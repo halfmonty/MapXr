@@ -1,0 +1,25 @@
+[package]
+name = "tap-ble"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+mapping-core = { path = "../mapping-core" }
+btleplug = { version = "0.12", features = ["serde"] }
+uuid = "1"
+tokio = { version = "1", features = ["sync", "time", "rt", "macros"] }
+thiserror = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+futures = "0.3"
+log = "0.4"
+
+# Linux only: used to set Transport::Le in SetDiscoveryFilter, bypassing btleplug's
+# hardcoded Transport::Auto which causes coexistence issues on MT7921 and similar chips.
+[target.'cfg(target_os = "linux")'.dependencies]
+bluez-async = "0.8"
+
+[dev-dependencies]
+async-trait = "0.1"
+rstest = "0.24"
+tempfile = "3"

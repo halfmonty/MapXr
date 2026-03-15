@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "kind": "single",
+  "name": "valid-single",
+  "layer_id": "valid-single",
+  "hand": "right",
+  "mappings": [
+    {
+      "label": "Thumb",
+      "trigger": { "type": "tap", "code": "xoooo" },
+      "action": { "type": "key", "key": "space" }
+    }
+  ]
+}

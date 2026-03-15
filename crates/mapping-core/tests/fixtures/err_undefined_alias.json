@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "kind": "single",
+  "name": "bad-alias",
+  "layer_id": "bad-alias",
+  "mappings": [
+    {
+      "label": "Missing alias",
+      "trigger": { "type": "tap", "code": "xoooo" },
+      "action": { "type": "alias", "name": "does_not_exist" }
+    }
+  ]
+}

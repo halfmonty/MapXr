@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "kind": "dual",
+  "name": "valid-dual",
+  "layer_id": "valid-dual",
+  "settings": {
+    "combo_window_ms": 150
+  },
+  "mappings": [
+    {
+      "label": "Both thumbs",
+      "trigger": { "type": "tap", "code": "xoooo xoooo" },
+      "action": { "type": "key", "key": "space" }
+    }
+  ]
+}

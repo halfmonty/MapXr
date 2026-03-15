@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "kind": "single",
+  "name": "circular-alias",
+  "layer_id": "circular-alias",
+  "aliases": {
+    "a": { "type": "alias", "name": "b" },
+    "b": { "type": "alias", "name": "a" }
+  },
+  "mappings": [
+    {
+      "label": "Trigger a",
+      "trigger": { "type": "tap", "code": "xoooo" },
+      "action": { "type": "alias", "name": "a" }
+    }
+  ]
+}

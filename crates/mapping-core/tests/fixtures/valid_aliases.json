@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "kind": "single",
+  "name": "valid-aliases",
+  "layer_id": "valid-aliases",
+  "aliases": {
+    "save": { "type": "key", "key": "s", "modifiers": ["ctrl"] }
+  },
+  "mappings": [
+    {
+      "label": "Save",
+      "trigger": { "type": "tap", "code": "xoooo" },
+      "action": { "type": "alias", "name": "save" }
+    }
+  ]
+}

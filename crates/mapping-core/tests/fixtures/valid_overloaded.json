@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "kind": "single",
+  "name": "valid-overloaded",
+  "layer_id": "valid-overloaded",
+  "settings": {
+    "overload_strategy": "patient",
+    "double_tap_window_ms": 250
+  },
+  "mappings": [
+    {
+      "label": "Index single",
+      "trigger": { "type": "tap", "code": "oooox" },
+      "action": { "type": "key", "key": "a" }
+    },
+    {
+      "label": "Index double",
+      "trigger": { "type": "double_tap", "code": "oooox" },
+      "action": { "type": "key", "key": "b" }
+    }
+  ]
+}

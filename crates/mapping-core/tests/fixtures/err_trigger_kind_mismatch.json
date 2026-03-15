@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "kind": "single",
+  "name": "kind-mismatch",
+  "layer_id": "kind-mismatch",
+  "mappings": [
+    {
+      "label": "Dual code in single profile",
+      "trigger": { "type": "tap", "code": "xoooo xoooo" },
+      "action": { "type": "key", "key": "space" }
+    }
+  ]
+}

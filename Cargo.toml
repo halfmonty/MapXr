@@ -1,0 +1,7 @@
+[workspace]
+resolver = "2"
+members = [
+    "src-tauri",
+    "crates/mapping-core",
+    "crates/tap-ble"
+]

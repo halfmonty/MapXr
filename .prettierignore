@@ -1,0 +1,7 @@
+node_modules/
+build/
+.svelte-kit/
+target/
+src-tauri/gen/
+src-tauri/target/
+*.lock

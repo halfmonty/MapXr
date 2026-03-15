@@ -1,0 +1,432 @@
+use std::time::{Duration, Instant};
+
+use btleplug::api::{BDAddr, Central as _, Characteristic, Peripheral as _, WriteType};
+use btleplug::platform::{Adapter, Peripheral};
+use futures::StreamExt as _;
+use mapping_core::engine::{DeviceId, RawTapEvent};
+use tokio::sync::{broadcast, watch};
+use uuid::Uuid;
+
+use crate::{BleError, manager::BleStatusEvent, packet_parser::parse_tap_packet};
+
+// ── Protocol constants ────────────────────────────────────────────────────────
+
+/// NUS RX characteristic — receives controller mode commands.
+/// Source: `docs/reference/windows-sdk-guid-reference.txt`
+const NUS_RX_UUID: Uuid = Uuid::from_u128(0x6E400002_B5A3_F393_E0A9_E50E24DCCA9E);
+
+/// Tap data characteristic — sends tap event notifications.
+/// Source: `docs/reference/windows-sdk-guid-reference.txt`
+const TAP_DATA_UUID: Uuid = Uuid::from_u128(0xC3FF0005_1D8B_40FD_A56F_C7BD5D0F3370);
+
+/// Written to NUS RX to enter controller mode.
+/// Source: `docs/reference/api-doc.txt`
+const ENTER_CONTROLLER_MODE: &[u8] = &[0x03, 0x0C, 0x00, 0x01];
+
+/// Written to NUS RX to exit controller mode.
+/// Source: `docs/reference/api-doc.txt`
+const EXIT_CONTROLLER_MODE: &[u8] = &[0x03, 0x0C, 0x00, 0x00];
+
+/// Re-send interval for the controller mode keepalive (10 s per spec).
+const KEEPALIVE_INTERVAL: Duration = Duration::from_secs(10);
+
+/// Starting delay for the reconnect backoff sequence.
+const RECONNECT_BASE_DELAY: Duration = Duration::from_secs(1);
+
+/// Maximum delay between reconnect attempts.
+const RECONNECT_MAX_DELAY: Duration = Duration::from_secs(60);
+
+// ── TapDevice ─────────────────────────────────────────────────────────────────
+
+/// A connected Tap device.
+///
+/// Manages controller mode, the 10-second keepalive, tap data streaming, and
+/// automatic reconnection on unexpected dropout.
+///
+/// Prefer calling [`TapDevice::disconnect`] before dropping to ensure the device
+/// exits controller mode cleanly. The [`Drop`] impl provides a best-effort
+/// fallback via an asynchronous detached task.
+pub struct TapDevice {
+    peripheral: Peripheral,
+    address: BDAddr,
+    device_id: DeviceId,
+    nus_rx: Characteristic,
+    // Retained so that `connection_monitor_task` can re-subscribe after a reconnect.
+    #[allow(dead_code)]
+    tap_data: Characteristic,
+    /// Send `true` to stop all background tasks.
+    cancel_tx: watch::Sender<bool>,
+}
+
+impl TapDevice {
+    /// Connect to the Tap device at `address` on `adapter`, assign it `device_id`,
+    /// and forward decoded tap events to `event_tx`.
+    ///
+    /// On success the device is in controller mode, tap data notifications are
+    /// subscribed, and three background tasks are running:
+    /// keepalive, notification reader, and connection monitor / reconnect.
+    pub async fn connect(
+        adapter: &Adapter,
+        address: BDAddr,
+        device_id: DeviceId,
+        event_tx: broadcast::Sender<RawTapEvent>,
+        status_tx: broadcast::Sender<BleStatusEvent>,
+    ) -> Result<Self, BleError> {
+        let peripheral = find_peripheral(adapter, address).await?;
+
+        // connect() triggers OS bonding/pairing on first use.
+        if !peripheral.is_connected().await? {
+            peripheral
+                .connect()
+                .await
+                .map_err(|e| BleError::ConnectionRefused {
+                    address: address.to_string(),
+                    reason: e.to_string(),
+                })?;
+        }
+
+        peripheral.discover_services().await?;
+
+        let (nus_rx, tap_data) = find_characteristics(&peripheral, address)?;
+
+        // Subscribe to tap data notifications before entering controller mode.
+        peripheral.subscribe(&tap_data).await?;
+
+        // Enter controller mode.
+        peripheral
+            .write(&nus_rx, ENTER_CONTROLLER_MODE, WriteType::WithoutResponse)
+            .await?;
+
+        let (cancel_tx, cancel_rx) = watch::channel(false);
+
+        tokio::spawn(keepalive_task(
+            peripheral.clone(),
+            nus_rx.clone(),
+            cancel_rx.clone(),
+        ));
+
+        tokio::spawn(notification_task(
+            peripheral.clone(),
+            device_id.clone(),
+            event_tx.clone(),
+            cancel_rx.clone(),
+        ));
+
+        tokio::spawn(connection_monitor_task(
+            peripheral.clone(),
+            adapter.clone(),
+            nus_rx.clone(),
+            tap_data.clone(),
+            device_id.clone(),
+            event_tx,
+            status_tx,
+            cancel_rx,
+        ));
+
+        Ok(TapDevice {
+            peripheral,
+            address,
+            device_id,
+            nus_rx,
+            tap_data,
+            cancel_tx,
+        })
+    }
+
+    /// Disconnect cleanly: stop all background tasks, exit controller mode, close BLE.
+    ///
+    /// If the connection has already dropped (e.g. device out of range), the exit
+    /// packet write is attempted but errors are swallowed.
+    pub async fn disconnect(&self) -> Result<(), BleError> {
+        let _ = self.cancel_tx.send(true);
+
+        if self.peripheral.is_connected().await.unwrap_or(false) {
+            // Best-effort: if the write fails the device has likely already dropped.
+            let _ = self
+                .peripheral
+                .write(
+                    &self.nus_rx,
+                    EXIT_CONTROLLER_MODE,
+                    WriteType::WithoutResponse,
+                )
+                .await;
+
+            self.peripheral.disconnect().await?;
+        }
+
+        Ok(())
+    }
+
+    /// The logical role string assigned to this device.
+    pub fn device_id(&self) -> &DeviceId {
+        &self.device_id
+    }
+
+    /// The BLE hardware address of this device.
+    pub fn address(&self) -> BDAddr {
+        self.address
+    }
+}
+
+impl Drop for TapDevice {
+    fn drop(&mut self) {
+        // Signal background tasks to wind down.
+        let _ = self.cancel_tx.send(true);
+
+        // NOTE: best-effort drop; prefer explicit `disconnect()` before dropping.
+        // Spawns a detached async task to send the exit packet; only attempted
+        // when a tokio runtime is available.
+        if let Ok(handle) = tokio::runtime::Handle::try_current() {
+            let peripheral = self.peripheral.clone();
+            let nus_rx = self.nus_rx.clone();
+            handle.spawn(async move {
+                let _ = peripheral
+                    .write(&nus_rx, EXIT_CONTROLLER_MODE, WriteType::WithoutResponse)
+                    .await;
+                let _ = peripheral.disconnect().await;
+            });
+        }
+    }
+}
+
+// ── Private helpers ───────────────────────────────────────────────────────────
+
+/// Find the peripheral with `address` in the adapter's current peripheral list.
+///
+/// Returns [`BleError::DeviceNotFound`] if the device has not been seen in a recent scan.
+async fn find_peripheral(adapter: &Adapter, address: BDAddr) -> Result<Peripheral, BleError> {
+    adapter
+        .peripherals()
+        .await?
+        .into_iter()
+        .find(|p| p.address() == address)
+        .ok_or_else(|| BleError::DeviceNotFound {
+            address: address.to_string(),
+        })
+}
+
+/// Locate the NUS RX and tap data characteristics on a connected peripheral.
+///
+/// Both characteristics must be present after [`discover_services`](Peripheral::discover_services);
+/// returns [`BleError::MissingCharacteristic`] for whichever UUID is absent.
+fn find_characteristics(
+    peripheral: &Peripheral,
+    address: BDAddr,
+) -> Result<(Characteristic, Characteristic), BleError> {
+    let chars = peripheral.characteristics();
+
+    let nus_rx = chars
+        .iter()
+        .find(|c| c.uuid == NUS_RX_UUID)
+        .cloned()
+        .ok_or_else(|| BleError::MissingCharacteristic {
+            uuid: NUS_RX_UUID.to_string(),
+            address: address.to_string(),
+        })?;
+
+    let tap_data = chars
+        .iter()
+        .find(|c| c.uuid == TAP_DATA_UUID)
+        .cloned()
+        .ok_or_else(|| BleError::MissingCharacteristic {
+            uuid: TAP_DATA_UUID.to_string(),
+            address: address.to_string(),
+        })?;
+
+    Ok((nus_rx, tap_data))
+}
+
+// ── Background tasks ──────────────────────────────────────────────────────────
+
+/// Resends the enter-controller-mode packet every [`KEEPALIVE_INTERVAL`].
+///
+/// Exits when `cancel` is set to `true`, the sender is dropped, or a write fails
+/// (which typically means the connection has dropped).
+async fn keepalive_task(
+    peripheral: Peripheral,
+    nus_rx: Characteristic,
+    mut cancel: watch::Receiver<bool>,
+) {
+    loop {
+        tokio::select! {
+            result = cancel.changed() => {
+                if result.is_err() || *cancel.borrow() { break; }
+            }
+            _ = tokio::time::sleep(KEEPALIVE_INTERVAL) => {
+                if peripheral
+                    .write(&nus_rx, ENTER_CONTROLLER_MODE, WriteType::WithoutResponse)
+                    .await
+                    .is_err()
+                {
+                    break;
+                }
+            }
+        }
+    }
+}
+
+/// Reads tap data notifications and forwards them as [`RawTapEvent`]s.
+///
+/// Exits when `cancel` is set to `true`, the notification stream ends, or the
+/// sender is dropped.
+async fn notification_task(
+    peripheral: Peripheral,
+    device_id: DeviceId,
+    event_tx: broadcast::Sender<RawTapEvent>,
+    mut cancel: watch::Receiver<bool>,
+) {
+    let stream = match peripheral.notifications().await {
+        Ok(s) => s,
+        Err(_) => return,
+    };
+    tokio::pin!(stream);
+
+    loop {
+        tokio::select! {
+            result = cancel.changed() => {
+                if result.is_err() || *cancel.borrow() { break; }
+            }
+            item = stream.next() => {
+                match item {
+                    None => break, // stream ended (device disconnected)
+                    Some(n) if n.uuid == TAP_DATA_UUID => {
+                        if let Some(packet) = parse_tap_packet(&n.value) {
+                            let event = RawTapEvent::new_at(
+                                device_id.clone(),
+                                packet.tap_code,
+                                Instant::now(),
+                            );
+                            // SendError means no active receivers; drop silently.
+                            let _ = event_tx.send(event);
+                        }
+                    }
+                    Some(_) => {} // notification for a different characteristic; ignore
+                }
+            }
+        }
+    }
+}
+
+/// Subscribes to adapter-level events and triggers the reconnect loop on unexpected disconnect.
+#[allow(clippy::too_many_arguments)]
+async fn connection_monitor_task(
+    peripheral: Peripheral,
+    adapter: Adapter,
+    nus_rx: Characteristic,
+    tap_data: Characteristic,
+    device_id: DeviceId,
+    event_tx: broadcast::Sender<RawTapEvent>,
+    status_tx: broadcast::Sender<BleStatusEvent>,
+    mut cancel: watch::Receiver<bool>,
+) {
+    let events = match adapter.events().await {
+        Ok(s) => s,
+        Err(_) => return,
+    };
+    tokio::pin!(events);
+
+    let peripheral_id = peripheral.id();
+    let address = peripheral.address();
+
+    loop {
+        tokio::select! {
+            result = cancel.changed() => {
+                if result.is_err() || *cancel.borrow() { break; }
+            }
+            item = events.next() => {
+                match item {
+                    None => break, // adapter events stream ended
+                    Some(btleplug::api::CentralEvent::DeviceDisconnected(id))
+                        if id == peripheral_id =>
+                    {
+                        if *cancel.borrow() { break; }
+
+                        // Notify subscribers of the unexpected disconnect.
+                        let _ = status_tx.send(BleStatusEvent::Disconnected {
+                            device_id: device_id.clone(),
+                            address,
+                        });
+
+                        reconnect_loop(
+                            &peripheral,
+                            &nus_rx,
+                            &tap_data,
+                            &device_id,
+                            &event_tx,
+                            &status_tx,
+                            &mut cancel,
+                        )
+                        .await;
+
+                        if *cancel.borrow() { break; }
+                    }
+                    Some(_) => {}
+                }
+            }
+        }
+    }
+}
+
+/// Reconnects with exponential backoff: 1 s, 2 s, 4 s … capped at 60 s.
+///
+/// Retries indefinitely until the connection is re-established or `cancel` fires.
+/// On success, restarts the keepalive and notification tasks.
+async fn reconnect_loop(
+    peripheral: &Peripheral,
+    nus_rx: &Characteristic,
+    tap_data: &Characteristic,
+    device_id: &DeviceId,
+    event_tx: &broadcast::Sender<RawTapEvent>,
+    status_tx: &broadcast::Sender<BleStatusEvent>,
+    cancel: &mut watch::Receiver<bool>,
+) {
+    let mut delay = RECONNECT_BASE_DELAY;
+    let address = peripheral.address();
+
+    loop {
+        if *cancel.borrow() {
+            return;
+        }
+
+        tokio::select! {
+            result = cancel.changed() => {
+                if result.is_err() || *cancel.borrow() { return; }
+            }
+            _ = tokio::time::sleep(delay) => {}
+        }
+
+        match peripheral.connect().await {
+            Ok(()) => {
+                // Re-subscribe and re-enter controller mode.
+                let _ = peripheral.subscribe(tap_data).await;
+                let _ = peripheral
+                    .write(nus_rx, ENTER_CONTROLLER_MODE, WriteType::WithoutResponse)
+                    .await;
+
+                // Notify subscribers of the successful reconnect.
+                let _ = status_tx.send(BleStatusEvent::Connected {
+                    device_id: device_id.clone(),
+                    address,
+                });
+
+                // Restart keepalive and notification tasks.
+                tokio::spawn(keepalive_task(
+                    peripheral.clone(),
+                    nus_rx.clone(),
+                    cancel.clone(),
+                ));
+                tokio::spawn(notification_task(
+                    peripheral.clone(),
+                    device_id.clone(),
+                    event_tx.clone(),
+                    cancel.clone(),
+                ));
+
+                return;
+            }
+            Err(_) => {
+                delay = (delay * 2).min(RECONNECT_MAX_DELAY);
+            }
+        }
+    }
+}

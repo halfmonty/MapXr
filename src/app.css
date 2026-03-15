@@ -1,0 +1,7 @@
+@import "tailwindcss";
+@plugin "daisyui";
+
+@keyframes tap-flash {
+  0%   { transform: scale(1.25); }
+  100% { transform: scale(1); }
+}

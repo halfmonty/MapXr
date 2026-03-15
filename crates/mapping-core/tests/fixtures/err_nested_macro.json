@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "kind": "single",
+  "name": "nested-macro",
+  "layer_id": "nested-macro",
+  "mappings": [
+    {
+      "label": "Nested macro",
+      "trigger": { "type": "tap", "code": "xoooo" },
+      "action": {
+        "type": "macro",
+        "steps": [
+          {
+            "action": {
+              "type": "macro",
+              "steps": [
+                { "action": { "type": "key", "key": "a" }, "delay_ms": 0 }
+              ]
+            },
+            "delay_ms": 0
+          }
+        ]
+      }
+    }
+  ]
+}

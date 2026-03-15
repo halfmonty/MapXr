@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "kind": "single",
+  "name": "bad-key",
+  "layer_id": "bad-key",
+  "mappings": [
+    {
+      "label": "Bad key",
+      "trigger": { "type": "tap", "code": "xoooo" },
+      "action": { "type": "key", "key": "not_a_real_key" }
+    }
+  ]
+}

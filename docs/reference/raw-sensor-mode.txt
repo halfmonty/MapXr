@@ -1,0 +1,157 @@
+Tap Strap Raw Sensors Mode
+
+Summary
+From FW version 2.3.27, Tap allows developers access to raw sensors data stream.
+
+In raw sensors mode, the Tap continuously sends raw data from the following sensors:
+
+Five 3-axis accelerometers (one per each finger).
+
+sampled at 200Hz
+
+allows dynamic range configuration (±2G, ±4G, ±8G, ±16G)
+
+IMU (3-axis accelerometer + gyro) located on the thumb (available with TAP Strap 2 only).
+
+sampled at 208Hz.
+
+allows dynamic range configuration for the accelerometer (±2G, ±4G, ±8G, ±16G) and for the gyro (±125dps, ±250dps, ±500dps, ±1000dps, ±2000dps).
+
+Timestamp synchronisation
+Each sample (of accelerometer or IMU) is preambled with a millisecond timestamp, referenced to an internal Tap Strap clock.
+
+Dynamic range configuration
+The dynamic range of the sensors is determined by passing a three sensitivity values (by order):
+
+Fingers accelerometers sensitivity -
+
+value
+
+sensitivity
+
+scale factor (mg/LSB)
+
+0 (default)
+
+±16G
+
+31.25
+
+1
+
+±2G
+
+3.91
+
+2
+
+±4G
+
+7.81
+
+3
+
+±8G
+
+15.62
+
+4
+
+±16G
+
+31.25
+
+
+
+2. IMU gyro sensitivity -
+
+value
+
+sensitivity
+
+scale factor (mdps/LSB)
+
+0 (default)
+
+±500dps
+
+17.5
+
+1
+
+±125dps
+
+4.375
+
+2
+
+±250dps
+
+8.75
+
+3
+
+±500dps
+
+17.5
+
+4
+
+±1000dps
+
+35
+
+5
+
+±2000dps
+
+70
+
+
+
+3. IMU accelerometer sensitivity -
+
+value
+
+sensitivity
+
+scale factor (mg/LSB)
+
+0 (default)
+
+±4G
+
+0.122
+
+1
+
+±2G
+
+0.061
+
+2
+
+±4G
+
+0.122
+
+3
+
+±8G
+
+0.244
+
+4
+
+±16G
+
+0.488
+
+
+
+Inertial coordinate system
+The sensors measurements are given with respect to the reference coordinate system below.
+
+X - forward and backwards
+Y - Left and Right laterally
+Z - Up and down
