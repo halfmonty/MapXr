@@ -59,11 +59,23 @@ npm install
 # Run in development mode (hot-reload frontend + Rust rebuild on change)
 npm run tauri dev
 
-# Build a production binary
+# Build a production binary (Linux / macOS)
 npm run tauri build
 ```
 
 Profile files are stored in the `profiles/` directory next to the application binary. On a development build they are read from `profiles/` at the project root.
+
+### Building for Windows from Linux
+
+Tauri's bundler must run on Windows to produce a proper `.msi` / NSIS installer. Use the included GitHub Actions workflow:
+
+1. Push the repository to GitHub (the `.github/workflows/build-windows.yml` file must be on the branch).
+2. Go to **Actions → Build Windows → Run workflow** for a manual build, or push a tag matching `v*` (e.g. `v0.2.0`) to trigger automatically.
+3. Download the `mapxr-windows` artifact when the run completes. It contains the `.msi` installer and the NSIS `.exe`.
+
+> **Note on `GITHUB_TOKEN`:** this token is injected automatically by GitHub — no setup required.
+> Your repository must have **Settings → Actions → General → Workflow permissions** set to
+> **"Read and write permissions"** for the action to attach artifacts to a GitHub Release.
 
 ---
 

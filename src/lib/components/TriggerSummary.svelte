@@ -7,14 +7,24 @@
 
   let { trigger }: Props = $props();
 
-  let summary = $derived((() => {
-    switch (trigger.type) {
-      case "tap":        return `Tap ${trigger.code}`;
-      case "double_tap": return `Double tap ${trigger.code}`;
-      case "triple_tap": return `Triple tap ${trigger.code}`;
-      case "sequence":   return `Sequence [${trigger.steps.length} step${trigger.steps.length === 1 ? "" : "s"}]`;
-    }
-  })());
+  function triggerCodeToSymbols(trigger: string): string {
+    return trigger.replace(/x/g, "●").replace(/o/g, "○");
+  }
+
+  let summary = $derived(
+    (() => {
+      switch (trigger.type) {
+        case "tap":
+          return `Tap ${triggerCodeToSymbols(trigger.code)}`;
+        case "double_tap":
+          return `Double tap ${trigger.code}`;
+        case "triple_tap":
+          return `Triple tap ${trigger.code}`;
+        case "sequence":
+          return `Sequence [${trigger.steps.length} step${trigger.steps.length === 1 ? "" : "s"}]`;
+      }
+    })()
+  );
 </script>
 
 <span class="font-mono text-sm">{summary}</span>

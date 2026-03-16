@@ -182,17 +182,14 @@
     updateMapping(i, { ...profile.mappings[i], trigger });
   }
 
-  function changeTriggerType(
-    i: number,
-    newType: Trigger["type"],
-  ) {
+  function changeTriggerType(i: number, newType: Trigger["type"]) {
     if (!profile) return;
     const code = defaultCode();
     const defaults: Record<Trigger["type"], Trigger> = {
-      tap:        { type: "tap", code },
+      tap: { type: "tap", code },
       double_tap: { type: "double_tap", code },
       triple_tap: { type: "triple_tap", code },
-      sequence:   { type: "sequence", steps: [code] },
+      sequence: { type: "sequence", steps: [code] },
     };
     updateTrigger(i, defaults[newType]);
   }
@@ -252,19 +249,21 @@
   }
 
   /** Variable names referenced in mappings but not defined in variables. */
-  let undefinedVariables = $derived((() => {
-    if (!profile) return [] as string[];
-    const defined = new Set(Object.keys(profile.variables));
-    const referenced = new Set<string>();
-    function scan(action: Action) {
-      if (action.type === "toggle_variable") referenced.add(action.variable);
-      if (action.type === "set_variable") referenced.add(action.variable);
-    }
-    profile.mappings.forEach((m) => scan(m.action));
-    if (profile.on_enter) scan(profile.on_enter);
-    if (profile.on_exit) scan(profile.on_exit);
-    return [...referenced].filter((v) => !defined.has(v));
-  })());
+  let undefinedVariables = $derived(
+    (() => {
+      if (!profile) return [] as string[];
+      const defined = new Set(Object.keys(profile.variables));
+      const referenced = new Set<string>();
+      function scan(action: Action) {
+        if (action.type === "toggle_variable") referenced.add(action.variable);
+        if (action.type === "set_variable") referenced.add(action.variable);
+      }
+      profile.mappings.forEach((m) => scan(m.action));
+      if (profile.on_enter) scan(profile.on_enter);
+      if (profile.on_exit) scan(profile.on_exit);
+      return [...referenced].filter((v) => !defined.has(v));
+    })()
+  );
 </script>
 
 {#if loading}
@@ -296,11 +295,7 @@
         {#if saveError}
           <span class="text-sm text-error truncate max-w-xs" title={saveError}>{saveError}</span>
         {/if}
-        <button
-          class="btn btn-primary btn-sm"
-          onclick={handleSave}
-          disabled={saving || !isDirty}
-        >
+        <button class="btn btn-primary btn-sm" onclick={handleSave} disabled={saving || !isDirty}>
           {#if saving}
             <span class="loading loading-spinner loading-xs"></span>
           {:else}
@@ -329,7 +324,7 @@
 
     <!-- Tabs -->
     <div class="tabs tabs-bordered">
-      {#each (["mappings", "settings", "aliases", "variables", "lifecycle"] as const) as tab}
+      {#each ["mappings", "settings", "aliases", "variables", "lifecycle"] as const as tab}
         <button
           class="tab {activeTab === tab ? 'tab-active' : ''}"
           onclick={() => (activeTab = tab)}
@@ -392,8 +387,8 @@
                       <button
                         class="btn btn-ghost btn-xs text-error"
                         onclick={() => deleteMapping(i)}
-                        aria-label="Delete mapping"
-                      >✕</button>
+                        aria-label="Delete mapping">✕</button
+                      >
                     </td>
                   </tr>
 
@@ -405,7 +400,9 @@
                           <!-- Label -->
                           <div class="col-span-2">
                             <label class="form-control w-full">
-                              <div class="label py-0"><span class="label-text text-xs">Label</span></div>
+                              <div class="label py-0">
+                                <span class="label-text text-xs">Label</span>
+                              </div>
                               <input
                                 type="text"
                                 class="input input-bordered input-sm w-full"
@@ -425,14 +422,16 @@
 
                             <!-- Type selector (5.23a) -->
                             <label class="form-control">
-                              <div class="label py-0"><span class="label-text text-xs">Type</span></div>
+                              <div class="label py-0">
+                                <span class="label-text text-xs">Type</span>
+                              </div>
                               <select
                                 class="select select-bordered select-sm w-full"
                                 value={mapping.trigger.type}
                                 onchange={(e) =>
                                   changeTriggerType(
                                     i,
-                                    (e.target as HTMLSelectElement).value as Trigger["type"],
+                                    (e.target as HTMLSelectElement).value as Trigger["type"]
                                   )}
                               >
                                 <option value="tap">Tap</option>
@@ -445,13 +444,17 @@
                             <!-- Finger pattern (5.23b) -->
                             {#if mapping.trigger.type !== "sequence"}
                               <label class="form-control">
-                                <div class="label py-0"><span class="label-text text-xs">Pattern</span></div>
-                                <FingerPattern
-                                  code={mapping.trigger.code}
-                                  hand={profile.hand ?? "right"}
-                                  onchange={(c) =>
-                                    updateTrigger(i, { ...mapping.trigger, code: c } as Trigger)}
-                                />
+                                <div class="label py-0">
+                                  <span class="label-text text-xs">Pattern</span>
+                                </div>
+                                <div class="flex">
+                                  <FingerPattern
+                                    code={mapping.trigger.code}
+                                    hand={profile.hand ?? "right"}
+                                    onchange={(c) =>
+                                      updateTrigger(i, { ...mapping.trigger, code: c } as Trigger)}
+                                  />
+                                </div>
                               </label>
                             {/if}
 
@@ -468,7 +471,7 @@
                                       onchange={(c) => {
                                         if (mapping.trigger.type !== "sequence") return;
                                         const steps = mapping.trigger.steps.map((s, idx) =>
-                                          idx === si ? c : s,
+                                          idx === si ? c : s
                                         );
                                         updateTrigger(i, { ...mapping.trigger, steps });
                                       }}
@@ -478,12 +481,12 @@
                                       onclick={() => {
                                         if (mapping.trigger.type !== "sequence") return;
                                         const steps = mapping.trigger.steps.filter(
-                                          (_, idx) => idx !== si,
+                                          (_, idx) => idx !== si
                                         );
                                         updateTrigger(i, { ...mapping.trigger, steps });
                                       }}
-                                      aria-label="Remove step"
-                                    >✕</button>
+                                      aria-label="Remove step">✕</button
+                                    >
                                   </div>
                                 {/each}
                                 <button
@@ -494,8 +497,8 @@
                                       ...mapping.trigger,
                                       steps: [...mapping.trigger.steps, defaultCode()],
                                     });
-                                  }}
-                                >+ Add step</button>
+                                  }}>+ Add step</button
+                                >
                               </div>
                             {/if}
 
@@ -549,16 +552,11 @@
         </button>
       </div>
 
-    <!-- ── Settings tab (5.25) ───────────────────────────────────────────── -->
+      <!-- ── Settings tab (5.25) ───────────────────────────────────────────── -->
     {:else if activeTab === "settings"}
       <div class="card bg-base-100 shadow">
         <div class="card-body space-y-4">
-          {#each ([
-            { field: "combo_window_ms",        label: "Combo window (ms)",         hint: "Cross-device chord detection window. Dual profiles only." },
-            { field: "double_tap_window_ms",    label: "Double-tap window (ms)",    hint: "Max time between first and second tap." },
-            { field: "triple_tap_window_ms",    label: "Triple-tap window (ms)",    hint: "Max time from first to third tap." },
-            { field: "sequence_window_ms",      label: "Sequence step timeout (ms)",hint: "Max gap between consecutive sequence steps." },
-          ] as const) as row}
+          {#each [{ field: "combo_window_ms", label: "Combo window (ms)", hint: "Cross-device chord detection window. Dual profiles only." }, { field: "double_tap_window_ms", label: "Double-tap window (ms)", hint: "Max time between first and second tap." }, { field: "triple_tap_window_ms", label: "Triple-tap window (ms)", hint: "Max time from first to third tap." }, { field: "sequence_window_ms", label: "Sequence step timeout (ms)", hint: "Max gap between consecutive sequence steps." }] as const as row}
             <label class="form-control">
               <div class="label">
                 <span class="label-text">{row.label}</span>
@@ -582,14 +580,16 @@
           <label class="form-control">
             <div class="label">
               <span class="label-text">Overload strategy</span>
-              <span class="label-text-alt opacity-60 text-xs">Required when a code is used for both tap and double/triple-tap.</span>
+              <span class="label-text-alt opacity-60 text-xs"
+                >Required when a code is used for both tap and double/triple-tap.</span
+              >
             </div>
             <select
               class="select select-bordered w-40"
               value={profile.settings.overload_strategy ?? ""}
               onchange={(e) => {
                 const v = (e.target as HTMLSelectElement).value;
-                updateSettings("overload_strategy", v === "" ? null : v as OverloadStrategy);
+                updateSettings("overload_strategy", v === "" ? null : (v as OverloadStrategy));
               }}
             >
               <option value="">None</option>
@@ -602,7 +602,9 @@
           <label class="form-control">
             <div class="label cursor-pointer">
               <span class="label-text">Passthrough</span>
-              <span class="label-text-alt opacity-60 text-xs">Pass unmatched codes to lower layers.</span>
+              <span class="label-text-alt opacity-60 text-xs"
+                >Pass unmatched codes to lower layers.</span
+              >
             </div>
             <input
               type="checkbox"
@@ -616,7 +618,7 @@
         </div>
       </div>
 
-    <!-- ── Aliases tab (5.26) ────────────────────────────────────────────── -->
+      <!-- ── Aliases tab (5.26) ────────────────────────────────────────────── -->
     {:else if activeTab === "aliases"}
       <div class="space-y-3">
         {#if Object.keys(profile.aliases).length === 0 && !editingAlias}
@@ -630,13 +632,14 @@
                   <div class="flex gap-1">
                     <button
                       class="btn btn-ghost btn-xs"
-                      onclick={() => editingAlias = editingAlias === name ? null : name}
-                    >{editingAlias === name ? "Done" : "Edit"}</button>
+                      onclick={() => (editingAlias = editingAlias === name ? null : name)}
+                      >{editingAlias === name ? "Done" : "Edit"}</button
+                    >
                     <button
                       class="btn btn-ghost btn-xs text-error"
                       onclick={() => deleteAlias(name)}
-                      aria-label="Delete alias {name}"
-                    >✕</button>
+                      aria-label="Delete alias {name}">✕</button
+                    >
                   </div>
                 </div>
                 {#if editingAlias === name}
@@ -674,13 +677,13 @@
             <button
               class="btn btn-sm btn-primary"
               onclick={addAlias}
-              disabled={!newAliasName.trim()}
-            >Add</button>
+              disabled={!newAliasName.trim()}>Add</button
+            >
           </div>
         </div>
       </div>
 
-    <!-- ── Variables tab (5.27) ──────────────────────────────────────────── -->
+      <!-- ── Variables tab (5.27) ──────────────────────────────────────────── -->
     {:else if activeTab === "variables"}
       <div class="space-y-3">
         {#if undefinedVariables.length > 0}
@@ -702,14 +705,18 @@
                 {#each Object.entries(profile.variables) as [name, value]}
                   <tr>
                     <td class="font-mono">{name}</td>
-                    <td><span class="badge badge-ghost badge-sm">{typeof value === "boolean" ? "bool" : "int"}</span></td>
+                    <td
+                      ><span class="badge badge-ghost badge-sm"
+                        >{typeof value === "boolean" ? "bool" : "int"}</span
+                      ></td
+                    >
                     <td class="font-mono">{JSON.stringify(value)}</td>
                     <td>
                       <button
                         class="btn btn-ghost btn-xs text-error"
                         onclick={() => deleteVariable(name)}
-                        aria-label="Delete variable {name}"
-                      >✕</button>
+                        aria-label="Delete variable {name}">✕</button
+                      >
                     </td>
                   </tr>
                 {/each}
@@ -738,8 +745,8 @@
                   {#each ["bool", "int"] as t}
                     <button
                       class="btn join-item btn-xs {newVarType === t ? 'btn-primary' : 'btn-ghost'}"
-                      onclick={() => (newVarType = t as "bool" | "int")}
-                    >{t}</button>
+                      onclick={() => (newVarType = t as "bool" | "int")}>{t}</button
+                    >
                   {/each}
                 </div>
               </label>
@@ -761,14 +768,14 @@
               <button
                 class="btn btn-sm btn-primary"
                 onclick={addVariable}
-                disabled={!newVarName.trim()}
-              >Add</button>
+                disabled={!newVarName.trim()}>Add</button
+              >
             </div>
           </div>
         </div>
       </div>
 
-    <!-- ── Lifecycle tab (5.28) ──────────────────────────────────────────── -->
+      <!-- ── Lifecycle tab (5.28) ──────────────────────────────────────────── -->
     {:else if activeTab === "lifecycle"}
       <div class="space-y-4">
         <!-- on_enter -->
@@ -779,20 +786,26 @@
               {#if profile.on_enter}
                 <button
                   class="btn btn-ghost btn-xs text-error"
-                  onclick={() => { if (profile) profile.on_enter = undefined; }}
-                >Clear</button>
+                  onclick={() => {
+                    if (profile) profile.on_enter = undefined;
+                  }}>Clear</button
+                >
               {:else}
                 <button
                   class="btn btn-ghost btn-xs"
-                  onclick={() => { if (profile) profile.on_enter = { type: "block" }; }}
-                >+ Set action</button>
+                  onclick={() => {
+                    if (profile) profile.on_enter = { type: "block" };
+                  }}>+ Set action</button
+                >
               {/if}
             </div>
             {#if profile.on_enter}
               <ActionEditor
                 action={profile.on_enter}
                 {profile}
-                onchange={(a: Action) => { if (profile) profile.on_enter = a; }}
+                onchange={(a: Action) => {
+                  if (profile) profile.on_enter = a;
+                }}
               />
             {:else}
               <p class="text-sm text-base-content/50">No action on layer enter.</p>
@@ -808,20 +821,26 @@
               {#if profile.on_exit}
                 <button
                   class="btn btn-ghost btn-xs text-error"
-                  onclick={() => { if (profile) profile.on_exit = undefined; }}
-                >Clear</button>
+                  onclick={() => {
+                    if (profile) profile.on_exit = undefined;
+                  }}>Clear</button
+                >
               {:else}
                 <button
                   class="btn btn-ghost btn-xs"
-                  onclick={() => { if (profile) profile.on_exit = { type: "block" }; }}
-                >+ Set action</button>
+                  onclick={() => {
+                    if (profile) profile.on_exit = { type: "block" };
+                  }}>+ Set action</button
+                >
               {/if}
             </div>
             {#if profile.on_exit}
               <ActionEditor
                 action={profile.on_exit}
                 {profile}
-                onchange={(a: Action) => { if (profile) profile.on_exit = a; }}
+                onchange={(a: Action) => {
+                  if (profile) profile.on_exit = a;
+                }}
               />
             {:else}
               <p class="text-sm text-base-content/50">No action on layer exit.</p>

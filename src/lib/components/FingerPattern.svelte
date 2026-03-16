@@ -88,7 +88,7 @@
           ariaLabel: "Finger pattern",
         },
       ];
-    })(),
+    })()
   );
 
   let validationError: string | null = $derived(
@@ -103,7 +103,7 @@
         return "All-open pattern is not a valid trigger.";
       }
       return null;
-    })(),
+    })()
   );
 
   // Flat array of button refs for keyboard navigation (task 6.6).
@@ -197,7 +197,7 @@
               <!-- Interactive circle (tasks 6.2, 6.3, 6.6) -->
               <button
                 type="button"
-                class="btn btn-circle btn-sm {char === 'x' ? 'btn-primary' : 'btn-outline'}
+                class="btn btn-circle btn-xs {char === 'x' ? 'btn-primary' : 'btn-outline'}
                   {flash && char === 'x' ? '[animation:tap-flash_0.45s_ease-out]' : ''}"
                 aria-pressed={char === "x"}
                 aria-label="{group.labels[fi]} {char === 'x' ? 'tapped' : 'not tapped'}"

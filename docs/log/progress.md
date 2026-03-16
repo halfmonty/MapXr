@@ -1,3 +1,22 @@
+## 2026-03-16 — Windows build via GitHub Actions; root README
+
+**Tasks completed:** partial 9.4 (Windows-only CI workflow); 9.8 (user-facing README.md)
+**Tasks in progress:** none
+
+**Files changed:**
+
+- `.github/workflows/build-windows.yml` — new GitHub Actions workflow; runs on `windows-latest`, installs Rust + Node, runs `npm ci`, invokes `tauri-apps/tauri-action@v0` with `GITHUB_TOKEN` passed explicitly; uploads `.msi`/NSIS `.exe` as artifacts; triggers on `workflow_dispatch` or `v*` tag push
+- `README.md` — new user-facing README covering project overview, prerequisites, dev setup, building for Linux/Windows, profile directory layout, and a quick-start example profile
+
+**Notes:**
+- `GITHUB_TOKEN` is a GitHub built-in secret — no user action required; repo must have "Read and write permissions" enabled under Settings → Actions → General for the release step to create GitHub Releases
+- The workflow covers Windows only; macOS and Linux CI/release targets (full task 9.4) are deferred
+- 9.8 README is a development-era README; update installation section once packaging (9.1–9.3) is complete
+
+**Next:** Epic 8.1 — Add `tap-cli` binary crate to the workspace
+
+---
+
 ## 2026-03-15 — Implement hold_modifier action (sticky modifier keys)
 
 **Tasks completed:** hold_modifier feature (spec-approved, not in original numbered task list)
