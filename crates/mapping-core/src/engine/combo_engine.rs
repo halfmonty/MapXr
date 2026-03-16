@@ -4,7 +4,8 @@ use crate::engine::{
     DebugEvent, DeviceId, EngineOutput, LayerStack, RawTapEvent, ResolvedEvent, ResolvedTriggerKind,
 };
 use crate::types::{
-    Action, Hand, OverloadStrategy, Profile, PushLayerMode, TapCode, TriggerPattern, VariableValue,
+    Action, Hand, HoldModifierMode, MacroStep, Modifier, OverloadStrategy, Profile, PushLayerMode,
+    TapCode, TriggerPattern, VariableValue,
 };
 
 // ── Default timing constants ───────────────────────────────────────────────
@@ -104,6 +105,27 @@ struct SequenceProgress {
     buffered: Vec<PendingEntry>,
 }
 
+// ── Held modifier state ────────────────────────────────────────────────────
+
+/// A modifier set that is currently held (active) in the engine.
+#[derive(Debug, Clone)]
+struct HeldModifierEntry {
+    /// Sorted modifier list for order-independent equality comparison.
+    modifiers: Vec<Modifier>,
+    mode: ActiveHoldMode,
+}
+
+/// How the held modifier persists.
+#[derive(Debug, Clone)]
+enum ActiveHoldMode {
+    /// Active until this same entry is dispatched again.
+    Toggle,
+    /// Active for `remaining` more key-dispatching trigger firings.
+    Count { remaining: u32 },
+    /// Active until `deadline`.
+    Timeout { deadline: Instant },
+}
+
 // ── ComboEngine ────────────────────────────────────────────────────────────
 
 /// The main event-processing engine.
@@ -155,6 +177,9 @@ pub struct ComboEngine {
     tap_pending: Option<TapPending>,
     /// In-progress partial sequence match, if any.
     seq_progress: Option<SequenceProgress>,
+    /// Active sticky modifier entries. Independent of the layer stack — not
+    /// cleared on push/pop/switch layer operations.
+    held_modifiers: Vec<HeldModifierEntry>,
     /// Whether debug events are emitted alongside action outputs.
     debug_mode: bool,
 }
@@ -176,18 +201,20 @@ impl ComboEngine {
             combo_pending: Vec::new(),
             tap_pending: None,
             seq_progress: None,
+            held_modifiers: Vec::new(),
             debug_mode: false,
         }
     }
 
     /// Replace the base profile, discarding the entire stack. Clears all
-    /// pending state.
+    /// pending state including held modifiers.
     pub fn set_profile(&mut self, profile: Profile) {
         self.layer_stack.switch_to(profile);
         self.rebuild_overloads();
         self.combo_pending.clear();
         self.tap_pending = None;
         self.seq_progress = None;
+        self.held_modifiers.clear();
     }
 
     /// Push a new layer onto the stack, returning any `on_enter` action.
@@ -245,6 +272,9 @@ impl ComboEngine {
 
         // Flush tap-pending state whose double/triple-tap window has expired.
         outputs.extend(self.flush_expired_tap_pending(now));
+
+        // Remove held modifier entries whose timeout has elapsed.
+        self.expire_held_modifier_timeouts(now);
 
         // Check whether the top layer has timed out (Timeout push-layer mode).
         if let Some(on_exit) = self.layer_stack.check_timeout(now) {
@@ -891,7 +921,7 @@ impl ComboEngine {
         let action = Self::resolve_action_in(raw_action, self.layer_stack.top());
         let layer_stack_ids = self.layer_stack.layer_ids();
 
-        let mut outputs = self.execute_action(action.clone());
+        let mut outputs = self.execute_action(action.clone(), now);
 
         if self.debug_mode && !buffered.is_empty() {
             let first = &buffered[0];
@@ -932,7 +962,7 @@ impl ComboEngine {
     /// 4. If not found and `passthrough: false`, stop (event consumed silently).
     ///
     /// `Action::Block` stops the walk at that layer regardless of passthrough.
-    fn dispatch(&mut self, resolved: ResolvedEvent, _now: Instant) -> Vec<EngineOutput> {
+    fn dispatch(&mut self, resolved: ResolvedEvent, now: Instant) -> Vec<EngineOutput> {
         use crate::types::Trigger;
 
         // Phase 1 — find the match (immutable walk).
@@ -1008,7 +1038,7 @@ impl ComboEngine {
             return vec![];
         };
 
-        let mut outputs = self.execute_action(action.clone());
+        let mut outputs = self.execute_action(action.clone(), now);
 
         if self.debug_mode {
             let hand = self.layer_stack.top().hand.unwrap_or(Hand::Right);
@@ -1042,13 +1072,20 @@ impl ComboEngine {
     /// Execute a resolved action, handling special cases inline.
     ///
     /// - `Block` — consumed silently; returns empty.
+    /// - `HoldModifier` — updates held modifier state; returns empty.
     /// - `PopLayer` — pops the top layer; returns `on_exit` actions.
     /// - `ToggleVariable` — mutates top-layer variable; returns child action.
     /// - `SetVariable` — mutates top-layer variable; returns empty.
+    /// - `Key` / `KeyChord` / `TypeString` / `Macro` — held modifiers are applied and
+    ///   count-mode entries are decremented.
     /// - Everything else — returned as-is for the caller to dispatch.
-    fn execute_action(&mut self, action: Action) -> Vec<EngineOutput> {
+    fn execute_action(&mut self, action: Action, now: Instant) -> Vec<EngineOutput> {
         match action {
             Action::Block => vec![],
+            Action::HoldModifier { modifiers, mode } => {
+                self.update_hold_modifier(modifiers, mode, now);
+                vec![]
+            }
             Action::PopLayer => {
                 let on_exit = self.layer_stack.pop();
                 self.rebuild_overloads();
@@ -1070,11 +1107,33 @@ impl ComboEngine {
                     _ => *on_false,
                 };
                 self.layer_stack.toggle_variable(&variable);
-                self.execute_action(child)
+                self.execute_action(child, now)
             }
             Action::SetVariable { variable, value } => {
                 self.layer_stack.set_variable(&variable, value);
                 vec![]
+            }
+            Action::Key { key, modifiers } => {
+                let effective = self.merge_held_modifiers(modifiers);
+                self.decrement_hold_modifier_counts();
+                vec![EngineOutput::actions(vec![Action::Key {
+                    key,
+                    modifiers: effective,
+                }])]
+            }
+            Action::KeyChord { keys } => {
+                let keys = self.merge_held_modifiers_into_chord(keys);
+                self.decrement_hold_modifier_counts();
+                vec![EngineOutput::actions(vec![Action::KeyChord { keys }])]
+            }
+            Action::TypeString { text } => {
+                self.decrement_hold_modifier_counts();
+                vec![EngineOutput::actions(vec![Action::TypeString { text }])]
+            }
+            Action::Macro { steps } => {
+                let steps = self.apply_held_modifiers_to_macro_steps(steps);
+                self.decrement_hold_modifier_counts();
+                vec![EngineOutput::actions(vec![Action::Macro { steps }])]
             }
             other => vec![EngineOutput::actions(vec![other])],
         }
@@ -1088,6 +1147,120 @@ impl ComboEngine {
             }
         }
         action
+    }
+
+    // ── Held modifier helpers ──────────────────────────────────────────────
+
+    /// Sort a modifier list deterministically for order-independent comparison.
+    fn sort_modifiers(modifiers: &mut [Modifier]) {
+        modifiers.sort_unstable_by_key(modifier_sort_key);
+    }
+
+    /// Compute the union of all active held modifier sets.
+    fn held_modifier_set(&self) -> Vec<Modifier> {
+        let mut seen = std::collections::HashSet::new();
+        for entry in &self.held_modifiers {
+            for m in &entry.modifiers {
+                seen.insert(*m);
+            }
+        }
+        let mut v: Vec<Modifier> = seen.into_iter().collect();
+        v.sort_unstable_by_key(modifier_sort_key);
+        v
+    }
+
+    /// Merge the held modifier set into `own`, deduplicating.
+    fn merge_held_modifiers(&self, mut own: Vec<Modifier>) -> Vec<Modifier> {
+        let held = self.held_modifier_set();
+        for m in held {
+            if !own.contains(&m) {
+                own.push(m);
+            }
+        }
+        own
+    }
+
+    /// Add held modifier key names to a `KeyChord` keys list, deduplicating.
+    fn merge_held_modifiers_into_chord(&self, mut keys: Vec<String>) -> Vec<String> {
+        let held = self.held_modifier_set();
+        for m in held {
+            let name = modifier_to_str(m);
+            if !keys.iter().any(|k| k == name) {
+                keys.push(name.to_string());
+            }
+        }
+        keys
+    }
+
+    /// Apply held modifiers to each `Key`/`KeyChord` step inside a macro.
+    fn apply_held_modifiers_to_macro_steps(&self, steps: Vec<MacroStep>) -> Vec<MacroStep> {
+        let held = self.held_modifier_set();
+        if held.is_empty() {
+            return steps;
+        }
+        steps
+            .into_iter()
+            .map(|step| MacroStep {
+                action: apply_held_modifiers_to_action(step.action, &held),
+                delay_ms: step.delay_ms,
+            })
+            .collect()
+    }
+
+    /// Process a `HoldModifier` action dispatch: update `held_modifiers` state.
+    fn update_hold_modifier(
+        &mut self,
+        mut modifiers: Vec<Modifier>,
+        mode: HoldModifierMode,
+        now: Instant,
+    ) {
+        Self::sort_modifiers(&mut modifiers);
+        match mode {
+            HoldModifierMode::Toggle => {
+                // Same sorted modifier set with Toggle mode → deactivate; else activate.
+                if let Some(idx) = self.held_modifiers.iter().position(|e| {
+                    matches!(e.mode, ActiveHoldMode::Toggle) && e.modifiers == modifiers
+                }) {
+                    self.held_modifiers.remove(idx);
+                } else {
+                    self.held_modifiers.push(HeldModifierEntry {
+                        modifiers,
+                        mode: ActiveHoldMode::Toggle,
+                    });
+                }
+            }
+            HoldModifierMode::Count { count } => {
+                self.held_modifiers.push(HeldModifierEntry {
+                    modifiers,
+                    mode: ActiveHoldMode::Count { remaining: count },
+                });
+            }
+            HoldModifierMode::Timeout { timeout_ms } => {
+                let deadline = now + Duration::from_millis(timeout_ms);
+                self.held_modifiers.push(HeldModifierEntry {
+                    modifiers,
+                    mode: ActiveHoldMode::Timeout { deadline },
+                });
+            }
+        }
+    }
+
+    /// Decrement count-mode held modifier entries by 1, removing those that reach 0.
+    fn decrement_hold_modifier_counts(&mut self) {
+        self.held_modifiers.retain_mut(|e| {
+            if let ActiveHoldMode::Count { remaining } = &mut e.mode {
+                *remaining = remaining.saturating_sub(1);
+                *remaining > 0
+            } else {
+                true
+            }
+        });
+    }
+
+    /// Remove timeout-mode held modifier entries whose deadline has passed.
+    fn expire_held_modifier_timeouts(&mut self, now: Instant) {
+        self.held_modifiers
+            .retain(|e| !matches!(e.mode, ActiveHoldMode::Timeout { deadline } if now >= deadline));
     }
 
     // ── Housekeeping ───────────────────────────────────────────────────────
@@ -1181,11 +1354,63 @@ impl ComboEngine {
             bump!(seq.last_step_at + Duration::from_millis(seq.window_ms));
         }
 
+        for entry in &self.held_modifiers {
+            if let ActiveHoldMode::Timeout { deadline } = entry.mode {
+                bump!(deadline);
+            }
+        }
+
         if let Some(t) = self.layer_stack.next_timeout() {
             bump!(t);
         }
 
         earliest
+    }
+}
+
+/// Canonical sort key for `Modifier` (avoids requiring `Ord` on the enum).
+fn modifier_sort_key(m: &Modifier) -> u8 {
+    match m {
+        Modifier::Ctrl => 0,
+        Modifier::Shift => 1,
+        Modifier::Alt => 2,
+        Modifier::Meta => 3,
+    }
+}
+
+/// Return the lowercase string name of a `Modifier` (matches JSON serialisation).
+fn modifier_to_str(m: Modifier) -> &'static str {
+    match m {
+        Modifier::Ctrl => "ctrl",
+        Modifier::Shift => "shift",
+        Modifier::Alt => "alt",
+        Modifier::Meta => "meta",
+    }
+}
+
+/// Apply `held` modifier set to a single action's Key/KeyChord fields.
+///
+/// Only `Key` and `KeyChord` actions are modified; all others are returned unchanged.
+fn apply_held_modifiers_to_action(action: Action, held: &[Modifier]) -> Action {
+    match action {
+        Action::Key { key, mut modifiers } => {
+            for m in held {
+                if !modifiers.contains(m) {
+                    modifiers.push(*m);
+                }
+            }
+            Action::Key { key, modifiers }
+        }
+        Action::KeyChord { mut keys } => {
+            for m in held {
+                let name = modifier_to_str(*m);
+                if !keys.iter().any(|k| k == name) {
+                    keys.push(name.to_string());
+                }
+            }
+            Action::KeyChord { keys }
+        }
+        other => other,
     }
 }
 

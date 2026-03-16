@@ -17,7 +17,7 @@
   const ALL_TYPES: Action["type"][] = [
     "key", "key_chord", "type_string", "macro",
     "push_layer", "pop_layer", "switch_layer",
-    "toggle_variable", "set_variable", "block", "alias",
+    "toggle_variable", "set_variable", "block", "alias", "hold_modifier",
   ];
 
   const TYPE_LABELS: Record<Action["type"], string> = {
@@ -25,6 +25,7 @@
     macro: "Macro", push_layer: "Push layer", pop_layer: "Pop layer",
     switch_layer: "Switch layer", toggle_variable: "Toggle variable",
     set_variable: "Set variable", block: "Block", alias: "Alias",
+    hold_modifier: "Hold modifier",
   };
 
   let availableTypes = $derived(ALL_TYPES.filter((t) => !disallow.includes(t)));
@@ -42,6 +43,7 @@
       case "set_variable":    return { type: "set_variable", variable: "", value: false };
       case "block":           return { type: "block" };
       case "alias":           return { type: "alias", name: "" };
+      case "hold_modifier":   return { type: "hold_modifier", modifiers: ["shift"], mode: "toggle" };
     }
   }
 
@@ -123,6 +125,28 @@
     } else if (field === "timeout_ms" && "timeout_ms" in action) {
       onchange({ ...action, timeout_ms: Number(value) } as Action);
     }
+  }
+
+  // ── Hold modifier helpers ───────────────────────────────────────────────────
+
+  type HoldMode = "toggle" | "count" | "timeout";
+
+  let holdMode = $derived(
+    action.type === "hold_modifier" ? (action.mode as HoldMode) : "toggle",
+  );
+
+  function toggleHoldModifier(mod: Modifier) {
+    if (action.type !== "hold_modifier") return;
+    const mods = action.modifiers;
+    const next = mods.includes(mod) ? mods.filter((m) => m !== mod) : [...mods, mod];
+    onchange({ ...action, modifiers: next } as Action);
+  }
+
+  function setHoldMode(m: HoldMode) {
+    if (action.type !== "hold_modifier") return;
+    if (m === "toggle") onchange({ ...action, mode: "toggle" } as Action);
+    else if (m === "count") onchange({ ...action, mode: "count", count: 1 } as Action);
+    else onchange({ ...action, mode: "timeout", timeout_ms: 2000 } as Action);
   }
 
   // ── Variable helpers ────────────────────────────────────────────────────────
@@ -258,7 +282,7 @@
           <ActionEditor
             action={step.action}
             {profile}
-            disallow={["macro"]}
+            disallow={["macro", "hold_modifier"]}
             onchange={(a: Action) => updateMacroStep(i, { ...step, action: a })}
           />
           <label class="form-control">
@@ -431,5 +455,58 @@
         {#each Object.keys(profile.aliases) as a}<option value={a}>{a}</option>{/each}
       </select>
     </label>
+
+  <!-- ── Hold modifier ─────────────────────────────────────────────────────── -->
+  {:else if action.type === "hold_modifier"}
+    <div>
+      <p class="label-text mb-1 text-xs">Modifiers to hold</p>
+      <div class="flex gap-2">
+        {#each ["ctrl", "shift", "alt", "meta"] as m}
+          <label class="flex cursor-pointer items-center gap-1 text-sm">
+            <input
+              type="checkbox"
+              class="checkbox checkbox-sm"
+              checked={action.modifiers.includes(m as Modifier)}
+              onchange={() => toggleHoldModifier(m as Modifier)}
+            />
+            {m}
+          </label>
+        {/each}
+      </div>
+    </div>
+    <div>
+      <p class="label-text mb-1 text-xs">Mode</p>
+      <div class="join">
+        {#each ["toggle", "count", "timeout"] as m}
+          <button
+            class="btn join-item btn-xs {holdMode === m ? 'btn-primary' : 'btn-ghost'}"
+            onclick={() => setHoldMode(m as HoldMode)}
+          >{m}</button>
+        {/each}
+      </div>
+    </div>
+    {#if action.mode === "count"}
+      <label class="form-control">
+        <div class="label py-0"><span class="label-text text-xs">Count</span></div>
+        <input
+          type="number"
+          class="input input-bordered input-sm w-32"
+          min={1}
+          value={action.count}
+          oninput={(e) => onchange({ ...action, count: Math.max(1, Number((e.target as HTMLInputElement).value)) } as Action)}
+        />
+      </label>
+    {:else if action.mode === "timeout"}
+      <label class="form-control">
+        <div class="label py-0"><span class="label-text text-xs">Timeout (ms)</span></div>
+        <input
+          type="number"
+          class="input input-bordered input-sm w-36"
+          min={1}
+          value={action.timeout_ms}
+          oninput={(e) => onchange({ ...action, timeout_ms: Math.max(1, Number((e.target as HTMLInputElement).value)) } as Action)}
+        />
+      </label>
+    {/if}
   {/if}
 </div>

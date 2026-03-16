@@ -69,7 +69,10 @@ export async function listProfiles(): Promise<ProfileSummary[]> {
  * @throws If no profile with that layer_id exists.
  */
 export async function loadProfile(layerId: string): Promise<Profile> {
-  return invoke("load_profile", { layerId });
+  const profile = await invoke<Profile>("load_profile", { layerId });
+  profile.aliases ??= {};
+  profile.variables ??= {};
+  return profile;
 }
 
 /**

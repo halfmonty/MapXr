@@ -5,7 +5,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::ProfileError;
 use crate::types::{
-    Action, Hand, Mapping, ProfileKind, ProfileSettings, TriggerPattern, VariableValue,
+    Action, Hand, HoldModifierMode, Mapping, Modifier, ProfileKind, ProfileSettings,
+    TriggerPattern, VariableValue,
 };
 
 fn default_passthrough() -> bool {
@@ -138,6 +139,7 @@ impl Profile {
         self.check_trigger_kinds()?;
         self.check_key_names()?;
         self.check_macro_nesting()?;
+        self.check_hold_modifier_rules()?;
         self.check_aliases()?;
         self.check_overloaded_codes()?;
         Ok(())
@@ -205,6 +207,23 @@ impl Profile {
     fn check_macro_nesting(&self) -> Result<(), ProfileError> {
         for mapping in &self.mappings {
             check_action_macro_nesting(&mapping.action, &mapping.label)?;
+        }
+        Ok(())
+    }
+
+    /// Rules: hold_modifier actions must be valid and may not appear inside macros.
+    fn check_hold_modifier_rules(&self) -> Result<(), ProfileError> {
+        for mapping in &self.mappings {
+            check_action_hold_modifier(&mapping.action, &mapping.label, false)?;
+        }
+        for action in self.aliases.values() {
+            check_action_hold_modifier(action, "<alias>", false)?;
+        }
+        if let Some(action) = &self.on_enter {
+            check_action_hold_modifier(action, "<on_enter>", false)?;
+        }
+        if let Some(action) = &self.on_exit {
+            check_action_hold_modifier(action, "<on_exit>", false)?;
         }
         Ok(())
     }
@@ -319,6 +338,79 @@ fn check_action_aliases(
     Ok(())
 }
 
+/// Walk an action tree and enforce hold_modifier rules.
+///
+/// - At the top level (`in_macro = false`): validates non-empty modifiers, no
+///   duplicates, and valid count/timeout values.
+/// - Inside a macro step (`in_macro = true`): rejects any `HoldModifier` action.
+fn check_action_hold_modifier(
+    action: &Action,
+    label: &str,
+    in_macro: bool,
+) -> Result<(), ProfileError> {
+    match action {
+        Action::HoldModifier { modifiers, mode } => {
+            if in_macro {
+                return Err(ProfileError::HoldModifierInsideMacro {
+                    label: label.into(),
+                });
+            }
+            if modifiers.is_empty() {
+                return Err(ProfileError::HoldModifierEmptyModifiers {
+                    label: label.into(),
+                });
+            }
+            let mut seen = std::collections::HashSet::new();
+            for m in modifiers {
+                if !seen.insert(*m) {
+                    return Err(ProfileError::HoldModifierDuplicateModifier {
+                        modifier: modifier_name(*m).into(),
+                        label: label.into(),
+                    });
+                }
+            }
+            match mode {
+                HoldModifierMode::Count { count } if *count == 0 => {
+                    return Err(ProfileError::HoldModifierCountZero {
+                        label: label.into(),
+                    });
+                }
+                HoldModifierMode::Timeout { timeout_ms } if *timeout_ms == 0 => {
+                    return Err(ProfileError::HoldModifierTimeoutZero {
+                        label: label.into(),
+                    });
+                }
+                _ => {}
+            }
+            Ok(())
+        }
+        Action::Macro { steps } => {
+            for step in steps {
+                check_action_hold_modifier(&step.action, label, true)?;
+            }
+            Ok(())
+        }
+        Action::ToggleVariable {
+            on_true, on_false, ..
+        } => {
+            check_action_hold_modifier(on_true, label, in_macro)?;
+            check_action_hold_modifier(on_false, label, in_macro)?;
+            Ok(())
+        }
+        _ => Ok(()),
+    }
+}
+
+/// Return the canonical lowercase name of a modifier key.
+fn modifier_name(m: Modifier) -> &'static str {
+    match m {
+        Modifier::Ctrl => "ctrl",
+        Modifier::Shift => "shift",
+        Modifier::Alt => "alt",
+        Modifier::Meta => "meta",
+    }
+}
+
 /// DFS cycle detection for alias chains.
 fn detect_alias_cycle<'a>(
     name: &'a str,
@@ -341,7 +433,10 @@ fn detect_alias_cycle<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::{Action, KeyDef, ProfileKind, TapCode, Trigger, TriggerPattern};
+    use crate::types::{
+        Action, HoldModifierMode, KeyDef, MacroStep, Modifier, ProfileKind, TapCode, Trigger,
+        TriggerPattern,
+    };
 
     fn minimal_profile() -> Profile {
         Profile {
@@ -496,5 +591,132 @@ mod tests {
             p.settings.overload_strategy,
             Some(crate::types::OverloadStrategy::Eager)
         );
+    }
+
+    // ── hold_modifier validation ──────────────────────────────────────────────
+
+    fn hold_modifier_mapping(label: &str, action: Action) -> Mapping {
+        Mapping {
+            label: label.into(),
+            trigger: Trigger::Tap {
+                code: TriggerPattern::Single(TapCode::from_u8(1).unwrap()),
+            },
+            action,
+            enabled: true,
+        }
+    }
+
+    #[test]
+    fn hold_modifier_valid_toggle_passes_validation() {
+        let p = Profile {
+            mappings: vec![hold_modifier_mapping(
+                "hold shift",
+                Action::HoldModifier {
+                    modifiers: vec![Modifier::Shift],
+                    mode: HoldModifierMode::Toggle,
+                },
+            )],
+            ..minimal_profile()
+        };
+        assert!(p.validate().is_ok());
+    }
+
+    #[test]
+    fn hold_modifier_empty_modifiers_fails_validation() {
+        let p = Profile {
+            mappings: vec![hold_modifier_mapping(
+                "bad",
+                Action::HoldModifier {
+                    modifiers: vec![],
+                    mode: HoldModifierMode::Toggle,
+                },
+            )],
+            ..minimal_profile()
+        };
+        assert!(matches!(
+            p.validate(),
+            Err(ProfileError::HoldModifierEmptyModifiers { .. })
+        ));
+    }
+
+    #[test]
+    fn hold_modifier_duplicate_modifiers_fails_validation() {
+        let p = Profile {
+            mappings: vec![hold_modifier_mapping(
+                "bad",
+                Action::HoldModifier {
+                    modifiers: vec![Modifier::Shift, Modifier::Shift],
+                    mode: HoldModifierMode::Toggle,
+                },
+            )],
+            ..minimal_profile()
+        };
+        assert!(matches!(
+            p.validate(),
+            Err(ProfileError::HoldModifierDuplicateModifier { .. })
+        ));
+    }
+
+    #[test]
+    fn hold_modifier_count_zero_fails_validation() {
+        let p = Profile {
+            mappings: vec![hold_modifier_mapping(
+                "bad",
+                Action::HoldModifier {
+                    modifiers: vec![Modifier::Ctrl],
+                    mode: HoldModifierMode::Count { count: 0 },
+                },
+            )],
+            ..minimal_profile()
+        };
+        assert!(matches!(
+            p.validate(),
+            Err(ProfileError::HoldModifierCountZero { .. })
+        ));
+    }
+
+    #[test]
+    fn hold_modifier_timeout_ms_zero_fails_validation() {
+        let p = Profile {
+            mappings: vec![hold_modifier_mapping(
+                "bad",
+                Action::HoldModifier {
+                    modifiers: vec![Modifier::Alt],
+                    mode: HoldModifierMode::Timeout { timeout_ms: 0 },
+                },
+            )],
+            ..minimal_profile()
+        };
+        assert!(matches!(
+            p.validate(),
+            Err(ProfileError::HoldModifierTimeoutZero { .. })
+        ));
+    }
+
+    #[test]
+    fn hold_modifier_inside_macro_fails_validation() {
+        let p = Profile {
+            mappings: vec![Mapping {
+                label: "bad macro".into(),
+                trigger: Trigger::Tap {
+                    code: TriggerPattern::Single(TapCode::from_u8(1).unwrap()),
+                },
+                action: Action::Macro {
+                    steps: vec![MacroStep {
+                        action: Action::HoldModifier {
+                            modifiers: vec![Modifier::Shift],
+                            mode: HoldModifierMode::Toggle,
+                        },
+                        delay_ms: 0,
+                    }],
+                },
+                enabled: true,
+            }],
+            ..minimal_profile()
+        };
+        assert!(matches!(
+            p.validate(),
+            Err(ProfileError::HoldModifierInsideMacro { .. })
+        ));
     }
 }

@@ -4,8 +4,9 @@ use std::time::{Duration, Instant};
 use mapping_core::engine::DebugEvent;
 use mapping_core::engine::{ComboEngine, RawTapEvent};
 use mapping_core::types::{
-    Action, Hand, KeyDef, Mapping, OverloadStrategy, Profile, ProfileKind, ProfileSettings,
-    PushLayerMode, TapCode, TapStep, Trigger, TriggerPattern,
+    Action, Hand, HoldModifierMode, KeyDef, MacroStep, Mapping, Modifier, OverloadStrategy,
+    Profile, ProfileKind, ProfileSettings, PushLayerMode, TapCode, TapStep, Trigger,
+    TriggerPattern,
 };
 
 // ── Profile builders ──────────────────────────────────────────────────────────
@@ -179,7 +180,10 @@ fn check_timeout_flushes_single_tap_after_double_tap_window_expires() {
 
     // Simulate timer ticks before the window expires — nothing should fire yet.
     let mid = engine.check_timeout(t(base, 100));
-    assert!(mid.is_empty(), "100ms < 250ms window, should still be buffered");
+    assert!(
+        mid.is_empty(),
+        "100ms < 250ms window, should still be buffered"
+    );
 
     // Simulate timer tick after the double-tap window has expired.
     let out2 = engine.check_timeout(t(base, 300));
@@ -857,8 +861,7 @@ fn single_tap_with_double_tap_binding_still_waits() {
 #[test]
 fn single_tap_triple_tap_binding_still_waits() {
     // Opt A: a code that appears in a TripleTap trigger IS in needs_wait.
-    let profile =
-        single_profile_with_mappings(vec![triple_tap_mapping("A triple", 1, "c")]);
+    let profile = single_profile_with_mappings(vec![triple_tap_mapping("A triple", 1, "c")]);
     let mut engine = ComboEngine::new(profile);
     let base = Instant::now();
 
@@ -876,10 +879,8 @@ fn single_tap_triple_tap_binding_still_waits() {
 fn rapid_alternating_dual_taps_all_combos_fire() {
     // Simulates the user-reported scenario: rapid R→L→R→L alternation.
     // All pairs should form combos; none should be missed or delayed.
-    let profile = dual_profile_with_mappings(
-        vec![dual_tap_mapping("Both thumbs", 1, 1, "space")],
-        80,
-    );
+    let profile =
+        dual_profile_with_mappings(vec![dual_tap_mapping("Both thumbs", 1, 1, "space")], 80);
     let mut engine = ComboEngine::new(profile);
     let base = Instant::now();
 
@@ -887,34 +888,44 @@ fn rapid_alternating_dual_taps_all_combos_fire() {
     let out1 = engine.push_event(RawTapEvent::new_at("right", 1, t(base, 0)), t(base, 0));
     assert!(out1.is_empty(), "R@0 should buffer");
     let out2 = engine.push_event(RawTapEvent::new_at("left", 1, t(base, 20)), t(base, 20));
-    assert!(key_in_output(&out2, "space"), "pair 1 combo should fire, got {out2:?}");
+    assert!(
+        key_in_output(&out2, "space"),
+        "pair 1 combo should fire, got {out2:?}"
+    );
 
     // Pair 2: R@40, L@60 — 20ms gap.
     let out3 = engine.push_event(RawTapEvent::new_at("right", 1, t(base, 40)), t(base, 40));
     assert!(out3.is_empty(), "R@40 should buffer");
     let out4 = engine.push_event(RawTapEvent::new_at("left", 1, t(base, 60)), t(base, 60));
-    assert!(key_in_output(&out4, "space"), "pair 2 combo should fire, got {out4:?}");
+    assert!(
+        key_in_output(&out4, "space"),
+        "pair 2 combo should fire, got {out4:?}"
+    );
 
     // Pair 3: R@80, L@100 — 20ms gap.
     let out5 = engine.push_event(RawTapEvent::new_at("right", 1, t(base, 80)), t(base, 80));
     assert!(out5.is_empty(), "R@80 should buffer");
     let out6 = engine.push_event(RawTapEvent::new_at("left", 1, t(base, 100)), t(base, 100));
-    assert!(key_in_output(&out6, "space"), "pair 3 combo should fire, got {out6:?}");
+    assert!(
+        key_in_output(&out6, "space"),
+        "pair 3 combo should fire, got {out6:?}"
+    );
 
     // Pair 4: R@120, L@140 — 20ms gap.
     let out7 = engine.push_event(RawTapEvent::new_at("right", 1, t(base, 120)), t(base, 120));
     assert!(out7.is_empty(), "R@120 should buffer");
     let out8 = engine.push_event(RawTapEvent::new_at("left", 1, t(base, 140)), t(base, 140));
-    assert!(key_in_output(&out8, "space"), "pair 4 combo should fire, got {out8:?}");
+    assert!(
+        key_in_output(&out8, "space"),
+        "pair 4 combo should fire, got {out8:?}"
+    );
 }
 
 #[test]
 fn rapid_alternating_dual_taps_left_first_all_combos_fire() {
     // Same as above but left device always taps first.
-    let profile = dual_profile_with_mappings(
-        vec![dual_tap_mapping("Both thumbs", 1, 1, "space")],
-        80,
-    );
+    let profile =
+        dual_profile_with_mappings(vec![dual_tap_mapping("Both thumbs", 1, 1, "space")], 80);
     let mut engine = ComboEngine::new(profile);
     let base = Instant::now();
 
@@ -985,7 +996,10 @@ fn rapid_alternating_dual_same_device_stacks_then_all_resolve() {
     let out1 = engine.push_event(RawTapEvent::new_at("right", 1, t(base, 0)), t(base, 0));
     assert!(out1.is_empty(), "R@0 should buffer");
     let out2 = engine.push_event(RawTapEvent::new_at("right", 1, t(base, 5)), t(base, 5));
-    assert!(out2.is_empty(), "R@5 (same device) should buffer alongside R@0");
+    assert!(
+        out2.is_empty(),
+        "R@5 (same device) should buffer alongside R@0"
+    );
 
     // Left taps arrive, each should match the oldest pending right entry.
     let out3 = engine.push_event(RawTapEvent::new_at("left", 1, t(base, 20)), t(base, 20));
@@ -1036,7 +1050,575 @@ fn next_deadline_set_after_tap_buffered() {
 
     engine.push_event(RawTapEvent::new_at("solo", 1, t(base, 0)), t(base, 0));
 
-    let deadline = engine.next_deadline().expect("deadline must be set after buffering");
+    let deadline = engine
+        .next_deadline()
+        .expect("deadline must be set after buffering");
     let expected = t(base, 0) + Duration::from_millis(250);
-    assert_eq!(deadline, expected, "deadline should be received_at + double_tap_window_ms");
+    assert_eq!(
+        deadline, expected,
+        "deadline should be received_at + double_tap_window_ms"
+    );
+}
+
+// ── hold_modifier ─────────────────────────────────────────────────────────────
+
+/// Build a single-hand profile with two mappings:
+///   code 1 → `hold_modifier { modifiers, mode }`
+///   code 2 → `Key { key, modifiers: [] }`
+fn hold_modifier_profile(modifiers: Vec<Modifier>, mode: HoldModifierMode, key: &str) -> Profile {
+    single_profile_with_mappings(vec![
+        Mapping {
+            label: "hold".into(),
+            trigger: Trigger::Tap {
+                code: TriggerPattern::Single(TapCode::from_u8(1).unwrap()),
+            },
+            action: Action::HoldModifier { modifiers, mode },
+            enabled: true,
+        },
+        tap_mapping("key", 2, key),
+    ])
+}
+
+/// Collect all actions from a flat list of EngineOutputs.
+fn collect_actions(outputs: &[mapping_core::engine::EngineOutput]) -> Vec<&Action> {
+    outputs.iter().flat_map(|o| &o.actions).collect()
+}
+
+#[test]
+fn hold_modifier_toggle_activates_on_first_dispatch() {
+    let profile = hold_modifier_profile(vec![Modifier::Shift], HoldModifierMode::Toggle, "a");
+    let mut engine = ComboEngine::new(profile);
+    let base = Instant::now();
+
+    // Tap code 1 → hold_modifier; should produce no actions.
+    let out1 = engine.push_event(RawTapEvent::new_at("solo", 1, t(base, 0)), t(base, 0));
+    assert!(
+        collect_actions(&out1).is_empty(),
+        "hold_modifier fires no action: {out1:?}"
+    );
+
+    // Tap code 2 → Key "a"; should have Shift injected.
+    let out2 = engine.push_event(RawTapEvent::new_at("solo", 2, t(base, 100)), t(base, 100));
+    let actions = collect_actions(&out2);
+    assert_eq!(actions.len(), 1, "expected one action: {actions:?}");
+    match actions[0] {
+        Action::Key { key, modifiers } => {
+            assert_eq!(key.as_str(), "a");
+            assert!(
+                modifiers.contains(&Modifier::Shift),
+                "expected Shift in modifiers, got {modifiers:?}"
+            );
+        }
+        other => panic!("expected Key, got {other:?}"),
+    }
+}
+
+#[test]
+fn hold_modifier_toggle_deactivates_on_second_dispatch_same_set() {
+    let profile = hold_modifier_profile(vec![Modifier::Shift], HoldModifierMode::Toggle, "a");
+    let mut engine = ComboEngine::new(profile);
+    let base = Instant::now();
+
+    // Activate: tap code 1 twice → second should deactivate.
+    engine.push_event(RawTapEvent::new_at("solo", 1, t(base, 0)), t(base, 0));
+    engine.push_event(RawTapEvent::new_at("solo", 1, t(base, 100)), t(base, 100));
+
+    // Tap code 2 → Key "a"; modifier should be gone.
+    let out = engine.push_event(RawTapEvent::new_at("solo", 2, t(base, 200)), t(base, 200));
+    let actions = collect_actions(&out);
+    assert_eq!(actions.len(), 1, "expected one action: {actions:?}");
+    match actions[0] {
+        Action::Key { modifiers, .. } => {
+            assert!(
+                !modifiers.contains(&Modifier::Shift),
+                "Shift should be deactivated, got {modifiers:?}"
+            );
+        }
+        other => panic!("expected Key, got {other:?}"),
+    }
+}
+
+#[test]
+fn hold_modifier_toggle_two_different_sets_independent() {
+    // Code 1 → hold Shift (toggle), Code 3 → hold Ctrl (toggle), Code 2 → Key "a"
+    let profile = single_profile_with_mappings(vec![
+        Mapping {
+            label: "hold shift".into(),
+            trigger: Trigger::Tap {
+                code: TriggerPattern::Single(TapCode::from_u8(1).unwrap()),
+            },
+            action: Action::HoldModifier {
+                modifiers: vec![Modifier::Shift],
+                mode: HoldModifierMode::Toggle,
+            },
+            enabled: true,
+        },
+        Mapping {
+            label: "hold ctrl".into(),
+            trigger: Trigger::Tap {
+                code: TriggerPattern::Single(TapCode::from_u8(3).unwrap()),
+            },
+            action: Action::HoldModifier {
+                modifiers: vec![Modifier::Ctrl],
+                mode: HoldModifierMode::Toggle,
+            },
+            enabled: true,
+        },
+        tap_mapping("key", 2, "a"),
+    ]);
+    let mut engine = ComboEngine::new(profile);
+    let base = Instant::now();
+
+    engine.push_event(RawTapEvent::new_at("solo", 1, t(base, 0)), t(base, 0));
+    engine.push_event(RawTapEvent::new_at("solo", 3, t(base, 100)), t(base, 100));
+
+    let out = engine.push_event(RawTapEvent::new_at("solo", 2, t(base, 200)), t(base, 200));
+    let actions = collect_actions(&out);
+    assert_eq!(actions.len(), 1);
+    match actions[0] {
+        Action::Key { modifiers, .. } => {
+            assert!(
+                modifiers.contains(&Modifier::Shift),
+                "expected Shift: {modifiers:?}"
+            );
+            assert!(
+                modifiers.contains(&Modifier::Ctrl),
+                "expected Ctrl: {modifiers:?}"
+            );
+        }
+        other => panic!("expected Key, got {other:?}"),
+    }
+}
+
+#[test]
+fn hold_modifier_count_one_applies_modifier_to_first_key_only() {
+    let profile = hold_modifier_profile(
+        vec![Modifier::Shift],
+        HoldModifierMode::Count { count: 1 },
+        "a",
+    );
+    let mut engine = ComboEngine::new(profile);
+    let base = Instant::now();
+
+    engine.push_event(RawTapEvent::new_at("solo", 1, t(base, 0)), t(base, 0));
+
+    // First key: Shift applied.
+    let out1 = engine.push_event(RawTapEvent::new_at("solo", 2, t(base, 100)), t(base, 100));
+    match collect_actions(&out1)[0] {
+        Action::Key { modifiers, .. } => {
+            assert!(
+                modifiers.contains(&Modifier::Shift),
+                "first key should have Shift"
+            );
+        }
+        other => panic!("expected Key, got {other:?}"),
+    }
+
+    // Second key: count exhausted; no Shift.
+    let out2 = engine.push_event(RawTapEvent::new_at("solo", 2, t(base, 200)), t(base, 200));
+    match collect_actions(&out2)[0] {
+        Action::Key { modifiers, .. } => {
+            assert!(
+                !modifiers.contains(&Modifier::Shift),
+                "second key should not have Shift"
+            );
+        }
+        other => panic!("expected Key, got {other:?}"),
+    }
+}
+
+#[test]
+fn hold_modifier_count_two_applies_modifier_to_two_keys() {
+    let profile = hold_modifier_profile(
+        vec![Modifier::Shift],
+        HoldModifierMode::Count { count: 2 },
+        "a",
+    );
+    let mut engine = ComboEngine::new(profile);
+    let base = Instant::now();
+
+    engine.push_event(RawTapEvent::new_at("solo", 1, t(base, 0)), t(base, 0));
+
+    for (i, offset) in [100u64, 200].iter().enumerate() {
+        let out = engine.push_event(
+            RawTapEvent::new_at("solo", 2, t(base, *offset)),
+            t(base, *offset),
+        );
+        match collect_actions(&out)[0] {
+            Action::Key { modifiers, .. } => {
+                assert!(
+                    modifiers.contains(&Modifier::Shift),
+                    "key {i} should have Shift"
+                );
+            }
+            other => panic!("expected Key, got {other:?}"),
+        }
+    }
+
+    // Third key: count exhausted.
+    let out3 = engine.push_event(RawTapEvent::new_at("solo", 2, t(base, 300)), t(base, 300));
+    match collect_actions(&out3)[0] {
+        Action::Key { modifiers, .. } => {
+            assert!(
+                !modifiers.contains(&Modifier::Shift),
+                "third key should not have Shift"
+            );
+        }
+        other => panic!("expected Key, got {other:?}"),
+    }
+}
+
+#[test]
+fn hold_modifier_count_type_string_decrements_count_without_applying_modifier() {
+    // Code 1 → hold_modifier count=1, Code 2 → TypeString, Code 3 → Key "a"
+    let profile = single_profile_with_mappings(vec![
+        Mapping {
+            label: "hold".into(),
+            trigger: Trigger::Tap {
+                code: TriggerPattern::Single(TapCode::from_u8(1).unwrap()),
+            },
+            action: Action::HoldModifier {
+                modifiers: vec![Modifier::Shift],
+                mode: HoldModifierMode::Count { count: 1 },
+            },
+            enabled: true,
+        },
+        Mapping {
+            label: "type".into(),
+            trigger: Trigger::Tap {
+                code: TriggerPattern::Single(TapCode::from_u8(2).unwrap()),
+            },
+            action: Action::TypeString {
+                text: "hello".into(),
+            },
+            enabled: true,
+        },
+        tap_mapping("key", 3, "a"),
+    ]);
+    let mut engine = ComboEngine::new(profile);
+    let base = Instant::now();
+
+    engine.push_event(RawTapEvent::new_at("solo", 1, t(base, 0)), t(base, 0));
+
+    // TypeString: modifier not applied, but count decremented.
+    let out_ts = engine.push_event(RawTapEvent::new_at("solo", 2, t(base, 100)), t(base, 100));
+    let ts_actions = collect_actions(&out_ts);
+    assert!(
+        matches!(ts_actions[0], Action::TypeString { text } if text == "hello"),
+        "TypeString should be unmodified: {ts_actions:?}"
+    );
+
+    // Key "a": count was exhausted by TypeString dispatch; no modifier.
+    let out_key = engine.push_event(RawTapEvent::new_at("solo", 3, t(base, 200)), t(base, 200));
+    match collect_actions(&out_key)[0] {
+        Action::Key { modifiers, .. } => {
+            assert!(
+                !modifiers.contains(&Modifier::Shift),
+                "count exhausted; key should have no Shift"
+            );
+        }
+        other => panic!("expected Key, got {other:?}"),
+    }
+}
+
+#[test]
+fn hold_modifier_timeout_applies_within_window() {
+    let profile = hold_modifier_profile(
+        vec![Modifier::Shift],
+        HoldModifierMode::Timeout { timeout_ms: 1000 },
+        "a",
+    );
+    let mut engine = ComboEngine::new(profile);
+    let base = Instant::now();
+
+    // Activate hold_modifier.
+    engine.push_event(RawTapEvent::new_at("solo", 1, t(base, 0)), t(base, 0));
+
+    // Key dispatched at 500 ms — well within the 1000 ms timeout.
+    let out = engine.push_event(RawTapEvent::new_at("solo", 2, t(base, 500)), t(base, 500));
+    match collect_actions(&out)[0] {
+        Action::Key { modifiers, .. } => {
+            assert!(
+                modifiers.contains(&Modifier::Shift),
+                "Shift should be active within window"
+            );
+        }
+        other => panic!("expected Key, got {other:?}"),
+    }
+}
+
+#[test]
+fn hold_modifier_timeout_does_not_apply_after_expiry() {
+    let profile = hold_modifier_profile(
+        vec![Modifier::Shift],
+        HoldModifierMode::Timeout { timeout_ms: 100 },
+        "a",
+    );
+    let mut engine = ComboEngine::new(profile);
+    let base = Instant::now();
+
+    // Activate hold_modifier.
+    engine.push_event(RawTapEvent::new_at("solo", 1, t(base, 0)), t(base, 0));
+
+    // Advance time past the deadline via check_timeout.
+    engine.check_timeout(t(base, 200));
+
+    // Key dispatched after expiry — Shift should be gone.
+    let out = engine.push_event(RawTapEvent::new_at("solo", 2, t(base, 300)), t(base, 300));
+    match collect_actions(&out)[0] {
+        Action::Key { modifiers, .. } => {
+            assert!(
+                !modifiers.contains(&Modifier::Shift),
+                "Shift should be expired: {modifiers:?}"
+            );
+        }
+        other => panic!("expected Key, got {other:?}"),
+    }
+}
+
+#[test]
+fn hold_modifier_combines_with_action_own_modifiers() {
+    // Key binding already has Ctrl; hold_modifier adds Shift.
+    let profile = single_profile_with_mappings(vec![
+        Mapping {
+            label: "hold shift".into(),
+            trigger: Trigger::Tap {
+                code: TriggerPattern::Single(TapCode::from_u8(1).unwrap()),
+            },
+            action: Action::HoldModifier {
+                modifiers: vec![Modifier::Shift],
+                mode: HoldModifierMode::Toggle,
+            },
+            enabled: true,
+        },
+        Mapping {
+            label: "ctrl+a".into(),
+            trigger: Trigger::Tap {
+                code: TriggerPattern::Single(TapCode::from_u8(2).unwrap()),
+            },
+            action: Action::Key {
+                key: KeyDef::new_unchecked("a"),
+                modifiers: vec![Modifier::Ctrl],
+            },
+            enabled: true,
+        },
+    ]);
+    let mut engine = ComboEngine::new(profile);
+    let base = Instant::now();
+
+    engine.push_event(RawTapEvent::new_at("solo", 1, t(base, 0)), t(base, 0));
+
+    let out = engine.push_event(RawTapEvent::new_at("solo", 2, t(base, 100)), t(base, 100));
+    match collect_actions(&out)[0] {
+        Action::Key { modifiers, .. } => {
+            assert!(
+                modifiers.contains(&Modifier::Ctrl),
+                "expected Ctrl: {modifiers:?}"
+            );
+            assert!(
+                modifiers.contains(&Modifier::Shift),
+                "expected Shift: {modifiers:?}"
+            );
+        }
+        other => panic!("expected Key, got {other:?}"),
+    }
+}
+
+#[test]
+fn hold_modifier_survives_push_layer() {
+    let base_profile = single_profile_with_mappings(vec![
+        Mapping {
+            label: "hold shift".into(),
+            trigger: Trigger::Tap {
+                code: TriggerPattern::Single(TapCode::from_u8(1).unwrap()),
+            },
+            action: Action::HoldModifier {
+                modifiers: vec![Modifier::Shift],
+                mode: HoldModifierMode::Toggle,
+            },
+            enabled: true,
+        },
+        tap_mapping("key", 2, "a"),
+    ]);
+    let overlay_profile = single_profile_with_mappings(vec![tap_mapping("key2", 2, "b")]);
+
+    let mut engine = ComboEngine::new(base_profile);
+    let base = Instant::now();
+
+    // Activate modifier on base layer.
+    engine.push_event(RawTapEvent::new_at("solo", 1, t(base, 0)), t(base, 0));
+
+    // Push an overlay layer — held_modifiers must survive.
+    engine.push_layer(overlay_profile, PushLayerMode::Permanent, t(base, 100));
+
+    // Key on overlay layer should have Shift.
+    let out = engine.push_event(RawTapEvent::new_at("solo", 2, t(base, 200)), t(base, 200));
+    match collect_actions(&out)[0] {
+        Action::Key { modifiers, .. } => {
+            assert!(
+                modifiers.contains(&Modifier::Shift),
+                "Shift should survive push_layer"
+            );
+        }
+        other => panic!("expected Key, got {other:?}"),
+    }
+}
+
+#[test]
+fn hold_modifier_survives_pop_layer() {
+    let base_profile = single_profile_with_mappings(vec![tap_mapping("key", 2, "a")]);
+    let overlay_profile = single_profile_with_mappings(vec![
+        Mapping {
+            label: "hold shift".into(),
+            trigger: Trigger::Tap {
+                code: TriggerPattern::Single(TapCode::from_u8(1).unwrap()),
+            },
+            action: Action::HoldModifier {
+                modifiers: vec![Modifier::Shift],
+                mode: HoldModifierMode::Toggle,
+            },
+            enabled: true,
+        },
+        Mapping {
+            label: "pop".into(),
+            trigger: Trigger::Tap {
+                code: TriggerPattern::Single(TapCode::from_u8(3).unwrap()),
+            },
+            action: Action::PopLayer,
+            enabled: true,
+        },
+    ]);
+
+    let mut engine = ComboEngine::new(base_profile);
+    let base = Instant::now();
+
+    engine.push_layer(overlay_profile, PushLayerMode::Permanent, t(base, 0));
+
+    // Activate modifier on overlay.
+    engine.push_event(RawTapEvent::new_at("solo", 1, t(base, 100)), t(base, 100));
+
+    // Pop layer.
+    engine.push_event(RawTapEvent::new_at("solo", 3, t(base, 200)), t(base, 200));
+
+    // Key on base layer should still have Shift.
+    let out = engine.push_event(RawTapEvent::new_at("solo", 2, t(base, 300)), t(base, 300));
+    match collect_actions(&out)[0] {
+        Action::Key { modifiers, .. } => {
+            assert!(
+                modifiers.contains(&Modifier::Shift),
+                "Shift should survive pop_layer"
+            );
+        }
+        other => panic!("expected Key, got {other:?}"),
+    }
+}
+
+#[test]
+fn hold_modifier_macro_counts_as_single_decrement() {
+    // count=1; a macro with two Key steps should count as one decrement.
+    let profile = single_profile_with_mappings(vec![
+        Mapping {
+            label: "hold shift".into(),
+            trigger: Trigger::Tap {
+                code: TriggerPattern::Single(TapCode::from_u8(1).unwrap()),
+            },
+            action: Action::HoldModifier {
+                modifiers: vec![Modifier::Shift],
+                mode: HoldModifierMode::Count { count: 1 },
+            },
+            enabled: true,
+        },
+        Mapping {
+            label: "macro".into(),
+            trigger: Trigger::Tap {
+                code: TriggerPattern::Single(TapCode::from_u8(2).unwrap()),
+            },
+            action: Action::Macro {
+                steps: vec![
+                    MacroStep {
+                        action: Action::Key {
+                            key: KeyDef::new_unchecked("a"),
+                            modifiers: vec![],
+                        },
+                        delay_ms: 0,
+                    },
+                    MacroStep {
+                        action: Action::Key {
+                            key: KeyDef::new_unchecked("b"),
+                            modifiers: vec![],
+                        },
+                        delay_ms: 0,
+                    },
+                ],
+            },
+            enabled: true,
+        },
+        tap_mapping("key", 3, "c"),
+    ]);
+    let mut engine = ComboEngine::new(profile);
+    let base = Instant::now();
+
+    engine.push_event(RawTapEvent::new_at("solo", 1, t(base, 0)), t(base, 0));
+
+    // Macro dispatch: Shift applied to both steps; count decremented once.
+    let out = engine.push_event(RawTapEvent::new_at("solo", 2, t(base, 100)), t(base, 100));
+    let actions = collect_actions(&out);
+    assert_eq!(actions.len(), 1, "one Macro action returned");
+    match actions[0] {
+        Action::Macro { steps } => {
+            for step in steps {
+                match &step.action {
+                    Action::Key { modifiers, .. } => {
+                        assert!(
+                            modifiers.contains(&Modifier::Shift),
+                            "macro step should have Shift: {modifiers:?}"
+                        );
+                    }
+                    other => panic!("expected Key step, got {other:?}"),
+                }
+            }
+        }
+        other => panic!("expected Macro, got {other:?}"),
+    }
+
+    // Key "c": count was exhausted by the macro dispatch (one decrement total).
+    let out3 = engine.push_event(RawTapEvent::new_at("solo", 3, t(base, 200)), t(base, 200));
+    match collect_actions(&out3)[0] {
+        Action::Key { modifiers, .. } => {
+            assert!(
+                !modifiers.contains(&Modifier::Shift),
+                "count exhausted after macro"
+            );
+        }
+        other => panic!("expected Key, got {other:?}"),
+    }
+}
+
+#[test]
+fn hold_modifier_timeout_included_in_next_deadline() {
+    let profile = hold_modifier_profile(
+        vec![Modifier::Shift],
+        HoldModifierMode::Timeout { timeout_ms: 500 },
+        "a",
+    );
+    let mut engine = ComboEngine::new(profile);
+    let base = Instant::now();
+
+    assert!(
+        engine.next_deadline().is_none(),
+        "no deadline before activation"
+    );
+
+    engine.push_event(RawTapEvent::new_at("solo", 1, t(base, 0)), t(base, 0));
+
+    let deadline = engine
+        .next_deadline()
+        .expect("deadline set after hold_modifier activation");
+    // Deadline should be approximately base + 500 ms (within a small tolerance).
+    let lower = t(base, 490);
+    let upper = t(base, 510);
+    assert!(
+        deadline >= lower && deadline <= upper,
+        "deadline {deadline:?} should be near base+500ms"
+    );
 }

@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::types::{KeyDef, Modifier, PushLayerMode, VariableValue};
+use crate::types::{HoldModifierMode, KeyDef, Modifier, PushLayerMode, VariableValue};
 
 /// An action fired when a trigger matches.
 ///
@@ -18,12 +18,14 @@ use crate::types::{KeyDef, Modifier, PushLayerMode, VariableValue};
 /// { "type": "set_variable",    "variable": "muted", "value": false      }
 /// { "type": "block"                                                      }
 /// { "type": "alias",           "name": "save"                           }
+/// { "type": "hold_modifier",   "modifiers": ["shift"], "mode": "toggle" }
 /// ```
 ///
 /// # Nesting rules
 ///
 /// - `Macro` steps may not themselves be `Macro` actions. Profile validation
 ///   (task 1.22) enforces this; the type does not.
+/// - `Macro` steps may not be `HoldModifier` actions. Profile validation enforces this.
 /// - `ToggleVariable` may contain any action including another `ToggleVariable`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -105,6 +107,19 @@ pub enum Action {
     Alias {
         /// Name of the alias to resolve.
         name: String,
+    },
+
+    /// Activate a sticky modifier key that is applied to subsequent key actions.
+    ///
+    /// The modifier stays active according to `mode` (toggle, count, or timeout).
+    /// When active, its keys are unioned with any `modifiers` already on a `Key`
+    /// action. `HoldModifier` must not appear as a step inside a `Macro`.
+    HoldModifier {
+        /// Modifier keys to activate. Must be non-empty and contain no duplicates.
+        modifiers: Vec<Modifier>,
+        /// How long the modifier stays active.
+        #[serde(flatten)]
+        mode: HoldModifierMode,
     },
 }
 
@@ -452,6 +467,105 @@ mod tests {
     fn action_alias_round_trips() {
         let a = Action::Alias {
             name: "save".into(),
+        };
+        assert_eq!(round_trip(&a), a);
+    }
+
+    // ── Action::HoldModifier ──────────────────────────────────────────────────
+
+    #[test]
+    fn action_hold_modifier_toggle_serialises_with_correct_type_tag() {
+        let a = Action::HoldModifier {
+            modifiers: vec![Modifier::Shift],
+            mode: crate::types::HoldModifierMode::Toggle,
+        };
+        let json = serde_json::to_string(&a).unwrap();
+        assert!(json.contains(r#""type":"hold_modifier""#), "got: {json}");
+        assert!(json.contains(r#""mode":"toggle""#), "got: {json}");
+    }
+
+    #[test]
+    fn action_hold_modifier_count_serialises_correctly() {
+        let a = Action::HoldModifier {
+            modifiers: vec![Modifier::Ctrl],
+            mode: crate::types::HoldModifierMode::Count { count: 1 },
+        };
+        let json = serde_json::to_string(&a).unwrap();
+        assert!(json.contains(r#""type":"hold_modifier""#), "got: {json}");
+        assert!(json.contains(r#""mode":"count""#), "got: {json}");
+        assert!(json.contains(r#""count":1"#), "got: {json}");
+    }
+
+    #[test]
+    fn action_hold_modifier_timeout_serialises_correctly() {
+        let a = Action::HoldModifier {
+            modifiers: vec![Modifier::Alt],
+            mode: crate::types::HoldModifierMode::Timeout { timeout_ms: 2000 },
+        };
+        let json = serde_json::to_string(&a).unwrap();
+        assert!(json.contains(r#""type":"hold_modifier""#), "got: {json}");
+        assert!(json.contains(r#""mode":"timeout""#), "got: {json}");
+        assert!(json.contains(r#""timeout_ms":2000"#), "got: {json}");
+    }
+
+    #[test]
+    fn action_hold_modifier_toggle_round_trips() {
+        let a = Action::HoldModifier {
+            modifiers: vec![Modifier::Shift],
+            mode: crate::types::HoldModifierMode::Toggle,
+        };
+        assert_eq!(round_trip(&a), a);
+    }
+
+    #[test]
+    fn action_hold_modifier_count_round_trips() {
+        let a = Action::HoldModifier {
+            modifiers: vec![Modifier::Ctrl, Modifier::Shift],
+            mode: crate::types::HoldModifierMode::Count { count: 2 },
+        };
+        assert_eq!(round_trip(&a), a);
+    }
+
+    #[test]
+    fn action_hold_modifier_timeout_round_trips() {
+        let a = Action::HoldModifier {
+            modifiers: vec![Modifier::Alt],
+            mode: crate::types::HoldModifierMode::Timeout { timeout_ms: 2000 },
+        };
+        assert_eq!(round_trip(&a), a);
+    }
+
+    #[test]
+    fn action_hold_modifier_toggle_deserialises_from_spec_json() {
+        let json = r#"{"type":"hold_modifier","modifiers":["shift"],"mode":"toggle"}"#;
+        let a: Action = serde_json::from_str(json).unwrap();
+        assert_eq!(
+            a,
+            Action::HoldModifier {
+                modifiers: vec![Modifier::Shift],
+                mode: crate::types::HoldModifierMode::Toggle,
+            }
+        );
+    }
+
+    #[test]
+    fn action_hold_modifier_count_deserialises_from_spec_json() {
+        let json = r#"{"type":"hold_modifier","modifiers":["ctrl"],"mode":"count","count":1}"#;
+        let a: Action = serde_json::from_str(json).unwrap();
+        assert_eq!(
+            a,
+            Action::HoldModifier {
+                modifiers: vec![Modifier::Ctrl],
+                mode: crate::types::HoldModifierMode::Count { count: 1 },
+            }
+        );
+    }
+
+    #[test]
+    fn action_hold_modifier_multi_modifier_set_round_trips() {
+        let a = Action::HoldModifier {
+            modifiers: vec![Modifier::Ctrl, Modifier::Shift],
+            mode: crate::types::HoldModifierMode::Toggle,
         };
         assert_eq!(round_trip(&a), a);
     }

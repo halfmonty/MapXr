@@ -1,5 +1,6 @@
 mod action;
 mod hand;
+mod hold_modifier_mode;
 mod key_def;
 mod mapping;
 mod modifier;
@@ -15,6 +16,7 @@ mod variable_value;
 
 pub use action::{Action, MacroStep};
 pub use hand::Hand;
+pub use hold_modifier_mode::HoldModifierMode;
 pub use key_def::{KeyDef, KeyDefError, VALID_KEYS};
 pub use mapping::Mapping;
 pub use modifier::Modifier;

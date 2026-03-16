@@ -1,3 +1,32 @@
+## 2026-03-15 — Implement hold_modifier action (sticky modifier keys)
+
+**Tasks completed:** hold_modifier feature (spec-approved, not in original numbered task list)
+**Tasks in progress:** none
+
+**Files changed:**
+
+- `docs/spec/hold-modifier-spec.md` — new approved spec document
+- `crates/mapping-core/src/types/hold_modifier_mode.rs` — new `HoldModifierMode` enum with Toggle/Count/Timeout variants; serde round-trip tests
+- `crates/mapping-core/src/types/action.rs` — added `HoldModifier` variant; 9 new tests
+- `crates/mapping-core/src/types/mod.rs` — added module + re-export for `HoldModifierMode`
+- `crates/mapping-core/src/error.rs` — added 5 new `ProfileError` variants for hold_modifier validation
+- `crates/mapping-core/src/types/profile.rs` — added `check_hold_modifier_rules()` validator; 6 new validation tests; updated imports
+- `crates/mapping-core/src/engine/combo_engine.rs` — added `HeldModifierEntry`/`ActiveHoldMode` structs; `held_modifiers: Vec<HeldModifierEntry>` field; `update_hold_modifier()`, `decrement_hold_modifier_counts()`, `expire_held_modifier_timeouts()`, `held_modifier_set()`, `merge_held_modifiers()`, `merge_held_modifiers_into_chord()`, `apply_held_modifiers_to_macro_steps()` methods; updated `execute_action` to take `now: Instant` and apply held modifiers to Key/KeyChord/TypeString/Macro; updated `check_timeout()` and `next_deadline()` for timeout entries
+- `crates/mapping-core/tests/combo_engine.rs` — 13 new engine integration tests covering all spec scenarios
+- `src/lib/types.ts` — added `HoldModifierMode` type; added `hold_modifier` variant to `Action` union
+- `src/lib/components/ActionEditor.svelte` — added `hold_modifier` to type selector, `TYPE_LABELS`, `defaultAction`, helper functions, and form UI; macro steps now disallow `hold_modifier`
+
+**Notes:**
+- `execute_action` signature changed to accept `now: Instant` to support Timeout mode deadline calculation
+- `held_modifiers` state is deliberately NOT cleared on push/pop/switch_layer per spec §3
+- `set_profile()` clears `held_modifiers` (full reset)
+- All 263 mapping-core tests pass; clippy clean; fmt clean
+- The `+layout.svelte` TypeScript error is pre-existing (unrelated to this feature)
+
+**Next:** Epic 8.1 — Add `tap-cli` binary crate to the workspace
+
+---
+
 ## 2026-03-15 — Dual-device alternating tap: analysis + tap_code=0 guard + coverage tests
 
 **Tasks completed:** (bug investigation — not task-numbered)

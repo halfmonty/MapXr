@@ -76,4 +76,41 @@ pub enum ProfileError {
         /// `"single"` or `"dual"`.
         code_kind: String,
     },
+
+    /// A `hold_modifier` action has an empty `modifiers` list.
+    #[error("hold_modifier action must specify at least one modifier (in mapping {label:?})")]
+    HoldModifierEmptyModifiers {
+        /// Label of the offending mapping or context.
+        label: String,
+    },
+
+    /// A `hold_modifier` action has duplicate entries in its `modifiers` list.
+    #[error("hold_modifier action contains duplicate modifier {modifier:?} (in mapping {label:?})")]
+    HoldModifierDuplicateModifier {
+        /// The duplicate modifier name.
+        modifier: String,
+        /// Label of the offending mapping or context.
+        label: String,
+    },
+
+    /// A `hold_modifier` action with `mode: count` has `count: 0`.
+    #[error("hold_modifier count must be at least 1 (in mapping {label:?})")]
+    HoldModifierCountZero {
+        /// Label of the offending mapping or context.
+        label: String,
+    },
+
+    /// A `hold_modifier` action with `mode: timeout` has `timeout_ms: 0`.
+    #[error("hold_modifier timeout_ms must be at least 1 (in mapping {label:?})")]
+    HoldModifierTimeoutZero {
+        /// Label of the offending mapping or context.
+        label: String,
+    },
+
+    /// A `hold_modifier` action appears as a step inside a `macro`.
+    #[error("hold_modifier may not be used inside a macro step (in mapping {label:?})")]
+    HoldModifierInsideMacro {
+        /// Label of the offending mapping or context.
+        label: String,
+    },
 }

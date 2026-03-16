@@ -235,6 +235,10 @@ async fn execute_action(app: &tauri::AppHandle, state: &AppState, action: &Actio
                 .layer_stack_set_variable(variable, value.clone());
         }
         Action::Block => {}
+        // HoldModifier state is managed entirely inside ComboEngine before actions
+        // reach the pump; by the time an action arrives here it has already had held
+        // modifiers applied and the entry decremented/expired. Nothing to do.
+        Action::HoldModifier { .. } => {}
         Action::Alias { name } => {
             let resolved = state.engine.lock().await.top_profile_alias(name);
             if let Some(a) = resolved {
@@ -420,5 +424,6 @@ fn action_kind_name(action: &Action) -> &'static str {
         Action::SetVariable { .. } => "set_variable",
         Action::Block => "block",
         Action::Alias { .. } => "alias",
+        Action::HoldModifier { .. } => "hold_modifier",
     }
 }

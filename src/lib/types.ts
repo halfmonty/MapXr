@@ -84,6 +84,20 @@ export type PushLayerMode =
   | { mode: "count"; count: number }
   | { mode: "timeout"; timeout_ms: number };
 
+// ── HoldModifierMode ──────────────────────────────────────────────────────────
+
+/**
+ * Controls how long a sticky modifier stays active. Serialised with `"mode"` as the
+ * discriminant key, flattened into the parent `hold_modifier` action object:
+ *   { ..., "mode": "toggle" }
+ *   { ..., "mode": "count",   "count": 1 }
+ *   { ..., "mode": "timeout", "timeout_ms": 2000 }
+ */
+export type HoldModifierMode =
+  | { mode: "toggle" }
+  | { mode: "count"; count: number }
+  | { mode: "timeout"; timeout_ms: number };
+
 // ── Action ───────────────────────────────────────────────────────────────────
 
 /**
@@ -115,7 +129,8 @@ export type Action =
     }
   | { type: "set_variable"; variable: string; value: VariableValue }
   | { type: "block" }
-  | { type: "alias"; name: string };
+  | { type: "alias"; name: string }
+  | ({ type: "hold_modifier"; modifiers: Modifier[] } & HoldModifierMode);
 
 /** A single step inside a `macro` action. */
 export interface MacroStep {

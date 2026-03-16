@@ -86,10 +86,7 @@ fn push_layer_makes_new_layer_active() {
         key_in_output(&out1, "b"),
         "expected overlay 'b', got {out1:?}"
     );
-    assert!(
-        !key_in_output(&out1, "a"),
-        "base 'a' must not fire"
-    );
+    assert!(!key_in_output(&out1, "a"), "base 'a' must not fire");
 }
 
 #[test]
