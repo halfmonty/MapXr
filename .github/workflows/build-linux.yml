@@ -21,7 +21,8 @@ jobs:
             libappindicator3-dev \
             librsvg2-dev \
             patchelf \
-            rpm
+            rpm \
+            libxdo-dev
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
