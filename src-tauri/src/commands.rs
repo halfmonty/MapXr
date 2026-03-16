@@ -331,7 +331,7 @@ pub async fn push_layer(
         .await
         .push_layer(profile, mode, std::time::Instant::now());
 
-    crate::pump::process_outputs_no_keys(&app, outputs).await;
+    crate::pump::process_outputs(&app, &state, outputs).await;
 
     crate::pump::emit_layer_changed(&app, &state).await;
     Ok(())
@@ -352,7 +352,7 @@ pub async fn pop_layer(
     if outputs.is_empty() {
         return Err("Layer stack is at base layer; nothing to pop".into());
     }
-    crate::pump::process_outputs_no_keys(&app, outputs).await;
+    crate::pump::process_outputs(&app, &state, outputs).await;
     crate::pump::emit_layer_changed(&app, &state).await;
     Ok(())
 }
@@ -417,6 +417,19 @@ pub async fn get_engine_state(
         connected_devices,
         debug_mode,
     })
+}
+
+// ── read_file_text ────────────────────────────────────────────────────────────
+
+/// Read a file at an absolute path and return its contents as a UTF-8 string.
+///
+/// Used by the frontend to read files dropped onto the window via drag-and-drop:
+/// on Linux/WebKitGTK the WebView receives a `file://` URI rather than a `File`
+/// object, so the frontend resolves the path and delegates the read to this command.
+#[tauri::command]
+pub fn read_file_text(path: String) -> Result<String, String> {
+    std::fs::read_to_string(&path)
+        .map_err(|e| format!("could not read '{path}': {e}"))
 }
 
 // ── DTO unit tests ────────────────────────────────────────────────────────────

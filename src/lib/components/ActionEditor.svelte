@@ -17,15 +17,15 @@
   const ALL_TYPES: Action["type"][] = [
     "key", "key_chord", "type_string", "macro",
     "push_layer", "pop_layer", "switch_layer",
-    "toggle_variable", "set_variable", "block", "alias", "hold_modifier",
+    "toggle_variable", "set_variable", "conditional", "block", "alias", "hold_modifier",
   ];
 
   const TYPE_LABELS: Record<Action["type"], string> = {
     key: "Key", key_chord: "Key chord", type_string: "Type string",
     macro: "Macro", push_layer: "Push layer", pop_layer: "Pop layer",
     switch_layer: "Switch layer", toggle_variable: "Toggle variable",
-    set_variable: "Set variable", block: "Block", alias: "Alias",
-    hold_modifier: "Hold modifier",
+    set_variable: "Set variable", conditional: "Conditional", block: "Block",
+    alias: "Alias", hold_modifier: "Hold modifier",
   };
 
   let availableTypes = $derived(ALL_TYPES.filter((t) => !disallow.includes(t)));
@@ -41,6 +41,7 @@
       case "switch_layer":    return { type: "switch_layer", layer: "" };
       case "toggle_variable": return { type: "toggle_variable", variable: "", on_true: { type: "block" }, on_false: { type: "block" } };
       case "set_variable":    return { type: "set_variable", variable: "", value: false };
+      case "conditional":     return { type: "conditional", variable: "", on_true: { type: "block" }, on_false: { type: "block" } };
       case "block":           return { type: "block" };
       case "alias":           return { type: "alias", name: "" };
       case "hold_modifier":   return { type: "hold_modifier", modifiers: ["shift"], mode: "toggle" };
@@ -154,23 +155,13 @@
   let variableNames = $derived(Object.keys(profile.variables));
 
   function setVariableField(field: string, value: unknown) {
-    if (action.type !== "toggle_variable" && action.type !== "set_variable") return;
+    if (action.type !== "toggle_variable" && action.type !== "set_variable" && action.type !== "conditional") return;
     onchange({ ...action, [field]: value } as Action);
   }
 
   function setVariableValue(raw: string) {
     if (action.type !== "set_variable") return;
-    const current = action.value;
-    if (typeof current === "boolean") {
-      onchange({ ...action, value: raw === "true" });
-    } else {
-      onchange({ ...action, value: Number(raw) || 0 });
-    }
-  }
-
-  function setVariableValueType(t: "bool" | "int") {
-    if (action.type !== "set_variable") return;
-    onchange({ ...action, value: t === "bool" ? false : 0 });
+    onchange({ ...action, value: raw === "true" });
   }
 </script>
 
@@ -410,32 +401,47 @@
       </select>
     </label>
     <div>
-      <p class="label-text mb-1 text-xs">Value type</p>
-      <div class="join mb-2">
-        {#each ["bool", "int"] as t}
-          <button
-            class="btn join-item btn-xs {(typeof action.value === 'boolean' ? 'bool' : 'int') === t ? 'btn-primary' : 'btn-ghost'}"
-            onclick={() => setVariableValueType(t as "bool" | "int")}
-          >{t}</button>
-        {/each}
-      </div>
-      {#if typeof action.value === "boolean"}
-        <select
-          class="select select-bordered select-sm w-32"
-          value={String(action.value)}
-          onchange={(e) => setVariableValue((e.target as HTMLSelectElement).value)}
-        >
-          <option value="true">true</option>
-          <option value="false">false</option>
-        </select>
-      {:else}
-        <input
-          type="number"
-          class="input input-bordered input-sm w-32"
-          value={action.value}
-          oninput={(e) => setVariableValue((e.target as HTMLInputElement).value)}
-        />
-      {/if}
+      <p class="label-text mb-1 text-xs">Value</p>
+      <select
+        class="select select-bordered select-sm w-32"
+        value={String(action.value)}
+        onchange={(e) => setVariableValue((e.target as HTMLSelectElement).value)}
+      >
+        <option value="true">true</option>
+        <option value="false">false</option>
+      </select>
+    </div>
+
+  <!-- ── Conditional ───────────────────────────────────────────────────────── -->
+  {:else if action.type === "conditional"}
+    <label class="form-control w-full">
+      <div class="label py-0"><span class="label-text text-xs">Variable</span></div>
+      <select
+        class="select select-bordered select-sm w-full"
+        value={action.variable}
+        onchange={(e) => setVariableField("variable", (e.target as HTMLSelectElement).value)}
+      >
+        <option value="">— select variable —</option>
+        {#each variableNames as v}<option value={v}>{v}</option>{/each}
+      </select>
+    </label>
+    <div class="rounded-lg border border-base-300 p-3 space-y-2">
+      <p class="text-xs font-medium text-base-content/60">When true → fire:</p>
+      <ActionEditor
+        action={action.on_true}
+        {profile}
+        disallow={["macro"]}
+        onchange={(a: Action) => setVariableField("on_true", a)}
+      />
+    </div>
+    <div class="rounded-lg border border-base-300 p-3 space-y-2">
+      <p class="text-xs font-medium text-base-content/60">When false → fire:</p>
+      <ActionEditor
+        action={action.on_false}
+        {profile}
+        disallow={["macro"]}
+        onchange={(a: Action) => setVariableField("on_false", a)}
+      />
     </div>
 
   <!-- ── Block ─────────────────────────────────────────────────────────────── -->

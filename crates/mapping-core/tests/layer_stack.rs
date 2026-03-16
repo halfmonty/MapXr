@@ -45,6 +45,7 @@ fn tap_mapping(label: &str, code: u8, key: &str) -> Mapping {
             modifiers: vec![],
         },
         enabled: true,
+        condition: None,
     }
 }
 
@@ -205,6 +206,7 @@ fn block_action_prevents_passthrough_to_lower_layer() {
         },
         action: Action::Block,
         enabled: true,
+        condition: None,
     };
     let base = make_profile("base", vec![tap_mapping("A", 1, "a")]);
     let overlay = make_passthrough_profile("overlay", vec![block_mapping]);
@@ -333,6 +335,7 @@ fn toggle_variable_fires_on_false_when_variable_is_false() {
             on_false: Box::new(key_action("f14")),
         },
         enabled: true,
+        condition: None,
     });
 
     let mut engine = ComboEngine::new(profile);
@@ -363,6 +366,7 @@ fn toggle_variable_fires_on_true_when_variable_is_true() {
             on_false: Box::new(key_action("f14")),
         },
         enabled: true,
+        condition: None,
     });
 
     let mut engine = ComboEngine::new(profile);
@@ -394,6 +398,7 @@ fn toggle_variable_flips_on_each_successive_call() {
             on_false: Box::new(key_action("f14")),
         },
         enabled: true,
+        condition: None,
     });
 
     let mut engine = ComboEngine::new(profile);

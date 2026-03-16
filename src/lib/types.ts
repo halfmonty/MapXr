@@ -4,7 +4,7 @@
  * Serde conventions used on the Rust side:
  *   - Action, Trigger: internally tagged with `"type"` key, snake_case variants
  *   - PushLayerMode: internally tagged with `"mode"` key, flattened into PushLayer
- *   - VariableValue: untagged (serialises as plain `boolean` or `number`)
+ *   - VariableValue: untagged (serialises as plain `boolean`; integer variant exists in engine but is not exposed in UI)
  *   - ProfileKind, Hand, Modifier, OverloadStrategy: plain lowercase strings
  *   - TapStep: serialises as a plain finger-pattern string, not an object
  *   - KeyDef: transparent newtype over string
@@ -66,9 +66,10 @@ export type OverloadStrategy = "patient" | "eager";
  * VariableValue serialises as an untagged JSON value:
  *   Bool(true)  → true
  *   Bool(false) → false
- *   Int(42)     → 42
+ *
+ * Integer variables are supported by the engine but not exposed in the UI.
  */
-export type VariableValue = boolean | number;
+export type VariableValue = boolean;
 
 // ── PushLayerMode ─────────────────────────────────────────────────────────────
 
@@ -128,6 +129,12 @@ export type Action =
       on_false: Action;
     }
   | { type: "set_variable"; variable: string; value: VariableValue }
+  | {
+      type: "conditional";
+      variable: string;
+      on_true: Action;
+      on_false: Action;
+    }
   | { type: "block" }
   | { type: "alias"; name: string }
   | ({ type: "hold_modifier"; modifiers: Modifier[] } & HoldModifierMode);
@@ -161,11 +168,18 @@ export type Trigger =
 
 // ── Mapping ──────────────────────────────────────────────────────────────────
 
+/** Guards a mapping so it only fires when a variable matches a given value. */
+export interface MappingCondition {
+  variable: string;
+  value: boolean;
+}
+
 /**
  * A single mapping entry in a profile.
  *
  * `enabled` is omitted from JSON when `true` (the default). When `false` it
  * is present. Treat `undefined` as `true` when reading incoming JSON.
+ * `condition` is omitted when absent.
  */
 export interface Mapping {
   label: string;
@@ -173,6 +187,8 @@ export interface Mapping {
   action: Action;
   /** Omitted from JSON when true. Treat undefined as true. */
   enabled?: boolean;
+  /** Optional variable guard. Omitted when absent. */
+  condition?: MappingCondition;
 }
 
 // ── Profile settings ─────────────────────────────────────────────────────────
@@ -239,7 +255,7 @@ export interface EngineStateSnapshot {
   active_layer_id: string;
   /**
    * Current variable values on the top layer, serialised as JSON values.
-   * VariableValue::Bool(b) → boolean, VariableValue::Int(n) → number.
+   * VariableValue::Bool(b) → boolean.
    */
   variables: Record<string, VariableValue>;
   /** Currently connected BLE devices with their roles and addresses. */

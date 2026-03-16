@@ -129,7 +129,7 @@ pub async fn process_outputs_no_keys(app: &tauri::AppHandle, outputs: Vec<Engine
 }
 
 /// Process engine outputs with full action dispatch (key simulation + layer ops).
-async fn process_outputs(app: &tauri::AppHandle, state: &AppState, outputs: Vec<EngineOutput>) {
+pub async fn process_outputs(app: &tauri::AppHandle, state: &AppState, outputs: Vec<EngineOutput>) {
     for output in outputs {
         if let Some(debug) = output.debug {
             let _ = app.emit(DEBUG_EVENT, &debug);
@@ -199,8 +199,9 @@ async fn execute_action(app: &tauri::AppHandle, state: &AppState, action: &Actio
         Action::SwitchLayer { layer } => {
             let profile = state.layer_registry.lock().await.get(layer).cloned();
             if let Some(profile) = profile {
-                state.engine.lock().await.set_profile(profile);
+                let outputs = state.engine.lock().await.switch_layer(profile);
                 emit_layer_changed(app, state).await;
+                Box::pin(process_outputs(app, state, outputs)).await;
             } else {
                 log::warn!("SwitchLayer: profile '{layer}' not found in registry");
             }
@@ -233,6 +234,24 @@ async fn execute_action(app: &tauri::AppHandle, state: &AppState, action: &Actio
                 .lock()
                 .await
                 .layer_stack_set_variable(variable, value.clone());
+        }
+        Action::Conditional {
+            variable,
+            on_true,
+            on_false,
+        } => {
+            let val = state
+                .engine
+                .lock()
+                .await
+                .top_variables()
+                .get(variable.as_str())
+                .cloned();
+            let child = match val {
+                Some(mapping_core::types::VariableValue::Bool(true)) => on_true,
+                _ => on_false,
+            };
+            Box::pin(execute_action(app, state, child)).await;
         }
         Action::Block => {}
         // HoldModifier state is managed entirely inside ComboEngine before actions
@@ -423,6 +442,7 @@ fn action_kind_name(action: &Action) -> &'static str {
         Action::ToggleVariable { .. } => "toggle_variable",
         Action::SetVariable { .. } => "set_variable",
         Action::Block => "block",
+        Action::Conditional { .. } => "conditional",
         Action::Alias { .. } => "alias",
         Action::HoldModifier { .. } => "hold_modifier",
     }

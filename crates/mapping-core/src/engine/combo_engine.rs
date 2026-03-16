@@ -15,6 +15,12 @@ const DEFAULT_DOUBLE_TAP_WINDOW_MS: u64 = 250;
 const DEFAULT_TRIPLE_TAP_WINDOW_MS: u64 = 400;
 const DEFAULT_SEQUENCE_WINDOW_MS: u64 = 500;
 
+/// Minimum gap (ms) between two events with the same `(device_id, tap_code)`
+/// pair before the second is treated as a distinct tap rather than a hardware
+/// bounce. The TAP Strap may emit spurious duplicate notifications within a
+/// few tens of milliseconds of a genuine tap; this threshold suppresses them.
+const DEBOUNCE_WINDOW_MS: u64 = 50;
+
 // ── Pending event buffer entry ─────────────────────────────────────────────
 
 /// A raw event held in the pending buffer while the engine waits to determine
@@ -182,6 +188,10 @@ pub struct ComboEngine {
     held_modifiers: Vec<HeldModifierEntry>,
     /// Whether debug events are emitted alongside action outputs.
     debug_mode: bool,
+    /// Last-seen `(TapCode, received_at)` per device, used for hardware-bounce
+    /// debouncing. A second event with the same tap_code from the same device
+    /// arriving within [`DEBOUNCE_WINDOW_MS`] is discarded.
+    debounce_last: std::collections::HashMap<DeviceId, (TapCode, Instant)>,
 }
 
 impl ComboEngine {
@@ -203,13 +213,15 @@ impl ComboEngine {
             seq_progress: None,
             held_modifiers: Vec::new(),
             debug_mode: false,
+            debounce_last: Default::default(),
         }
     }
 
     /// Replace the base profile, discarding the entire stack. Clears all
-    /// pending state including held modifiers.
+    /// pending state including held modifiers. Does not fire lifecycle actions
+    /// — use [`switch_layer`] when `on_exit`/`on_enter` should be dispatched.
     pub fn set_profile(&mut self, profile: Profile) {
-        self.layer_stack.switch_to(profile);
+        let (_, _) = self.layer_stack.switch_to(profile);
         self.rebuild_overloads();
         self.combo_pending.clear();
         self.tap_pending = None;
@@ -247,12 +259,17 @@ impl ComboEngine {
             .collect()
     }
 
-    /// Replace the entire stack with a single layer.
+    /// Replace the entire stack with a single layer, returning `on_exit` of the
+    /// previous top layer followed by `on_enter` of the new layer (in that order).
     pub fn switch_layer(&mut self, profile: Profile) -> Vec<EngineOutput> {
-        self.layer_stack.switch_to(profile);
+        let (on_exit, on_enter) = self.layer_stack.switch_to(profile);
         self.rebuild_overloads();
         self.clear_pending();
-        vec![]
+        on_exit
+            .into_iter()
+            .chain(on_enter)
+            .map(|a| EngineOutput::actions(vec![a]))
+            .collect()
     }
 
     /// Flush any buffered pending events whose detection windows have expired,
@@ -345,6 +362,38 @@ impl ComboEngine {
         // steal a partner slot from the next genuine tap.
         if tap_code.as_u8() == 0 {
             return vec![];
+        }
+
+        // Hardware-bounce debounce: for single-kind profiles, discard a second
+        // event with the same tap code from the same device if it arrives within
+        // DEBOUNCE_WINDOW_MS of the previous event from that device.  The TAP
+        // Strap sometimes emits spurious duplicate notifications within ~10–30 ms
+        // of a genuine tap, which would otherwise be misread as a double-tap.
+        //
+        // Dual-kind profiles are exempt because they legitimately stack multiple
+        // same-device events (cross-device combo detection relies on them).
+        let is_single = self.layer_stack.top().kind == crate::types::ProfileKind::Single;
+        if is_single {
+            let debounce_gap = self
+                .debounce_last
+                .get(&event.device_id)
+                .and_then(|(last_code, last_at)| {
+                    if *last_code == tap_code {
+                        Some(
+                            event
+                                .received_at
+                                .saturating_duration_since(*last_at)
+                                .as_millis() as u64,
+                        )
+                    } else {
+                        None
+                    }
+                });
+            if debounce_gap.is_some_and(|gap| gap < DEBOUNCE_WINDOW_MS) {
+                return vec![];
+            }
+            self.debounce_last
+                .insert(event.device_id.clone(), (tap_code, event.received_at));
         }
 
         // Before flushing, detect combo timeouts for debug reporting.
@@ -830,6 +879,7 @@ impl ComboEngine {
 
         // No active sequence — check whether this tap starts one.
         // Collect (idx, wms, steps_len) to avoid borrow-after-move.
+        let top_vars_seq = self.layer_stack.top_variables().clone();
         let found =
             self.layer_stack
                 .top()
@@ -839,6 +889,14 @@ impl ComboEngine {
                 .find_map(|(idx, mapping)| {
                     if !mapping.enabled {
                         return None;
+                    }
+                    if let Some(cond) = &mapping.condition {
+                        let actual = top_vars_seq
+                            .get(cond.variable.as_str())
+                            .and_then(|v| if let crate::types::VariableValue::Bool(b) = v { Some(*b) } else { None });
+                        if actual != Some(cond.value) {
+                            return None;
+                        }
                     }
                     if let Trigger::Sequence { steps, window_ms } = &mapping.trigger {
                         if !steps.is_empty()
@@ -975,6 +1033,10 @@ impl ComboEngine {
         // Capture the full stack before walking (for the Resolved debug event).
         let full_layer_ids = self.layer_stack.layer_ids();
 
+        // Snapshot top-layer variables before the walk (conditions always test
+        // against the current top layer per spec).
+        let top_vars = self.layer_stack.top_variables().clone();
+
         let mut layers_checked: Vec<String> = Vec::new();
         let found: Option<MatchResult> = {
             let mut result = None;
@@ -985,6 +1047,14 @@ impl ComboEngine {
                 for mapping in &profile.mappings {
                     if !mapping.enabled {
                         continue;
+                    }
+                    if let Some(cond) = &mapping.condition {
+                        let actual = top_vars
+                            .get(cond.variable.as_str())
+                            .and_then(|v| if let crate::types::VariableValue::Bool(b) = v { Some(*b) } else { None });
+                        if actual != Some(cond.value) {
+                            continue;
+                        }
                     }
                     let trigger_matches = match (&mapping.trigger, resolved.kind) {
                         (Trigger::Tap { code }, ResolvedTriggerKind::Tap) => {

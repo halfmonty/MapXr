@@ -118,12 +118,17 @@ impl LayerStack {
 
     /// Replace the entire stack with a single new layer.
     ///
-    /// All existing layers (including the base) are discarded without firing
-    /// their `on_exit` actions. The new layer becomes the permanent base.
-    pub fn switch_to(&mut self, profile: Profile) {
+    /// Returns `(on_exit, on_enter)` where `on_exit` is the `on_exit` action
+    /// of the layer that was on top before the switch, and `on_enter` is the
+    /// `on_enter` action of the new layer. All intermediate layers are
+    /// discarded without firing their `on_exit` actions.
+    pub fn switch_to(&mut self, profile: Profile) -> (Option<Action>, Option<Action>) {
+        let on_exit = self.stack.last().and_then(|e| e.profile.on_exit.clone());
+        let on_enter = profile.on_enter.clone();
         self.stack.clear();
         self.stack
             .push(LayerEntry::new(profile, ActiveMode::Permanent));
+        (on_exit, on_enter)
     }
 
     /// The currently active (top) layer profile.
@@ -356,6 +361,30 @@ mod tests {
         stack.switch_to(make_profile("gaming"));
         assert_eq!(stack.len(), 1);
         assert_eq!(stack.top().layer_id, "gaming");
+    }
+
+    #[test]
+    fn layer_stack_switch_to_returns_on_exit_of_top_and_on_enter_of_new() {
+        let mut stack = LayerStack::new(make_profile("base"));
+        let now = Instant::now();
+        // Push a layer with on_exit so it is the current top.
+        let top = make_profile_with_enter_exit("top", None, Some(key_action("f14")));
+        stack.push(top, PushLayerMode::Permanent, now);
+
+        let new = make_profile_with_enter_exit("new_base", Some(key_action("a")), None);
+        let (on_exit, on_enter) = stack.switch_to(new);
+        assert_eq!(on_exit, Some(key_action("f14")));
+        assert_eq!(on_enter, Some(key_action("a")));
+        assert_eq!(stack.top().layer_id, "new_base");
+        assert_eq!(stack.len(), 1);
+    }
+
+    #[test]
+    fn layer_stack_switch_to_returns_none_when_no_lifecycle_actions() {
+        let mut stack = LayerStack::new(make_profile("base"));
+        let (on_exit, on_enter) = stack.switch_to(make_profile("new_base"));
+        assert!(on_exit.is_none());
+        assert!(on_enter.is_none());
     }
 
     #[test]

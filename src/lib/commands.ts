@@ -154,3 +154,17 @@ export async function setDebugMode(enabled: boolean): Promise<void> {
 export async function getEngineState(): Promise<EngineStateSnapshot> {
   return invoke("get_engine_state");
 }
+
+// ── Filesystem helpers ────────────────────────────────────────────────────────
+
+/**
+ * Read a file at an absolute path and return its text content.
+ *
+ * Used for drag-and-drop imports on Linux/WebKitGTK where the WebView receives
+ * a `file://` URI instead of a `File` object in `dataTransfer.files`.
+ *
+ * @throws If the file cannot be read or is not valid UTF-8.
+ */
+export async function readFileText(path: string): Promise<string> {
+  return invoke("read_file_text", { path });
+}

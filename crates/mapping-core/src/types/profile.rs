@@ -292,6 +292,12 @@ fn check_action_keys(action: &Action, label: &str) -> Result<(), ProfileError> {
             check_action_keys(on_true, label)?;
             check_action_keys(on_false, label)?;
         }
+        Action::Conditional {
+            on_true, on_false, ..
+        } => {
+            check_action_keys(on_true, label)?;
+            check_action_keys(on_false, label)?;
+        }
         _ => {}
     }
     Ok(())
@@ -328,6 +334,12 @@ fn check_action_aliases(
             }
         }
         Action::ToggleVariable {
+            on_true, on_false, ..
+        } => {
+            check_action_aliases(on_true, aliases)?;
+            check_action_aliases(on_false, aliases)?;
+        }
+        Action::Conditional {
             on_true, on_false, ..
         } => {
             check_action_aliases(on_true, aliases)?;
@@ -391,6 +403,13 @@ fn check_action_hold_modifier(
             Ok(())
         }
         Action::ToggleVariable {
+            on_true, on_false, ..
+        } => {
+            check_action_hold_modifier(on_true, label, in_macro)?;
+            check_action_hold_modifier(on_false, label, in_macro)?;
+            Ok(())
+        }
+        Action::Conditional {
             on_true, on_false, ..
         } => {
             check_action_hold_modifier(on_true, label, in_macro)?;
@@ -538,6 +557,7 @@ mod tests {
                     modifiers: vec![],
                 },
                 enabled: true,
+                condition: None,
             }],
             ..minimal_profile()
         };
@@ -603,6 +623,7 @@ mod tests {
             },
             action,
             enabled: true,
+            condition: None,
         }
     }
 
@@ -711,6 +732,7 @@ mod tests {
                     }],
                 },
                 enabled: true,
+                condition: None,
             }],
             ..minimal_profile()
         };

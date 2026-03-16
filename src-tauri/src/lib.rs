@@ -71,6 +71,7 @@ pub fn run() {
             commands::pop_layer,
             commands::set_debug_mode,
             commands::get_engine_state,
+            commands::read_file_text,
         ])
         // Task 3.16 / 4.21: graceful shutdown — exit controller mode before the
         // OS window closes so the Tap device returns to text mode.

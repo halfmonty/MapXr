@@ -141,11 +141,13 @@ pub async fn build_app_state(
 /// Attempt to reconnect all devices saved in the device registry.
 ///
 /// Runs as a background task immediately after app state is registered.
-/// Two-phase approach:
-/// 1. Try each device directly from the adapter's peripheral cache (fast path;
-///    works on Linux/BlueZ when the device is bonded and BlueZ knows its address).
-/// 2. For any device that was not in the cache, run a 5-second BLE scan to
-///    populate it, then retry those devices.
+/// Always scans first to populate the adapter's peripheral cache, then
+/// connects all registered devices in sequence.
+///
+/// Scanning before any connection attempt avoids a Linux/BlueZ issue where
+/// running a scan while a device is already mid-connection can disrupt the
+/// active connection — previously causing only the last-connected device to
+/// survive when two devices were registered.
 ///
 /// Failures are logged and skipped — they never block startup.
 pub(crate) async fn auto_reconnect(app: tauri::AppHandle, state: Arc<AppState>) {
@@ -171,16 +173,20 @@ pub(crate) async fn auto_reconnect(app: tauri::AppHandle, state: Arc<AppState>) 
         return;
     }
 
-    log::info!(
-        "auto_reconnect: {} saved device(s)",
-        saved.len()
-    );
+    log::info!("auto_reconnect: {} saved device(s), scanning first", saved.len());
 
-    // ── Phase 1: try direct connect from the adapter's existing cache ──────────
-    let mut needs_scan: Vec<(mapping_core::engine::DeviceId, btleplug::api::BDAddr)> = Vec::new();
+    // Scan before connecting. This populates the adapter cache and avoids
+    // triggering a scan mid-connection which can drop already-connected devices
+    // on some Linux Bluetooth adapters.
+    {
+        let mut manager = ble.lock().await;
+        if let Err(e) = manager.scan(SCAN_DURATION_MS).await {
+            // Non-fatal: bonded devices may still be reachable from the BlueZ cache.
+            log::warn!("auto_reconnect: scan failed: {e}");
+        }
+    }
 
     for (device_id, address) in &saved {
-        // Release the lock between iterations so other commands aren't blocked.
         let result = {
             let mut manager = ble.lock().await;
             tokio::time::timeout(
@@ -194,55 +200,11 @@ pub(crate) async fn auto_reconnect(app: tauri::AppHandle, state: Arc<AppState>) 
                 log::info!("auto_reconnect: connected {device_id} ({address})");
                 crate::pump::emit_layer_changed(&app, &state).await;
             }
-            Ok(Err(tap_ble::BleError::DeviceNotFound { .. })) => {
-                log::info!("auto_reconnect: {device_id} not in cache, will scan");
-                needs_scan.push((device_id.clone(), *address));
-            }
             Ok(Err(e)) => {
                 log::warn!("auto_reconnect: failed {device_id} ({address}): {e}");
             }
             Err(_) => {
                 log::warn!("auto_reconnect: timed out {device_id} ({address})");
-            }
-        }
-    }
-
-    if needs_scan.is_empty() {
-        return;
-    }
-
-    // ── Phase 2: scan to populate adapter cache, then retry ───────────────────
-    log::info!(
-        "auto_reconnect: scanning for {} device(s) not in cache",
-        needs_scan.len()
-    );
-    {
-        let mut manager = ble.lock().await;
-        if let Err(e) = manager.scan(SCAN_DURATION_MS).await {
-            log::warn!("auto_reconnect: scan failed: {e}");
-            return;
-        }
-    }
-
-    for (device_id, address) in needs_scan {
-        let result = {
-            let mut manager = ble.lock().await;
-            tokio::time::timeout(
-                CONNECT_TIMEOUT,
-                manager.connect(device_id.clone(), address),
-            )
-            .await
-        };
-        match result {
-            Ok(Ok(())) => {
-                log::info!("auto_reconnect: connected {device_id} ({address}) after scan");
-                crate::pump::emit_layer_changed(&app, &state).await;
-            }
-            Ok(Err(e)) => {
-                log::info!("auto_reconnect: skipped {device_id} ({address}): {e}");
-            }
-            Err(_) => {
-                log::warn!("auto_reconnect: timed out {device_id} ({address}) after scan");
             }
         }
     }

@@ -1,3 +1,21 @@
+## 2026-03-16 — Fix double-tap inversion bug via hardware-bounce debounce
+
+**Tasks completed:** bug fix (no task ID — reported during manual testing)
+**Tasks in progress:** none
+
+**Files changed:**
+
+- `crates/mapping-core/src/engine/combo_engine.rs` — added `DEBOUNCE_WINDOW_MS = 50` constant and `debounce_last: HashMap<DeviceId, (TapCode, Instant)>` field to `ComboEngine`; in `push_event`, same-device same-code events arriving within 50 ms of the previous event are silently discarded (single-kind profiles only; dual profiles are exempt because they legitimately stack same-device events for cross-device combo detection)
+- `crates/mapping-core/tests/combo_engine.rs` — added three new tests: `hardware_bounce_duplicate_within_debounce_window_is_discarded`, `hardware_bounce_different_code_is_not_debounced`, `hardware_bounce_outside_debounce_window_is_treated_as_second_tap`
+
+**Notes:**
+- Root cause: the TAP Strap hardware emits spurious duplicate BLE notifications within ~10–30 ms of a genuine tap. With a double-tap binding present, the engine treated the bounce as a second intentional tap, advancing `tap_pending` to `TapPending::Two` and firing the double-tap action on what the user intended as a single tap. Conversely, an intentional double tap produced three events (genuine + bounce + genuine), triggering a triple-tap dispatch ("no match") and then a single-tap dispatch — the inverted behavior the user observed.
+- The 50 ms window catches real TAP Strap bounces while still allowing intentional double-tapping (second tap normally arrives 100–200 ms after the first). Dual profiles are exempt to preserve the stacking behaviour tested in `rapid_alternating_dual_same_device_stacks_then_all_resolve`.
+
+**Next:** Epic 8.1 — Add `tap-cli` binary crate to the workspace
+
+---
+
 ## 2026-03-16 — Windows build via GitHub Actions; root README
 
 **Tasks completed:** partial 9.4 (Windows-only CI workflow); 9.8 (user-facing README.md)

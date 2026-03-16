@@ -10,6 +10,22 @@ fn is_true(v: &bool) -> bool {
     *v
 }
 
+/// A runtime condition that guards a mapping.
+///
+/// The mapping is only considered when the named variable on the current top
+/// layer equals `value`. If the variable is absent the condition is not met.
+///
+/// ```json
+/// { "variable": "caps_lock", "value": true }
+/// ```
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct MappingCondition {
+    /// Name of the variable to test.
+    pub variable: String,
+    /// The boolean value the variable must equal.
+    pub value: bool,
+}
+
 /// A single input binding: a trigger paired with an action.
 ///
 /// Serialises as a JSON object inside the profile `"mappings"` array:
@@ -39,6 +55,11 @@ pub struct Mapping {
     /// disable a mapping without deleting it.
     #[serde(default = "default_enabled", skip_serializing_if = "is_true")]
     pub enabled: bool,
+
+    /// Optional variable condition. When set, this mapping is only considered
+    /// when the named variable on the current top layer equals `value`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub condition: Option<MappingCondition>,
 }
 
 #[cfg(test)]
@@ -57,6 +78,7 @@ mod tests {
                 modifiers: vec![],
             },
             enabled: true,
+            condition: None,
         }
     }
 
@@ -122,5 +144,51 @@ mod tests {
         assert_eq!(m.label, "Unpause");
         assert_eq!(m.action, Action::PopLayer);
         assert!(m.enabled);
+    }
+
+    #[test]
+    fn mapping_condition_none_omitted_from_json() {
+        let m = sample_mapping();
+        let json = serde_json::to_string(&m).unwrap();
+        assert!(!json.contains("condition"), "got: {json}");
+    }
+
+    #[test]
+    fn mapping_condition_serialises_when_set() {
+        let m = Mapping {
+            condition: Some(MappingCondition {
+                variable: "caps_lock".into(),
+                value: true,
+            }),
+            ..sample_mapping()
+        };
+        let json = serde_json::to_string(&m).unwrap();
+        assert!(json.contains("\"condition\""), "got: {json}");
+        assert!(json.contains("\"caps_lock\""), "got: {json}");
+    }
+
+    #[test]
+    fn mapping_condition_round_trips() {
+        let m = Mapping {
+            condition: Some(MappingCondition {
+                variable: "caps_lock".into(),
+                value: false,
+            }),
+            ..sample_mapping()
+        };
+        let json = serde_json::to_string(&m).unwrap();
+        let m2: Mapping = serde_json::from_str(&json).unwrap();
+        assert_eq!(m, m2);
+    }
+
+    #[test]
+    fn mapping_deserialises_without_condition_defaults_to_none() {
+        let json = r#"{
+            "label": "test",
+            "trigger": { "type": "tap", "code": "xoooo" },
+            "action": { "type": "key", "key": "space" }
+        }"#;
+        let m: Mapping = serde_json::from_str(json).unwrap();
+        assert!(m.condition.is_none());
     }
 }

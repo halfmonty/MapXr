@@ -16,6 +16,7 @@ use crate::types::{HoldModifierMode, KeyDef, Modifier, PushLayerMode, VariableVa
 /// { "type": "switch_layer",    "layer": "base"                          }
 /// { "type": "toggle_variable", "variable": "muted", ...                 }
 /// { "type": "set_variable",    "variable": "muted", "value": false      }
+/// { "type": "conditional",     "variable": "caps", "on_true": {...}, "on_false": {...} }
 /// { "type": "block"                                                      }
 /// { "type": "alias",           "name": "save"                           }
 /// { "type": "hold_modifier",   "modifiers": ["shift"], "mode": "toggle" }
@@ -26,7 +27,7 @@ use crate::types::{HoldModifierMode, KeyDef, Modifier, PushLayerMode, VariableVa
 /// - `Macro` steps may not themselves be `Macro` actions. Profile validation
 ///   (task 1.22) enforces this; the type does not.
 /// - `Macro` steps may not be `HoldModifier` actions. Profile validation enforces this.
-/// - `ToggleVariable` may contain any action including another `ToggleVariable`.
+/// - `ToggleVariable` and `Conditional` may contain any action including further nesting.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Action {
@@ -98,6 +99,19 @@ pub enum Action {
         variable: String,
         /// The value to assign.
         value: VariableValue,
+    },
+
+    /// Read a boolean variable and dispatch one of two child actions without
+    /// modifying the variable.
+    ///
+    /// If the variable does not exist, `on_false` is dispatched.
+    Conditional {
+        /// Name of the variable to read from the current top layer.
+        variable: String,
+        /// Action dispatched when the variable is `true`.
+        on_true: Box<Action>,
+        /// Action dispatched when the variable is `false` or absent.
+        on_false: Box<Action>,
     },
 
     /// Consume the tap code and fire nothing. Stops passthrough walk at this layer.

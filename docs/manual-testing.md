@@ -9,97 +9,97 @@ Sections marked _(Epic 8)_ require the `tap-cli` binary to be built first.
 
 ## 1 — Device Setup & Connection
 
-- [ ] App launches without errors on a clean profile directory
-- [ ] Device scan finds at least one TAP device by BLE service UUID
-- [ ] Duplicate scan results are deduplicated (same device not listed twice)
-- [ ] Assigning a device the `solo` role connects and streams tap events
-- [ ] Assigning a device the `left` role connects and identifies as left hand
-- [ ] Assigning a device the `right` role connects and identifies as right hand
-- [ ] Device registry persists across app restarts — previously paired device reconnects automatically
-- [ ] Disconnect button disconnects the device (controller-mode exit packet sent)
-- [ ] Device going out of range triggers automatic reconnect with backoff
-- [ ] After reconnect, tap events resume correctly
-- [ ] App closing sends controller-mode exit to all connected devices before shutdown
-- [ ] Warning shown in UI when active profile requires a role not currently connected
+- [x] App launches without errors on a clean profile directory
+- [x] Device scan finds at least one TAP device by BLE service UUID
+- [x] Duplicate scan results are deduplicated (same device not listed twice)
+- [x] Assigning a device the `solo` role connects and streams tap events
+- [x] Assigning a device the `left` role connects and identifies as left hand
+- [x] Assigning a device the `right` role connects and identifies as right hand
+- [x] Device registry persists across app restarts — previously paired device reconnects automatically
+- [x] Disconnect button disconnects the device (controller-mode exit packet sent)
+- [x] Device going out of range triggers automatic reconnect with backoff
+- [x] After reconnect, tap events resume correctly
+- [x] App closing sends controller-mode exit to all connected devices before shutdown
+- [x] Warning shown in UI when active profile requires a role not currently connected
 
 ---
 
 ## 2 — Profile Management
 
-- [ ] Profile list shows all `.json` files in the profiles directory
-- [ ] Each profile shows name, kind badge (single/dual), and description
-- [ ] Active profile is visually indicated in the list
-- [ ] Create new single-hand profile — wizard prompts for name and hand (left/right)
-- [ ] Create new dual-hand profile — wizard prompts for name only (no hand field)
-- [ ] Activate a profile — it becomes the base layer
-- [ ] Delete a profile — requires confirmation before deletion
-- [ ] Import a profile via file picker — validates and copies to profiles directory
-- [ ] Import a profile via drag-and-drop — same validation as file picker
-- [ ] A profile with an invalid key name is rejected on load with a descriptive error
-- [ ] A profile with a malformed finger pattern is rejected on load with a descriptive error
-- [ ] A profile with a circular alias reference is rejected on load with a descriptive error
-- [ ] A profile with overloaded codes but no `overload_strategy` is rejected on load
-- [ ] `profile-error` event causes an error message in the UI, not a crash
+- [x] Profile list shows all `.json` files in the profiles directory
+- [x] Each profile shows name, kind badge (single/dual), and description
+- [x] Active profile is visually indicated in the list
+- [x] Create new single-hand profile — wizard prompts for name and hand (left/right)
+- [x] Create new dual-hand profile — wizard prompts for name only (no hand field)
+- [x] Activate a profile — it becomes the base layer
+- [x] Delete a profile — requires confirmation before deletion
+- [x] Import a profile via file picker — validates and copies to profiles directory
+- [x] Import a profile via drag-and-drop — same validation as file picker
+- [x] A profile with an invalid key name is rejected on load with a descriptive error
+- [x] A profile with a malformed finger pattern is rejected on load with a descriptive error
+- [x] A profile with a circular alias reference is rejected on load with a descriptive error
+- [x] A profile with overloaded codes but no `overload_strategy` is rejected on load
+- [x] `profile-error` event causes an error message in the UI, not a crash
 
 ---
 
 ## 3 — Profile Editor
 
-- [ ] Mapping list shows label, trigger summary, action summary, and enabled toggle
-- [ ] Enabled toggle sets `"enabled": false` in JSON without deleting the mapping
-- [ ] Disabled mapping does not fire when its trigger is activated
-- [ ] Mappings can be reordered by drag handle
-- [ ] Add mapping opens the editor panel; new mapping appears in list on save
-- [ ] Delete mapping shows a 5-second undo toast; mapping is removed if not undone
-- [ ] Undo toast restores the deleted mapping in its original position
-- [ ] Save button writes the profile to disk and shows a success toast
-- [ ] Save error (e.g. write permission denied) shows an error toast, does not crash
-- [ ] Navigating away with unsaved changes shows a confirmation dialog
-- [ ] Profile settings panel shows all timing fields with labels
-- [ ] Changing a timing field in the settings panel takes effect when the profile is saved and reloaded
-- [ ] Alias manager: add, edit, and delete named aliases
-- [ ] Variable manager: add and delete variables with type and initial value
-- [ ] `on_enter` action editor is accessible and saves correctly
-- [ ] `on_exit` action editor is accessible and saves correctly
+- [x] Mapping list shows label, trigger summary, action summary, and enabled toggle
+- [x] Enabled toggle sets `"enabled": false` in JSON without deleting the mapping
+- [x] Disabled mapping does not fire when its trigger is activated
+- [x] Mappings can be reordered by drag handle
+- [x] Add mapping opens the editor panel; new mapping appears in list on save
+- [x] Delete mapping shows a 5-second undo toast; mapping is removed if not undone
+- [x] Undo toast restores the deleted mapping in its original position
+- [x] Save button writes the profile to disk and shows a success toast
+- [x] Save error (e.g. write permission denied) shows an error toast, does not crash
+- [x] Navigating away with unsaved changes shows a confirmation dialog
+- [x] Profile settings panel shows all timing fields with labels
+- [x] Changing a timing field in the settings panel takes effect when the profile is saved and reloaded
+- [x] Alias manager: add, edit, and delete named aliases
+- [x] Variable manager: add and delete variables with type and initial value
+- [x] `on_enter` action editor is accessible and saves correctly
+- [x] `on_exit` action editor is accessible and saves correctly
 
 ---
 
 ## 4 — Finger Pattern Widget
 
 ### Single-hand
-- [ ] Clicking a circle toggles it between filled (x) and empty (o)
-- [ ] Typing `x` or `o` while focused fills the corresponding finger
-- [ ] Labels below circles show T/I/M/R/P for right hand (thumb → pinky, left to right)
-- [ ] Labels below circles show P/R/M/I/T for left hand (pinky → thumb, left to right)
-- [ ] Clicking record mode and tapping the hardware fills the pattern from the device
-- [ ] Validation error shown inline when all five circles are empty (all-o is invalid)
+- [x] Clicking a circle toggles it between filled (x) and empty (o)
+- [x] Typing `x` or `o` while focused fills the corresponding finger
+- [x] Labels below circles show T/I/M/R/P for right hand (thumb → pinky, left to right)
+- [x] Labels below circles show P/R/M/I/T for left hand (pinky → thumb, left to right)
+- [x] Clicking record mode and tapping the hardware fills the pattern from the device
+- [x] Validation error shown inline when all five circles are empty (all-o is invalid)
 
 ### Dual-hand
-- [ ] Two groups of five circles with a visual gap between them
-- [ ] Left group labelled "Left", right group labelled "Right"
-- [ ] Left group reads pinky → thumb (P/R/M/I/T), right group reads thumb → pinky (T/I/M/R/P)
-- [ ] Either group can be all-o (idle side of a dual pattern) — no validation error
-- [ ] Both groups all-o simultaneously shows validation error
-- [ ] Record mode fills the correct hand group based on which device sent the tap
+- [x] Two groups of five circles with a visual gap between them
+- [x] Left group labelled "Left", right group labelled "Right"
+- [x] Left group reads pinky → thumb (P/R/M/I/T), right group reads thumb → pinky (T/I/M/R/P)
+- [x] Either group can be all-o (idle side of a dual pattern) — no validation error
+- [x] Both groups all-o simultaneously shows validation error
+- [x] Record mode fills the correct hand group based on which device sent the tap
 
 ### Display
-- [ ] Read-only mode in mapping list summaries shows pattern without click handlers
-- [ ] Component renders correctly in light mode
-- [ ] Component renders correctly in dark mode
+- [x] Read-only mode in mapping list summaries shows pattern without click handlers
+- [x] Component renders correctly in light mode
+- [x] Component renders correctly in dark mode
 
 ---
 
 ## 5 — Trigger Types: Single-hand
 
 ### Tap
-- [ ] Single tap fires the mapped action exactly once
-- [ ] Two different tap codes each fire their own mapped action independently
-- [ ] A tap with no mapping in the active layer is consumed silently (passthrough: false)
+- [x] Single tap fires the mapped action exactly once
+- [x] Two different tap codes each fire their own mapped action independently
+- [x] A tap with no mapping in the active layer is consumed silently (passthrough: false)
 
 ### Double tap — patient strategy
-- [ ] Single tap on an overloaded code fires after `double_tap_window_ms` elapses with no second tap
-- [ ] Double tap on an overloaded code fires the `double_tap` action (not the `tap` action)
-- [ ] Non-overloaded code fires immediately without waiting for `double_tap_window_ms`
+- [x] Single tap on an overloaded code fires after `double_tap_window_ms` elapses with no second tap
+- [x] Double tap on an overloaded code fires the `double_tap` action (not the `tap` action)
+- [x] Non-overloaded code fires immediately without waiting for `double_tap_window_ms`
 
 ### Double tap — eager strategy
 - [ ] Single tap on an overloaded code fires the `tap` action immediately
@@ -108,8 +108,8 @@ Sections marked _(Epic 8)_ require the `tap-cli` binary to be built first.
 - [ ] Non-overloaded code fires immediately (no undo, no delay)
 
 ### Triple tap
-- [ ] Three taps within `triple_tap_window_ms` fires the `triple_tap` action
-- [ ] Two taps followed by a timeout resolves as double tap (if mapped) or two singles
+- [x] Three taps within `triple_tap_window_ms` fires the `triple_tap` action
+- [x] Two taps followed by a timeout resolves as double tap (if mapped) or two singles
 
 ### Sequence
 - [ ] Sequence completes correctly when all steps arrive within `sequence_window_ms`

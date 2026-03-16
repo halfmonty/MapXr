@@ -61,6 +61,7 @@ fn tap_mapping(label: &str, code: u8, key: &str) -> Mapping {
             modifiers: vec![],
         },
         enabled: true,
+        condition: None,
     }
 }
 
@@ -75,6 +76,7 @@ fn double_tap_mapping(label: &str, code: u8, key: &str) -> Mapping {
             modifiers: vec![],
         },
         enabled: true,
+        condition: None,
     }
 }
 
@@ -89,6 +91,7 @@ fn triple_tap_mapping(label: &str, code: u8, key: &str) -> Mapping {
             modifiers: vec![],
         },
         enabled: true,
+        condition: None,
     }
 }
 
@@ -106,6 +109,7 @@ fn dual_tap_mapping(label: &str, left_code: u8, right_code: u8, key: &str) -> Ma
             modifiers: vec![],
         },
         enabled: true,
+        condition: None,
     }
 }
 
@@ -150,6 +154,112 @@ fn single_tap_with_no_matching_binding_produces_no_output() {
     let out = engine.push_event(RawTapEvent::new_at("solo", 3, t(base, 300)), t(base, 300));
     // Code 2 resolves with no output (no binding); code 3 is now buffered.
     assert!(out.iter().all(|o| o.actions.is_empty()));
+}
+
+// ── Hardware-bounce debounce ──────────────────────────────────────────────────
+
+#[test]
+fn hardware_bounce_duplicate_within_debounce_window_is_discarded() {
+    // Regression: TAP Strap sometimes emits a duplicate notification within
+    // ~10–30 ms of a genuine tap. Without debounce, two events within the
+    // double-tap window advance tap_pending to TapPending::Two and the single
+    // tap fires as a double-tap action — the inversion bug.
+    let profile = single_profile_with_mappings(vec![
+        tap_mapping("A", 1, "a"),
+        double_tap_mapping("A double", 1, "b"),
+    ]);
+    let profile = Profile {
+        settings: ProfileSettings {
+            double_tap_window_ms: Some(250),
+            triple_tap_window_ms: Some(400),
+            overload_strategy: Some(OverloadStrategy::Patient),
+            ..Default::default()
+        },
+        ..profile
+    };
+    let mut engine = ComboEngine::new(profile);
+    let base = Instant::now();
+
+    // Genuine tap at T=0.
+    let out1 = engine.push_event(RawTapEvent::new_at("solo", 1, t(base, 0)), t(base, 0));
+    assert!(out1.is_empty(), "first tap should buffer");
+
+    // Hardware bounce at T=10 (within 50ms debounce window) — must be discarded.
+    let out2 = engine.push_event(RawTapEvent::new_at("solo", 1, t(base, 10)), t(base, 10));
+    assert!(
+        out2.is_empty(),
+        "bounce within debounce window must be silently discarded"
+    );
+
+    // After the double-tap window, only ONE tap should have fired (key 'a'), not
+    // the double-tap action (key 'b').
+    let out3 = engine.check_timeout(t(base, 300));
+    assert!(
+        key_in_output(&out3, "a"),
+        "single tap should fire 'a' after window, got {out3:?}"
+    );
+    assert!(
+        !key_in_output(&out3, "b"),
+        "double-tap action must NOT fire for a bounced single tap"
+    );
+}
+
+#[test]
+fn hardware_bounce_different_code_is_not_debounced() {
+    // Debounce only suppresses the same tap_code. A different code within
+    // the window must still be processed.
+    let profile = single_profile_with_mappings(vec![
+        tap_mapping("A", 1, "a"),
+        tap_mapping("B", 2, "b"),
+    ]);
+    let mut engine = ComboEngine::new(profile);
+    let base = Instant::now();
+
+    let out1 = engine.push_event(RawTapEvent::new_at("solo", 1, t(base, 0)), t(base, 0));
+    assert!(key_in_output(&out1, "a"), "code 1 should fire immediately");
+
+    // Different code (2) within debounce window — should NOT be discarded.
+    let out2 = engine.push_event(RawTapEvent::new_at("solo", 2, t(base, 10)), t(base, 10));
+    assert!(
+        key_in_output(&out2, "b"),
+        "different code within debounce window should still fire, got {out2:?}"
+    );
+}
+
+#[test]
+fn hardware_bounce_outside_debounce_window_is_treated_as_second_tap() {
+    // A second event with the same code arriving AFTER the debounce window
+    // (>= 50ms) is a genuine second tap and must be processed normally.
+    let profile = single_profile_with_mappings(vec![
+        tap_mapping("A", 1, "a"),
+        double_tap_mapping("A double", 1, "b"),
+    ]);
+    let profile = Profile {
+        settings: ProfileSettings {
+            double_tap_window_ms: Some(250),
+            triple_tap_window_ms: Some(400),
+            overload_strategy: Some(OverloadStrategy::Patient),
+            ..Default::default()
+        },
+        ..profile
+    };
+    let mut engine = ComboEngine::new(profile);
+    let base = Instant::now();
+
+    // First tap.
+    let out1 = engine.push_event(RawTapEvent::new_at("solo", 1, t(base, 0)), t(base, 0));
+    assert!(out1.is_empty(), "first tap should buffer");
+
+    // Second tap at T=100ms — outside debounce window, within double-tap window.
+    let out2 = engine.push_event(RawTapEvent::new_at("solo", 1, t(base, 100)), t(base, 100));
+    assert!(out2.is_empty(), "second tap within double-tap window should buffer");
+
+    // Triple-tap window expires → should fire as double-tap.
+    let out3 = engine.check_timeout(t(base, 450));
+    assert!(
+        key_in_output(&out3, "b"),
+        "intentional double-tap should fire 'b', got {out3:?}"
+    );
 }
 
 // ── check_timeout flushing ────────────────────────────────────────────────────
@@ -366,6 +476,8 @@ fn cross_device_combo_outside_window_resolves_as_two_singles() {
                     modifiers: vec![],
                 },
                 enabled: true,
+            condition: None,
+
             },
             Mapping {
                 label: "right thumb".into(),
@@ -380,6 +492,8 @@ fn cross_device_combo_outside_window_resolves_as_two_singles() {
                     modifiers: vec![],
                 },
                 enabled: true,
+            condition: None,
+
             },
         ],
         150,
@@ -421,7 +535,9 @@ fn sequence_mapping(label: &str, codes: &[u8], key: &str, window_ms: Option<u64>
             modifiers: vec![],
         },
         enabled: true,
-    }
+            condition: None,
+
+            }
 }
 
 #[test]
@@ -971,6 +1087,8 @@ fn rapid_alternating_dual_same_device_stacks_then_all_resolve() {
                     modifiers: vec![],
                 },
                 enabled: true,
+            condition: None,
+
             },
             Mapping {
                 label: "left solo".into(),
@@ -985,6 +1103,8 @@ fn rapid_alternating_dual_same_device_stacks_then_all_resolve() {
                     modifiers: vec![],
                 },
                 enabled: true,
+            condition: None,
+
             },
         ],
         80,
@@ -1074,6 +1194,7 @@ fn hold_modifier_profile(modifiers: Vec<Modifier>, mode: HoldModifierMode, key: 
             },
             action: Action::HoldModifier { modifiers, mode },
             enabled: true,
+            condition: None,
         },
         tap_mapping("key", 2, key),
     ])
@@ -1152,6 +1273,7 @@ fn hold_modifier_toggle_two_different_sets_independent() {
                 mode: HoldModifierMode::Toggle,
             },
             enabled: true,
+            condition: None,
         },
         Mapping {
             label: "hold ctrl".into(),
@@ -1163,6 +1285,7 @@ fn hold_modifier_toggle_two_different_sets_independent() {
                 mode: HoldModifierMode::Toggle,
             },
             enabled: true,
+            condition: None,
         },
         tap_mapping("key", 2, "a"),
     ]);
@@ -1282,6 +1405,7 @@ fn hold_modifier_count_type_string_decrements_count_without_applying_modifier() 
                 mode: HoldModifierMode::Count { count: 1 },
             },
             enabled: true,
+            condition: None,
         },
         Mapping {
             label: "type".into(),
@@ -1292,6 +1416,7 @@ fn hold_modifier_count_type_string_decrements_count_without_applying_modifier() 
                 text: "hello".into(),
             },
             enabled: true,
+            condition: None,
         },
         tap_mapping("key", 3, "a"),
     ]);
@@ -1390,6 +1515,7 @@ fn hold_modifier_combines_with_action_own_modifiers() {
                 mode: HoldModifierMode::Toggle,
             },
             enabled: true,
+            condition: None,
         },
         Mapping {
             label: "ctrl+a".into(),
@@ -1401,6 +1527,7 @@ fn hold_modifier_combines_with_action_own_modifiers() {
                 modifiers: vec![Modifier::Ctrl],
             },
             enabled: true,
+            condition: None,
         },
     ]);
     let mut engine = ComboEngine::new(profile);
@@ -1437,6 +1564,7 @@ fn hold_modifier_survives_push_layer() {
                 mode: HoldModifierMode::Toggle,
             },
             enabled: true,
+            condition: None,
         },
         tap_mapping("key", 2, "a"),
     ]);
@@ -1478,6 +1606,7 @@ fn hold_modifier_survives_pop_layer() {
                 mode: HoldModifierMode::Toggle,
             },
             enabled: true,
+            condition: None,
         },
         Mapping {
             label: "pop".into(),
@@ -1486,6 +1615,7 @@ fn hold_modifier_survives_pop_layer() {
             },
             action: Action::PopLayer,
             enabled: true,
+            condition: None,
         },
     ]);
 
@@ -1527,6 +1657,7 @@ fn hold_modifier_macro_counts_as_single_decrement() {
                 mode: HoldModifierMode::Count { count: 1 },
             },
             enabled: true,
+            condition: None,
         },
         Mapping {
             label: "macro".into(),
@@ -1552,6 +1683,7 @@ fn hold_modifier_macro_counts_as_single_decrement() {
                 ],
             },
             enabled: true,
+            condition: None,
         },
         tap_mapping("key", 3, "c"),
     ]);

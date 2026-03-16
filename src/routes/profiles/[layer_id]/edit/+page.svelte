@@ -1,7 +1,7 @@
 <script lang="ts">
   import { page } from "$app/stores";
   import { goto, beforeNavigate } from "$app/navigation";
-  import { onMount } from "svelte";
+  import { onMount, onDestroy } from "svelte";
   import { loadProfile, saveProfile } from "$lib/commands";
   import { profileStore } from "$lib/stores/profile.svelte";
   import { engineStore } from "$lib/stores/engine.svelte";
@@ -10,9 +10,13 @@
   import TriggerSummary from "$lib/components/TriggerSummary.svelte";
   import ActionSummary from "$lib/components/ActionSummary.svelte";
   import { logger } from "$lib/logger";
+  import { listen } from "@tauri-apps/api/event";
+  import { tapCodeToPattern } from "$lib/utils/tapCode";
+  import type { TapEventPayload } from "$lib/types";
   import type {
     Profile,
     Mapping,
+    MappingCondition,
     Trigger,
     Action,
     VariableValue,
@@ -146,34 +150,90 @@
     }
   }
 
-  // Drag-and-drop reorder (task 5.19)
+  // Drag-to-reorder (task 5.19)
+  // Uses pointer events instead of the HTML5 DnD API. WebKitGTK does not fire
+  // `drop` events for internal page drag-and-drop, making the DnD API unusable
+  // for row reordering. Pointer events work reliably across all WebViews.
   let dragIndex = $state<number | null>(null);
+  let dragOverIndex = $state<number | null>(null);
 
-  function onDragStart(e: DragEvent, i: number) {
+  function getMappingIdx(el: Element | null): number | null {
+    let target: Element | null = el;
+    while (target && target.tagName !== "TR") {
+      target = target.parentElement;
+    }
+    if (!target) return null;
+    const idx = (target as HTMLElement).dataset.mappingIdx;
+    return idx !== undefined ? parseInt(idx, 10) : null;
+  }
+
+  function onHandlePointerDown(e: PointerEvent, i: number) {
+    e.preventDefault(); // prevent text selection and click on the handle
     dragIndex = i;
-    if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
   }
 
-  function onDragOver(e: DragEvent, i: number) {
-    e.preventDefault();
-    if (dragIndex === null || dragIndex === i || !profile) return;
-    if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+  function onDocPointerMove(e: PointerEvent) {
+    if (dragIndex === null) return;
+    dragOverIndex = getMappingIdx(document.elementFromPoint(e.clientX, e.clientY));
   }
 
-  function onDrop(e: DragEvent, i: number) {
-    e.preventDefault();
-    if (dragIndex === null || dragIndex === i || !profile) return;
+  function onDocPointerUp() {
+    if (dragIndex === null) return;
+    const fromIdx = dragIndex;
+    const toIdx = dragOverIndex;
+    dragIndex = null;
+    dragOverIndex = null;
+    if (toIdx === null || toIdx === fromIdx || !profile) return;
     const mappings = [...profile.mappings];
-    const [moved] = mappings.splice(dragIndex, 1);
-    mappings.splice(i, 0, moved);
+    const [moved] = mappings.splice(fromIdx, 1);
+    mappings.splice(toIdx, 0, moved);
     profile.mappings = mappings;
-    if (selectedMappingIdx === dragIndex) selectedMappingIdx = i;
-    dragIndex = null;
+    if (selectedMappingIdx === fromIdx) selectedMappingIdx = toIdx;
   }
 
-  function onDragEnd() {
-    dragIndex = null;
+  // ── Record mode (6.7) ─────────────────────────────────────────────────────
+
+  /**
+   * Identifies which FingerPattern slot is currently recording.
+   * Format: `"${mappingIdx}"` for the main code, `"${mappingIdx}:${stepIdx}"` for sequence steps.
+   */
+  let recordingSlot = $state<string | null>(null);
+  let recordingUnlisten: (() => void) | null = null;
+
+  async function startRecording(slot: string) {
+    // Stop any previous recording first.
+    stopRecording();
+    recordingSlot = slot;
+    recordingUnlisten = await listen<TapEventPayload>("tap-event", ({ payload }) => {
+      if (!profile || recordingSlot !== slot) return;
+      const hand = profile.hand ?? "right";
+      const pattern = tapCodeToPattern(payload.tap_code, hand);
+      const [mappingIdxStr, stepIdxStr] = slot.split(":");
+      const mappingIdx = parseInt(mappingIdxStr, 10);
+      const mapping = profile.mappings[mappingIdx];
+      if (!mapping) return;
+      if (stepIdxStr !== undefined) {
+        // Sequence step
+        if (mapping.trigger.type !== "sequence") return;
+        const stepIdx = parseInt(stepIdxStr, 10);
+        const steps = mapping.trigger.steps.map((s, i) => (i === stepIdx ? pattern : s));
+        updateTrigger(mappingIdx, { ...mapping.trigger, steps });
+      } else {
+        // Single pattern (tap / double_tap / triple_tap)
+        if (!("code" in mapping.trigger)) return;
+        updateTrigger(mappingIdx, { ...mapping.trigger, code: pattern } as Trigger);
+      }
+      stopRecording();
+    });
   }
+
+  function stopRecording() {
+    recordingUnlisten?.();
+    recordingUnlisten = null;
+    recordingSlot = null;
+  }
+
+  onDestroy(() => stopRecording());
 
   // ── Trigger editor (5.23) ─────────────────────────────────────────────────
 
@@ -229,17 +289,13 @@
   // ── Variable manager (5.27) ───────────────────────────────────────────────
 
   let newVarName = $state("");
-  let newVarType = $state<"bool" | "int">("bool");
   let newVarBool = $state(false);
-  let newVarInt = $state(0);
 
   function addVariable() {
     if (!profile || !newVarName.trim()) return;
-    const value: VariableValue = newVarType === "bool" ? newVarBool : newVarInt;
-    profile.variables = { ...profile.variables, [newVarName.trim()]: value };
+    profile.variables = { ...profile.variables, [newVarName.trim()]: newVarBool };
     newVarName = "";
     newVarBool = false;
-    newVarInt = 0;
   }
 
   function deleteVariable(name: string) {
@@ -255,16 +311,25 @@
       const defined = new Set(Object.keys(profile.variables));
       const referenced = new Set<string>();
       function scan(action: Action) {
-        if (action.type === "toggle_variable") referenced.add(action.variable);
+        if (action.type === "toggle_variable") { referenced.add(action.variable); scan(action.on_true); scan(action.on_false); }
         if (action.type === "set_variable") referenced.add(action.variable);
+        if (action.type === "conditional") { referenced.add(action.variable); scan(action.on_true); scan(action.on_false); }
       }
-      profile.mappings.forEach((m) => scan(m.action));
+      profile.mappings.forEach((m) => {
+        scan(m.action);
+        if (m.condition) referenced.add(m.condition.variable);
+      });
       if (profile.on_enter) scan(profile.on_enter);
       if (profile.on_exit) scan(profile.on_exit);
       return [...referenced].filter((v) => !defined.has(v));
     })()
   );
 </script>
+
+<svelte:document
+  onpointermove={onDocPointerMove}
+  onpointerup={onDocPointerUp}
+/>
 
 {#if loading}
   <div class="flex items-center justify-center h-40">
@@ -354,23 +419,32 @@
                   <th class="w-10"></th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody class="{dragIndex !== null ? 'select-none cursor-grabbing' : ''}">
                 {#each profile.mappings as mapping, i}
                   <tr
+                    data-mapping-idx={i}
                     class="cursor-pointer hover:bg-base-200
                       {selectedMappingIdx === i ? 'bg-base-200' : ''}
-                      {dragIndex === i ? 'opacity-50' : ''}"
+                      {dragIndex === i ? 'opacity-40' : ''}
+                      {dragOverIndex === i && dragIndex !== null && dragIndex !== i ? 'outline outline-2 outline-primary' : ''}"
                     onclick={() => selectMapping(i)}
-                    draggable={true}
-                    ondragstart={(e) => onDragStart(e, i)}
-                    ondragover={(e) => onDragOver(e, i)}
-                    ondrop={(e) => onDrop(e, i)}
-                    ondragend={onDragEnd}
                   >
-                    <td class="cursor-grab text-base-content/30 text-center select-none">⠿</td>
+                    <td
+                      class="cursor-grab text-base-content/30 text-center select-none"
+                      onpointerdown={(e) => onHandlePointerDown(e, i)}
+                    >⠿</td>
                     <td class="max-w-32 truncate">{mapping.label}</td>
                     <td><TriggerSummary trigger={mapping.trigger} /></td>
-                    <td><ActionSummary action={mapping.action} /></td>
+                    <td>
+                      <div class="flex items-center gap-1">
+                        <ActionSummary action={mapping.action} />
+                        {#if mapping.condition}
+                          <span class="badge badge-xs badge-outline" title="if {mapping.condition.variable} = {mapping.condition.value}">
+                            if {mapping.condition.variable}
+                          </span>
+                        {/if}
+                      </div>
+                    </td>
                     <td onclick={(e) => e.stopPropagation()}>
                       <input
                         type="checkbox"
@@ -447,13 +521,23 @@
                                 <div class="label py-0">
                                   <span class="label-text text-xs">Pattern</span>
                                 </div>
-                                <div class="flex">
+                                <div class="flex items-center gap-2">
                                   <FingerPattern
                                     code={mapping.trigger.code}
                                     hand={profile.hand ?? "right"}
+                                    recording={recordingSlot === String(i)}
                                     onchange={(c) =>
                                       updateTrigger(i, { ...mapping.trigger, code: c } as Trigger)}
+                                    onrecorded={() => stopRecording()}
                                   />
+                                  <button
+                                    type="button"
+                                    class="btn btn-xs {recordingSlot === String(i) ? 'btn-error' : 'btn-ghost btn-outline'}"
+                                    onclick={() => recordingSlot === String(i) ? stopRecording() : startRecording(String(i))}
+                                    title={recordingSlot === String(i) ? "Cancel recording" : "Record from device"}
+                                  >
+                                    {recordingSlot === String(i) ? "Cancel" : "Record"}
+                                  </button>
                                 </div>
                               </label>
                             {/if}
@@ -468,6 +552,7 @@
                                     <FingerPattern
                                       code={step}
                                       hand={profile.hand ?? "right"}
+                                      recording={recordingSlot === `${i}:${si}`}
                                       onchange={(c) => {
                                         if (mapping.trigger.type !== "sequence") return;
                                         const steps = mapping.trigger.steps.map((s, idx) =>
@@ -475,7 +560,16 @@
                                         );
                                         updateTrigger(i, { ...mapping.trigger, steps });
                                       }}
+                                      onrecorded={() => stopRecording()}
                                     />
+                                    <button
+                                      type="button"
+                                      class="btn btn-xs {recordingSlot === `${i}:${si}` ? 'btn-error' : 'btn-ghost btn-outline'}"
+                                      onclick={() => recordingSlot === `${i}:${si}` ? stopRecording() : startRecording(`${i}:${si}`)}
+                                      title={recordingSlot === `${i}:${si}` ? "Cancel recording" : "Record from device"}
+                                    >
+                                      {recordingSlot === `${i}:${si}` ? "Cancel" : "Rec"}
+                                    </button>
                                     <button
                                       class="btn btn-ghost btn-xs text-error"
                                       onclick={() => {
@@ -537,6 +631,57 @@
                               onchange={(a: Action) => updateMapping(i, { ...mapping, action: a })}
                             />
                           </div>
+
+                          <!-- Condition editor -->
+                          <div class="space-y-2">
+                            <div class="flex items-center gap-2">
+                              <input
+                                type="checkbox"
+                                class="checkbox checkbox-sm"
+                                checked={!!mapping.condition}
+                                onchange={(e) => {
+                                  const checked = (e.target as HTMLInputElement).checked;
+                                  const varName = Object.keys(profile!.variables)[0] ?? "";
+                                  updateMapping(i, {
+                                    ...mapping,
+                                    condition: checked
+                                      ? { variable: varName, value: true }
+                                      : undefined,
+                                  });
+                                }}
+                              />
+                              <span class="text-sm font-medium">Only when variable…</span>
+                            </div>
+                            {#if mapping.condition}
+                              <div class="flex items-center gap-2 pl-6">
+                                <select
+                                  class="select select-bordered select-sm"
+                                  value={mapping.condition.variable}
+                                  onchange={(e) => updateMapping(i, {
+                                    ...mapping,
+                                    condition: { ...mapping.condition!, variable: (e.target as HTMLSelectElement).value },
+                                  })}
+                                >
+                                  <option value="">— select variable —</option>
+                                  {#each Object.keys(profile.variables) as v}
+                                    <option value={v}>{v}</option>
+                                  {/each}
+                                </select>
+                                <span class="text-sm">=</span>
+                                <select
+                                  class="select select-bordered select-sm w-24"
+                                  value={String(mapping.condition.value)}
+                                  onchange={(e) => updateMapping(i, {
+                                    ...mapping,
+                                    condition: { ...mapping.condition!, value: (e.target as HTMLSelectElement).value === "true" },
+                                  })}
+                                >
+                                  <option value="true">true</option>
+                                  <option value="false">false</option>
+                                </select>
+                              </div>
+                            {/if}
+                          </div>
                         </div>
                       </td>
                     </tr>
@@ -556,7 +701,7 @@
     {:else if activeTab === "settings"}
       <div class="card bg-base-100 shadow">
         <div class="card-body space-y-4">
-          {#each [{ field: "combo_window_ms", label: "Combo window (ms)", hint: "Cross-device chord detection window. Dual profiles only." }, { field: "double_tap_window_ms", label: "Double-tap window (ms)", hint: "Max time between first and second tap." }, { field: "triple_tap_window_ms", label: "Triple-tap window (ms)", hint: "Max time from first to third tap." }, { field: "sequence_window_ms", label: "Sequence step timeout (ms)", hint: "Max gap between consecutive sequence steps." }] as const as row}
+          {#each [{ field: "combo_window_ms", label: "Combo window (ms)", hint: "Cross-device chord detection window. Dual profiles only.", default: 80 }, { field: "double_tap_window_ms", label: "Double-tap window (ms)", hint: "Max time between first and second tap.", default: 250 }, { field: "triple_tap_window_ms", label: "Triple-tap window (ms)", hint: "Max time from first to third tap.", default: 400 }, { field: "sequence_window_ms", label: "Sequence step timeout (ms)", hint: "Max gap between consecutive sequence steps.", default: 500 }] as const as row}
             <label class="form-control">
               <div class="label">
                 <span class="label-text">{row.label}</span>
@@ -566,7 +711,7 @@
                 type="number"
                 class="input input-bordered w-40"
                 min={1}
-                placeholder="engine default"
+                placeholder="default: {row.default}"
                 value={profile.settings[row.field] ?? ""}
                 oninput={(e) => {
                   const raw = (e.target as HTMLInputElement).value;
@@ -740,30 +885,11 @@
                 />
               </label>
               <label class="form-control">
-                <div class="label py-0"><span class="label-text text-xs">Type</span></div>
-                <div class="join">
-                  {#each ["bool", "int"] as t}
-                    <button
-                      class="btn join-item btn-xs {newVarType === t ? 'btn-primary' : 'btn-ghost'}"
-                      onclick={() => (newVarType = t as "bool" | "int")}>{t}</button
-                    >
-                  {/each}
-                </div>
-              </label>
-              <label class="form-control">
                 <div class="label py-0"><span class="label-text text-xs">Initial value</span></div>
-                {#if newVarType === "bool"}
-                  <select class="select select-bordered select-sm w-24" bind:value={newVarBool}>
-                    <option value={false}>false</option>
-                    <option value={true}>true</option>
-                  </select>
-                {:else}
-                  <input
-                    type="number"
-                    class="input input-bordered input-sm w-24"
-                    bind:value={newVarInt}
-                  />
-                {/if}
+                <select class="select select-bordered select-sm w-24" bind:value={newVarBool}>
+                  <option value={false}>false</option>
+                  <option value={true}>true</option>
+                </select>
               </label>
               <button
                 class="btn btn-sm btn-primary"

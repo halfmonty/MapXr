@@ -1,6 +1,6 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
-  import { activateProfile, deactivateProfile, deleteProfile, saveProfile } from "$lib/commands";
+  import { activateProfile, deactivateProfile, deleteProfile, saveProfile, readFileText } from "$lib/commands";
   import { profileStore } from "$lib/stores/profile.svelte";
   import { engineStore } from "$lib/stores/engine.svelte";
   import { deviceStore } from "$lib/stores/device.svelte";
@@ -119,11 +119,9 @@
   // ── Import ──────────────────────────────────────────────────────────────────
 
   let importError = $state<string | null>(null);
+  let isDragOver = $state(false);
 
-  async function handleImport(e: Event) {
-    const input = e.target as HTMLInputElement;
-    const file = input.files?.[0];
-    if (!file) return;
+  async function importFile(file: File) {
     importError = null;
     const text = await file.text();
     let parsed: unknown;
@@ -131,7 +129,6 @@
       parsed = JSON.parse(text);
     } catch {
       importError = `${file.name} is not valid JSON.`;
-      input.value = "";
       return;
     }
     try {
@@ -141,7 +138,88 @@
       importError = e instanceof Error ? e.message : String(e);
       logger.error("save_profile (import) failed", e);
     }
+  }
+
+  async function handleImport(e: Event) {
+    const input = e.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) return;
+    await importFile(file);
     input.value = "";
+  }
+
+  function handleDragOver(e: DragEvent) {
+    e.preventDefault();
+    isDragOver = true;
+  }
+
+  function handleDragLeave(e: DragEvent) {
+    // Only clear when leaving the container itself, not a child element.
+    if (!e.currentTarget || !(e.currentTarget as Element).contains(e.relatedTarget as Node)) {
+      isDragOver = false;
+    }
+  }
+
+  async function handleDrop(e: DragEvent) {
+    e.preventDefault();
+    isDragOver = false;
+
+    // Standard path: Chromium-style WebViews populate dataTransfer.files.
+    const file = e.dataTransfer?.files[0];
+    if (file) {
+      await importFile(file);
+      return;
+    }
+
+    // Fallback for Linux/WebKitGTK: dataTransfer.files is empty and getData for
+    // text/uri-list returns "" despite being listed as a type (WebKitGTK bug).
+    // The file URI ends up in text/html as the href or text content of an anchor.
+    let uri: string | undefined;
+
+    // Try text/uri-list first (works on some platforms).
+    const uriList = e.dataTransfer?.getData("text/uri-list") ?? "";
+    uri = uriList.split(/\r?\n/).find((line) => line.startsWith("file://"));
+
+    // Fall back to parsing the file URI out of the text/html anchor.
+    if (!uri) {
+      const html = e.dataTransfer?.getData("text/html") ?? "";
+      if (html) {
+        const doc = new DOMParser().parseFromString(html, "text/html");
+        const anchor = doc.querySelector("a");
+        const candidate = anchor?.href || anchor?.textContent?.trim() || "";
+        if (candidate.startsWith("file://")) uri = candidate;
+      }
+    }
+
+    if (!uri) {
+      importError = "Could not read dropped item — no file URI found.";
+      return;
+    }
+    // Decode percent-encoded characters (e.g. %20 → space) and strip the scheme.
+    const path = decodeURIComponent(new URL(uri).pathname);
+    const fileName = path.split("/").pop() ?? path;
+    importError = null;
+    let text: string;
+    try {
+      text = await readFileText(path);
+    } catch (e) {
+      importError = e instanceof Error ? e.message : String(e);
+      return;
+    }
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      importError = `${fileName} is not valid JSON.`;
+      return;
+    }
+    try {
+      await saveProfile(parsed as Profile);
+      await profileStore.reload();
+    } catch (e) {
+      importError = e instanceof Error ? e.message : String(e);
+      logger.error("save_profile (import via URI) failed", e);
+    }
   }
 
   // ── Missing-roles warning ───────────────────────────────────────────────────
@@ -154,7 +232,15 @@
   );
 </script>
 
-<div class="mx-auto max-w-2xl space-y-4">
+<div
+  class="mx-auto max-w-2xl space-y-4 rounded-lg transition-colors
+    {isDragOver ? 'outline outline-2 outline-primary bg-primary/5' : ''}"
+  ondragover={handleDragOver}
+  ondragleave={handleDragLeave}
+  ondrop={handleDrop}
+  role="region"
+  aria-label="Profile list — drop a JSON file to import"
+>
   <!-- Header -->
   <div class="flex items-center justify-between">
     <h1 class="text-2xl font-bold">Profiles</h1>
