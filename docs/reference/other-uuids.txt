@@ -1,18 +1,86 @@
-Firmware Revision String: 00002A26-0000-1000-8000-00805F9B34FB | Read
-Serial name string: 00002A25-0000-1000-00805F9B34FB | Read
-Software Revision String: 00002A28-0000-1000-00805F9B34FB | Read
-Battery: 00002A19-0000-1000-8000-00805F9B | Read
-Hardware Revision String: 00002A27-0000-1000-00805F9B34FB | Read
+# TapXR GATT characteristic reference
+#
+# Populated from probe_gatt_characteristics integration test output (2026-03-18).
+# Device: TapXR_[name]  FW: 3.4.0  HW: 4.0  SW: 101  Serial: [serial]
+#
+# Format: UUID | properties | current value (if readable)
+# Properties: R = Read, W = Write, WwR = WriteWithoutResponse, N = Notify, I = Indicate
 
-Name: C3FF0003-1D8B-40FD-A56F-C7BD5D0F3370 | Read | Write
-Haptic: C3FF0009-1D8B-40FD-A56F-C7BD5D0F3370 | Write
-Settings (?): C3FF0002-1D8B-40FD-A56F-C7BD5D0F3370 | Read | Write
-Mapping Transmit: C3FF0008-1D8B-40FD-A56F-C7BD5D0F3370 | Notify
-Mapping Receive : C3FF0007-1D8B-40FD-A56F-C7BD5D0F3370 | Write
-Data: C3FF0005-1D8B-40FD-A56F-C7BD5D0F3370 | Notify
-Mouse Data: C3FF0006-1D8B-40FD-A56F-C7BD5D0F3370 | Write | Notify
+# ─── Service 00001800 — Generic Access Profile (GAP) ──────────────────────────
 
-maybe tap firmware/software?
-Nus(?): 6E400001-B5A3-F393-E0A9-E50E24DCCDA9E
-RX(?): 6E400002-B5A3-F393-E0A9-E50E24DCCDA9E | Write
-TX(?): 6E400003-B5A3-F393-E0A9-E50E24DCCDA9E | Notify
+00002A00  Device Name                          | R W           | "TapXR_[name]"
+           # Standard GAP name. Also mirrored in c3ff0003.
+00002A01  Appearance                           | R             | 0x03C1 → HID Keyboard (category 15, sub 1)
+00002A04  Preferred Connection Parameters      | R             | min 7.5 ms / max 15 ms / latency 0 / supervision 4 s
+00002AA6  Central Address Resolution           | R             | 0x01 (supported)
+
+# ─── Service 00001801 — Generic Attribute (GATT) ──────────────────────────────
+
+00002A05  Service Changed                      | I             | (fires after firmware update)
+
+# ─── Service 0000180A — Device Information ────────────────────────────────────
+
+00002A25  Serial Number                        | R             | "[serial]"
+00002A26  Firmware Revision                    | R             | "3.4.0"
+00002A27  Hardware Revision                    | R             | "4.0"
+00002A28  Software Revision                    | R             | "101"
+00002A29  Manufacturer Name                    | R             | "TAP Systems"
+00002A50  PnP ID                               | R             | vendor-src=USB-IF vendor=0x1915 (Nordic Semiconductor) product=0xEEEE ver=0x0001
+
+# ─── Service 0000180F — Battery ───────────────────────────────────────────────
+
+00002A19  Battery Level                        | R             | 0x46 = 70 %
+
+# ─── Service 00001812 — HID (Human Interface Device) ─────────────────────────
+# The TapXR presents as a composite HID device (keyboard + mouse + consumer).
+# Report Map (00002A4B) defines 5 report IDs:
+#   1 = Keyboard     (modifier + reserved + 6 keycodes)
+#   2 = Consumer     (media keys: FastForward, Skip, Play, Stop, Vol+/-, Next, Prev)
+#   3 = Relative Mouse (5 buttons + scroll wheel + tilt wheel)
+#   4 = Absolute Pointer / Touchpad (12-bit X/Y)
+#   5 = Extended Consumer (Play/Pause, Mute, Vol+/-, Scan Next/Prev)
+
+00002A22  Boot Keyboard Input Report           | R N           | (current 8-byte key state)
+00002A32  Boot Keyboard Output Report          | R WwR W       | (LED state: CapsLock etc.)
+00002A33  Boot Mouse Input Report              | R W N         |
+00002A4A  HID Information                      | R             | bcdHID=1.01 CountryCode=0 Flags=0x03 (RemoteWake|NormallyConnectable)
+00002A4B  Report Map                           | R             | (full HID descriptor — see above)
+00002A4C  HID Control Point                    | WwR           | (write 0=Suspend, 1=ExitSuspend)
+00002A4D  Report                               | R W N         | (current HID report, 8 bytes)
+00002A4E  Protocol Mode                        | R WwR         | 0x01 = Report Protocol (0x00 = Boot Protocol)
+
+# ─── Service 0000FE59 — Nordic Secure DFU ────────────────────────────────────
+
+8EC90004-F315-4F60-9FB8-838830DAEA50
+          DFU Control Point                    | W I           | OTA firmware update entry point (Nordic nRF Secure DFU)
+
+# ─── Service 6E400001-B5A3-F393-E0A9-E50E24DCCA9E — Nordic UART Service (NUS) ──
+# Primary Tap API command channel. All tap mode switching and gesture data flows here.
+# NOTE: earlier notes had a typo in the last UUID segment (DCCDA9E); correct is DCCA9E.
+
+6E400002-B5A3-F393-E0A9-E50E24DCCA9E
+          NUS RX (host → device)               | WwR W         | Commands written to the device
+6E400003-B5A3-F393-E0A9-E50E24DCCA9E
+          NUS TX (device → host)               | N             | Tap API responses and events
+
+# ─── Service C3FF0001-1D8B-40FD-A56F-C7BD5D0F3370 — Tap Proprietary ──────────
+
+C3FF0002  Settings                             | R W           | 20 bytes; probe value: 10 55 67 02 00 00 … (00×16)
+           # Likely device sensitivity / mode configuration blob.
+C3FF0003  Device Name (Tap copy)               | R W           | "TapXR_[name]"
+           # Mirrors the GAP Device Name (00002A00). Writing here presumably updates both.
+C3FF0005  Tap Data                             | N             | Tap finger-combination events
+C3FF0006  Mouse Data                           | WwR W N       | Mouse position / gesture data (bidirectional)
+C3FF0007  Mapping Receive (host → device)      | WwR W         | Host sends key-mapping commands to device
+C3FF0008  Mapping Transmit (device → host)     | N             | Device sends mapping data to host
+C3FF0009  Haptic                               | WwR W         | Trigger haptic feedback pattern
+C3FF000A  Unknown config register A            | R WwR N       | Probe value: 0xFB (signed: −5)
+           # Write+Notify pattern suggests a live read-write config register.
+           # Possibly a sensitivity threshold or mode flag. Investigate by writing known values.
+C3FF000B  Unknown config register B            | R WwR N       | Probe value: 0x8F (signed: −113)
+           # Same profile as C3FF000A. Likely a paired register. Both change together?
+C3FF000C  Unknown identifier / calibration     | R N           | "12487" (5-digit ASCII)
+           # Could be device calibration ID, accelerometer baseline, or unique serial fragment.
+C3FF000D  Tap SDK / protocol version           | R N           | "1.1.0"
+           # Version string distinct from DIS firmware version (3.4.0). Most likely the
+           # on-device Tap API/SDK protocol version.

@@ -52,6 +52,74 @@ async fn discover_devices_finds_at_least_one_tap_device() {
     assert!(!devices.is_empty(), "no Tap devices found within 5 s");
 }
 
+/// Connects to the first discovered Tap device, discovers all GATT services and
+/// characteristics, reads every readable characteristic, and prints the results.
+///
+/// Run with:
+///   cargo test -p tap-ble -- --ignored probe_gatt --nocapture --test-threads=1
+///
+/// Purpose: enumerate undocumented characteristics and confirm the device name
+/// characteristic (C3FF0003) is readable/writable.
+#[tokio::test]
+#[ignore = "requires physical Tap device; diagnostic output only"]
+async fn probe_gatt_characteristics() {
+    use btleplug::api::{Central as _, Peripheral as _};
+
+    let adapter = tap_ble::scanner::get_adapter().await.expect("no BLE adapter");
+
+    // Scan using existing discover_devices to get an address.
+    let devices = tap_ble::discover_devices(5000).await.expect("scan failed");
+    assert!(!devices.is_empty(), "no Tap devices found within 5 s");
+
+    let target_address = devices[0].address;
+    println!(
+        "\nProbing device: {} (name: {:?}, rssi: {:?})",
+        target_address, devices[0].name, devices[0].rssi
+    );
+
+    // Find the btleplug peripheral by address in the adapter's peripheral list.
+    let peripheral = adapter
+        .peripherals()
+        .await
+        .expect("peripherals() failed")
+        .into_iter()
+        .find(|p| p.address() == target_address)
+        .expect("peripheral not found in adapter cache after scan");
+
+    peripheral.connect().await.expect("connect failed");
+    peripheral.discover_services().await.expect("discover_services failed");
+
+    println!("\n=== GATT Services & Characteristics ===\n");
+    for service in peripheral.services() {
+        println!("Service: {}", service.uuid);
+        for characteristic in &service.characteristics {
+            println!(
+                "  Characteristic: {}  props: {:?}",
+                characteristic.uuid, characteristic.properties
+            );
+
+            // Attempt to read if the Read property is present.
+            if characteristic.properties.contains(btleplug::api::CharPropFlags::READ) {
+                match peripheral.read(characteristic).await {
+                    Ok(bytes) => {
+                        let hex: String = bytes
+                            .iter()
+                            .map(|b| format!("{b:02X}"))
+                            .collect::<Vec<_>>()
+                            .join(" ");
+                        let text = String::from_utf8_lossy(&bytes);
+                        println!("    value (hex): {hex}");
+                        println!("    value (utf8): {text}");
+                    }
+                    Err(e) => println!("    read error: {e}"),
+                }
+            }
+        }
+    }
+
+    peripheral.disconnect().await.expect("disconnect failed");
+}
+
 /// Asserts that a device discovered via the LE scan is connectable.
 ///
 /// This guards against a regression where switching to LE-only scanning prevents

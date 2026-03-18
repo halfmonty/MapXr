@@ -1,3 +1,49 @@
+## 2026-03-18 — Project website (mapxr-site) — full implementation
+
+**Tasks completed:** website (out-of-plan deliverable)
+**Tasks in progress:** none
+
+**Files changed:**
+
+- `mapxr-site/vite.config.ts` — added `base: '/mapxr/'`, wired in `@tailwindcss/vite` plugin
+- `mapxr-site/src/app.css` — replaced scaffold CSS with `@import "tailwindcss"; @plugin "daisyui";`
+- `mapxr-site/src/App.svelte` — replaced scaffold demo with hash router (Svelte 5 `$state`/`$derived` runes), theme wrapper
+- `mapxr-site/src/components/Nav.svelte` — DaisyUI navbar with active-link highlighting, theme toggle (sun/moon swap), GitHub link, mobile dropdown
+- `mapxr-site/src/components/Footer.svelte` — DaisyUI footer
+- `mapxr-site/src/components/landing/Hero.svelte` — DaisyUI hero; headline, tagline, two CTA buttons
+- `mapxr-site/src/components/landing/FeatureCard.svelte` — DaisyUI card; icon + title + description
+- `mapxr-site/src/components/landing/Features.svelte` — 6-card grid of features
+- `mapxr-site/src/components/landing/HowItWorks.svelte` — DaisyUI steps (4-step walkthrough)
+- `mapxr-site/src/components/landing/GetStarted.svelte` — bottom CTA section
+- `mapxr-site/src/components/docs/DocsSidebar.svelte` — DaisyUI menu grouped by doc section
+- `mapxr-site/src/components/docs/DocsLayout.svelte` — two-column sidebar + content layout
+- `mapxr-site/src/components/devlog/DevlogEntry.svelte` — DaisyUI card with date, title, body, progress bar, tags
+- `mapxr-site/src/components/devlog/MilestoneList.svelte` — DaisyUI checkbox list of 9 epics with done/pending state
+- `mapxr-site/src/components/devlog/ProgressBar.svelte` — DaisyUI progress element with % label
+- `mapxr-site/src/views/Landing.svelte` — composes all landing components
+- `mapxr-site/src/views/Docs.svelte` — `import.meta.glob` lazy loader for doc pages
+- `mapxr-site/src/views/Devlog.svelte` — progress header + entry list + milestones sidebar
+- `mapxr-site/src/docs-pages/getting-started.svelte` — installation, pairing, first profile
+- `mapxr-site/src/docs-pages/profiles.svelte` — JSON schema, top-level fields, app matching
+- `mapxr-site/src/docs-pages/triggers.svelte` — finger notation, single/double/combo triggers
+- `mapxr-site/src/docs-pages/actions.svelte` — key, type, mouse, layer, hold_modifier, noop
+- `mapxr-site/src/docs-pages/layers.svelte` — layer stack, push/pop/activate, example
+- `mapxr-site/src/data/docs-manifest.ts` — `DOCS: DocEntry[]` — 5 pages in 3 groups
+- `mapxr-site/src/data/devlog.ts` — `DEVLOG: DevlogEntry[]` — 7 entries drawn from progress.md
+- `.github/workflows/deploy-site.yml` — GitHub Actions: build mapxr-site → push to gh-pages branch
+
+**Notes:**
+- Tailwind v4 + DaisyUI v5 install: `npm install -D tailwindcss @tailwindcss/vite daisyui`
+- No `tailwind.config.js` or `postcss.config` needed — Tailwind v4 handles this via its Vite plugin
+- DaisyUI theme toggle persists choice in `localStorage`; `data-theme` is set on `<html>` via a `$effect`
+- Doc pages lazy-loaded via `import.meta.glob` — each page is its own JS chunk (verified in build output)
+- `vite.config.ts` sets `base: '/mapxr/'` for GitHub Pages subdirectory hosting
+- Open question: repo name must be `mapxr` for the base path to match. If using a custom domain, change `base` to `'/'`
+
+**Next:** Epic 8.1 — Add `tap-cli` binary crate to the workspace
+
+---
+
 ## 2026-03-16 — Fix double-tap inversion bug via hardware-bounce debounce
 
 **Tasks completed:** bug fix (no task ID — reported during manual testing)

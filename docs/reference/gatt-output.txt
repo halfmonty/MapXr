@@ -1,0 +1,210 @@
+=== GATT Services & Characteristics TapXR ===
+
+Service: 00001800-0000-1000-8000-00805f9b34fb
+  Characteristic: 00002a00-0000-1000-8000-00805f9b34fb  props: CharPropFlags(READ | WRITE)
+    value (hex): 54 61 70 58 52 5F 41 30 33 36 33 32 30
+    value (utf8): TapXR_A036320
+  Characteristic: 00002a01-0000-1000-8000-00805f9b34fb  props: CharPropFlags(READ)
+    value (hex): C1 03
+    value (utf8): �
+  Characteristic: 00002a04-0000-1000-8000-00805f9b34fb  props: CharPropFlags(READ)
+    value (hex): 06 00 0C 00 00 00 90 01
+    value (utf8):
+                  �
+  Characteristic: 00002aa6-0000-1000-8000-00805f9b34fb  props: CharPropFlags(READ)
+    value (hex): 01
+    value (utf8):
+Service: 00001801-0000-1000-8000-00805f9b34fb
+  Characteristic: 00002a05-0000-1000-8000-00805f9b34fb  props: CharPropFlags(INDICATE)
+Service: 0000180a-0000-1000-8000-00805f9b34fb
+  Characteristic: 00002a25-0000-1000-8000-00805f9b34fb  props: CharPropFlags(READ)
+    value (hex): 30 30 30 30 30 30 41 30 33 41 41 30 33 30 33 36
+    value (utf8): 000000A03AA03036
+  Characteristic: 00002a26-0000-1000-8000-00805f9b34fb  props: CharPropFlags(READ)
+    value (hex): 33 2E 34 2E 30
+    value (utf8): 3.4.0
+  Characteristic: 00002a27-0000-1000-8000-00805f9b34fb  props: CharPropFlags(READ)
+    value (hex): 34 2E 30
+    value (utf8): 4.0
+  Characteristic: 00002a28-0000-1000-8000-00805f9b34fb  props: CharPropFlags(READ)
+    value (hex): 31 30 31
+    value (utf8): 101
+  Characteristic: 00002a29-0000-1000-8000-00805f9b34fb  props: CharPropFlags(READ)
+    value (hex): 54 41 50 20 53 79 73 74 65 6D 73
+    value (utf8): TAP Systems
+  Characteristic: 00002a50-0000-1000-8000-00805f9b34fb  props: CharPropFlags(READ)
+    value (hex): 02 15 19 EE EE 01 00
+    value (utf8): ��
+Service: 0000180f-0000-1000-8000-00805f9b34fb
+  Characteristic: 00002a19-0000-1000-8000-00805f9b34fb  props: CharPropFlags(READ)
+    value (hex): 46
+    value (utf8): F
+Service: 00001812-0000-1000-8000-00805f9b34fb
+  Characteristic: 00002a22-0000-1000-8000-00805f9b34fb  props: CharPropFlags(READ | NOTIFY)
+    value (hex): 1C 73 FF F7 9D 2C C0 2A
+    value (utf8): s���,�*
+  Characteristic: 00002a32-0000-1000-8000-00805f9b34fb  props: CharPropFlags(READ | WRITE_WITHOUT_RESPONSE | WRITE)
+    value (hex): B8
+    value (utf8): �
+  Characteristic: 00002a33-0000-1000-8000-00805f9b34fb  props: CharPropFlags(READ | WRITE | NOTIFY)
+    value (hex): 8F D1 E9 09 60 28 00 66
+    value (utf8): ���	`(f
+  Characteristic: 00002a4a-0000-1000-8000-00805f9b34fb  props: CharPropFlags(READ)
+    value (hex): 01 01 00 03
+    value (utf8):
+  Characteristic: 00002a4b-0000-1000-8000-00805f9b34fb  props: CharPropFlags(READ)
+    value (hex): 05 01 09 06 A1 01 85 01 05 07 19 E0 29 E7 15 00 25 01 75 01 95 08 81 02 95 01 75 08 81 01 95 05 75 01 05 08 19 01 29 05 91 02 95 01 75 03 91 01 95 06 75 08 15 00 25 65 05 07 19 00 29 65 81 00 09 05 15 00 26 FF 00 75 08 95 02 B1 02 C0 05 0C 09 01 A1 01 85 02 15 00 25 01 95 01 75 01 0A AE 01 81 02 0A 23 02 81 02 0A 2A 02 81 02 0A 27 02 81 02 0A 2B 02 81 02 0A 2C 02 81 02 0A 45 02 81 02 0A 2B 02 81 02 C0 05 01 09 02 A1 01 85 03 09 01 A1 00 95 05 75 01 05 09 19 01 29 05 15 00 25 01 81 02 95 01 75 03 81 01 75 08 95 01 05 01 09 38 15 81 25 7F 81 06 05 0C 0A 38 02 95 01 81 06 C0 85 04 09 01 A1 00 75 0C 95 02 05 01 09 30 09 31 16 01 F8 26 FF 07 81 06 C0 C0 05 0C 09 01 A1 01 85 05 15 00 25 01 75 01 95 01 09 CD 81 06 09 E2 81 06 09 B5 81 06 09 B6 81 06 09 EA 81 06 09 E9 81 06 09 B3 81 06 09 B4 81 06 C0
+    value (utf8): 	���)�%u����)��u��%e)e�	&����
+                                                     	��%�u
+��
+#�
+*�
+'�
++�
+,�
+E�
++��	��	��u	)%��u��	8�%�
+
+8����	�u
+          �	0	1�&����
+                               	��%u�		�	��	��	��	��	���
+  Characteristic: 00002a4c-0000-1000-8000-00805f9b34fb  props: CharPropFlags(WRITE_WITHOUT_RESPONSE)
+  Characteristic: 00002a4d-0000-1000-8000-00805f9b34fb  props: CharPropFlags(READ | WRITE | NOTIFY)
+    value (hex): 00 00 00 00 00 00 00 00
+    value (utf8):
+  Characteristic: 00002a4e-0000-1000-8000-00805f9b34fb  props: CharPropFlags(READ | WRITE_WITHOUT_RESPONSE)
+    value (hex): 01
+    value (utf8):
+Service: 0000fe59-0000-1000-8000-00805f9b34fb
+  Characteristic: 8ec90004-f315-4f60-9fb8-838830daea50  props: CharPropFlags(WRITE | INDICATE)
+Service: 6e400001-b5a3-f393-e0a9-e50e24dcca9e
+  Characteristic: 6e400002-b5a3-f393-e0a9-e50e24dcca9e  props: CharPropFlags(WRITE_WITHOUT_RESPONSE | WRITE)
+  Characteristic: 6e400003-b5a3-f393-e0a9-e50e24dcca9e  props: CharPropFlags(NOTIFY)
+Service: c3ff0001-1d8b-40fd-a56f-c7bd5d0f3370
+  Characteristic: c3ff0002-1d8b-40fd-a56f-c7bd5d0f3370  props: CharPropFlags(READ | WRITE)
+    value (hex): 10 55 67 02 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    value (utf8): Ug
+  Characteristic: c3ff0003-1d8b-40fd-a56f-c7bd5d0f3370  props: CharPropFlags(READ | WRITE)
+    value (hex): 54 61 70 58 52 5F 41 30 33 36 33 32 30
+    value (utf8): TapXR_A036320
+  Characteristic: c3ff0005-1d8b-40fd-a56f-c7bd5d0f3370  props: CharPropFlags(NOTIFY)
+  Characteristic: c3ff0006-1d8b-40fd-a56f-c7bd5d0f3370  props: CharPropFlags(WRITE_WITHOUT_RESPONSE | WRITE | NOTIFY)
+  Characteristic: c3ff0007-1d8b-40fd-a56f-c7bd5d0f3370  props: CharPropFlags(WRITE_WITHOUT_RESPONSE | WRITE)
+  Characteristic: c3ff0008-1d8b-40fd-a56f-c7bd5d0f3370  props: CharPropFlags(NOTIFY)
+  Characteristic: c3ff0009-1d8b-40fd-a56f-c7bd5d0f3370  props: CharPropFlags(WRITE_WITHOUT_RESPONSE | WRITE)
+  Characteristic: c3ff000a-1d8b-40fd-a56f-c7bd5d0f3370  props: CharPropFlags(READ | WRITE_WITHOUT_RESPONSE | NOTIFY)
+    value (hex): FB
+    value (utf8): �
+  Characteristic: c3ff000b-1d8b-40fd-a56f-c7bd5d0f3370  props: CharPropFlags(READ | WRITE_WITHOUT_RESPONSE | NOTIFY)
+    value (hex): 8F
+    value (utf8): �
+  Characteristic: c3ff000c-1d8b-40fd-a56f-c7bd5d0f3370  props: CharPropFlags(READ | NOTIFY)
+    value (hex): 31 32 34 38 37
+    value (utf8): 12487
+  Characteristic: c3ff000d-1d8b-40fd-a56f-c7bd5d0f3370  props: CharPropFlags(READ | NOTIFY)
+    value (hex): 31 2E 31 2E 30
+    value (utf8): 1.1.0
+
+
+
+=== GATT Services & Characteristics Tap Strap 2 ===
+
+Service: 00001800-0000-1000-8000-00805f9b34fb
+  Characteristic: 00002a00-0000-1000-8000-00805f9b34fb  props: CharPropFlags(READ | WRITE)
+    value (hex): 54 61 70 5F 44 34 32 35 32 36 31 31
+    value (utf8): Tap_D4252611
+  Characteristic: 00002a01-0000-1000-8000-00805f9b34fb  props: CharPropFlags(READ)
+    value (hex): C1 03
+    value (utf8): �
+  Characteristic: 00002a04-0000-1000-8000-00805f9b34fb  props: CharPropFlags(READ)
+    value (hex): 06 00 0C 00 00 00 90 01
+    value (utf8):
+                  �
+  Characteristic: 00002aa6-0000-1000-8000-00805f9b34fb  props: CharPropFlags(READ)
+    value (hex): 01
+    value (utf8):
+Service: 00001801-0000-1000-8000-00805f9b34fb
+  Characteristic: 00002a05-0000-1000-8000-00805f9b34fb  props: CharPropFlags(INDICATE)
+Service: 0000180a-0000-1000-8000-00805f9b34fb
+  Characteristic: 00002a25-0000-1000-8000-00805f9b34fb  props: CharPropFlags(READ)
+    value (hex): 30 30 30 30 30 30 42 30 34 44 42 42 30 34 32 35
+    value (utf8): 000000B04DBB0425
+  Characteristic: 00002a26-0000-1000-8000-00805f9b34fb  props: CharPropFlags(READ)
+    value (hex): 32 2E 37 2E 30
+    value (utf8): 2.7.0
+  Characteristic: 00002a27-0000-1000-8000-00805f9b34fb  props: CharPropFlags(READ)
+    value (hex): 33 2E 33
+    value (utf8): 3.3
+  Characteristic: 00002a28-0000-1000-8000-00805f9b34fb  props: CharPropFlags(READ)
+    value (hex): 31 30 31
+    value (utf8): 101
+  Characteristic: 00002a29-0000-1000-8000-00805f9b34fb  props: CharPropFlags(READ)
+    value (hex): 54 41 50 20 53 79 73 74 65 6D 73
+    value (utf8): TAP Systems
+  Characteristic: 00002a50-0000-1000-8000-00805f9b34fb  props: CharPropFlags(READ)
+    value (hex): 02 15 19 EE EE 01 00
+    value (utf8): ��
+Service: 0000180f-0000-1000-8000-00805f9b34fb
+  Characteristic: 00002a19-0000-1000-8000-00805f9b34fb  props: CharPropFlags(READ)
+    value (hex): 5F
+    value (utf8): _
+Service: 00001812-0000-1000-8000-00805f9b34fb
+  Characteristic: 00002a22-0000-1000-8000-00805f9b34fb  props: CharPropFlags(READ | NOTIFY)
+    value (hex): FF 5D 40 E3 89 04 8A 9E
+    value (utf8): �]@���
+  Characteristic: 00002a32-0000-1000-8000-00805f9b34fb  props: CharPropFlags(READ | WRITE_WITHOUT_RESPONSE | WRITE)
+    value (hex): 0A
+    value (utf8):
+
+  Characteristic: 00002a33-0000-1000-8000-00805f9b34fb  props: CharPropFlags(READ | WRITE | NOTIFY)
+    value (hex): C9 CD CB 42 B9 6C 74 1E
+    value (utf8): ���B�lt
+  Characteristic: 00002a4a-0000-1000-8000-00805f9b34fb  props: CharPropFlags(READ)
+    value (hex): 01 01 00 03
+    value (utf8):
+  Characteristic: 00002a4b-0000-1000-8000-00805f9b34fb  props: CharPropFlags(READ)
+    value (hex): 05 01 09 06 A1 01 85 01 05 07 19 E0 29 E7 15 00 25 01 75 01 95 08 81 02 95 01 75 08 81 01 95 05 75 01 05 08 19 01 29 05 91 02 95 01 75 03 91 01 95 06 75 08 15 00 25 65 05 07 19 00 29 65 81 00 09 05 15 00 26 FF 00 75 08 95 02 B1 02 C0 05 0C 09 01 A1 01 85 02 15 00 25 01 95 01 75 01 0A AE 01 81 02 0A 23 02 81 02 0A 2A 02 81 02 0A 27 02 81 02 0A 2B 02 81 02 0A 2C 02 81 02 0A 45 02 81 02 0A 2B 02 81 02 C0 05 01 09 02 A1 01 85 03 09 01 A1 00 95 05 75 01 05 09 19 01 29 05 15 00 25 01 81 02 95 01 75 03 81 01 75 08 95 01 05 01 09 38 15 81 25 7F 81 06 05 0C 0A 38 02 95 01 81 06 C0 85 04 09 01 A1 00 75 0C 95 02 05 01 09 30 09 31 16 01 F8 26 FF 07 81 06 C0 C0 05 0C 09 01 A1 01 85 05 15 00 25 01 75 01 95 01 09 CD 81 06 09 E2 81 06 09 B5 81 06 09 B6 81 06 09 EA 81 06 09 E9 81 06 09 B3 81 06 09 B4 81 06 C0
+    value (utf8): 	���)�%u����)��u��%e)e�	&����
+                                                     	��%�u
+��
+#�
+*�
+'�
++�
+,�
+E�
++��	��	��u	)%��u��	8�%�
+
+8����	�u
+          �	0	1�&����
+                               	��%u�		�	��	��	��	��	���
+  Characteristic: 00002a4c-0000-1000-8000-00805f9b34fb  props: CharPropFlags(WRITE_WITHOUT_RESPONSE)
+  Characteristic: 00002a4d-0000-1000-8000-00805f9b34fb  props: CharPropFlags(READ | WRITE | NOTIFY)
+    value (hex):
+    value (utf8):
+  Characteristic: 00002a4e-0000-1000-8000-00805f9b34fb  props: CharPropFlags(READ | WRITE_WITHOUT_RESPONSE)
+    value (hex): 01
+    value (utf8):
+Service: 0000fe59-0000-1000-8000-00805f9b34fb
+  Characteristic: 8ec90004-f315-4f60-9fb8-838830daea50  props: CharPropFlags(WRITE | INDICATE)
+Service: 6e400001-b5a3-f393-e0a9-e50e24dcca9e
+  Characteristic: 6e400002-b5a3-f393-e0a9-e50e24dcca9e  props: CharPropFlags(WRITE_WITHOUT_RESPONSE | WRITE)
+  Characteristic: 6e400003-b5a3-f393-e0a9-e50e24dcca9e  props: CharPropFlags(NOTIFY)
+Service: c3ff0001-1d8b-40fd-a56f-c7bd5d0f3370
+  Characteristic: c3ff0002-1d8b-40fd-a56f-c7bd5d0f3370  props: CharPropFlags(READ | WRITE)
+    value (hex): C0 55 7A 42 08 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    value (utf8): �UzB
+  Characteristic: c3ff0003-1d8b-40fd-a56f-c7bd5d0f3370  props: CharPropFlags(READ | WRITE)
+    value (hex): 54 61 70 5F 44 34 32 35 32 36 31 31
+    value (utf8): Tap_D4252611
+  Characteristic: c3ff0005-1d8b-40fd-a56f-c7bd5d0f3370  props: CharPropFlags(NOTIFY)
+  Characteristic: c3ff0006-1d8b-40fd-a56f-c7bd5d0f3370  props: CharPropFlags(WRITE_WITHOUT_RESPONSE | WRITE | NOTIFY)
+  Characteristic: c3ff0007-1d8b-40fd-a56f-c7bd5d0f3370  props: CharPropFlags(WRITE_WITHOUT_RESPONSE | WRITE)
+  Characteristic: c3ff0008-1d8b-40fd-a56f-c7bd5d0f3370  props: CharPropFlags(NOTIFY)
+  Characteristic: c3ff0009-1d8b-40fd-a56f-c7bd5d0f3370  props: CharPropFlags(WRITE_WITHOUT_RESPONSE | WRITE)
+  Characteristic: c3ff000a-1d8b-40fd-a56f-c7bd5d0f3370  props: CharPropFlags(READ | WRITE_WITHOUT_RESPONSE | NOTIFY)
+    value (hex): 50
+    value (utf8): P
+  Characteristic: c3ff000b-1d8b-40fd-a56f-c7bd5d0f3370  props: CharPropFlags(READ | WRITE_WITHOUT_RESPONSE | NOTIFY)
+    value (hex): 16
+    value (utf8):

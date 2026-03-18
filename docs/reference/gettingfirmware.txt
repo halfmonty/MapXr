@@ -1,0 +1,135 @@
+How to call the Lambda directly You can get unauthenticated Cognito credentials and then invoke the Lambda with the AWS CLI:
+
+# Step 1: get an identity ID
+aws cognito-identity get-id \
+--account-id <your-aws-account-not-needed-for-unauth> \
+--identity-pool-id us-east-1:f354a448-801e-4f7c-ab6f-626d8fe57578 \
+--region us-east-1
+
+# Step 2: get temporary credentials
+aws cognito-identity get-credentials-for-identity \
+--identity-id us-east-1:a1ea737b-9bfe-c236-05cc-f04f56eb32d1 \
+--region us-east-1
+
+# Step 3: invoke the Lambda (set env vars from step 2 first)
+AWS_ACCESS_KEY_ID=<keyid>> AWS_SECRET_ACCESS_KEY=<access key> AWS_SESSION_TOKEN=<token> \
+aws lambda invoke \
+--function-name "get-fw-versions:prod" \
+--region us-east-1 \
+--payload '{"hw_version":40000,"nfw_version":0,"kfw_version":0,"mver_version":"","bl_version":0,"env_id":1,"app_version":"1.5.9","tap_sn":"<insert sn>"}' \
+--cli-binary-format raw-in-base64-out \ response.json && cat response.json
+
+The s3_file_path values in the response are what you append to
+https://s3.amazonaws.com/tap-firmware-files/ to get direct download URLs. You'll want to pass
+your actual device's hw_version, fw_version, etc. to get the right firmware — passing zeros
+should still return the latest available.
+
+base_url: https://s3.amazonaws.com/tap-firmware-files/
+
+
+==== TapXR Payload & Respone ====
+{"hw_version":40000,"nfw_version":30400,"kfw_version":10100,"mver_version":"30c7","bl_version":101,"env_id":1,"app_version":"a:1.5.9","tap_sn":"<insert sn>"}
+
+{
+  "nfw": [
+    {
+      "nfw_id": 104,
+      "version": 30505,
+      "bl_version": 101,
+      "change_log": "release social media controller mode",
+      "release_date": "2025-04-08",
+      "s3_file_path": "tapxr/4.0/NRF/3.x.x/3.5.x/3.5.5_4.0_101_20250408/dfu_files/NRF_3_5_5_4_0_101_20250408_debug.zip",
+      "hw_version": 40000
+    }
+  ],
+  "unified": [
+    {
+      "kneron_version_id": 84,
+      "hw_version": 40000,
+      "kfw": 10122,
+      "mver": "1d0a",
+      "change_log": "faster boot",
+      "release_date": "2025-03-24",
+      "kfw_s3_file_path": "tapxr/4.0/KNERON/1.x.x/1.1.x/1.1.22_1d0a_4.0_20250324/fw_1.1.22_1d0a_4.0_20250324.zip",
+      "unified_s3_file_path": "tapxr/4.0/KNERON/1.x.x/1.1.x/1.1.22_1d0a_4.0_20250324/all_1.1.22_1d0a_4.0_20250324.bin",
+      "kfw_packets_s3_file_path": "tapxr/4.0/KNERON/1.x.x/1.1.x/1.1.22_1d0a_4.0_20250324/ota_long_chip_erase/fw_1.1.22_1d0a_4.0_20250904.bin",
+      "unified_packets_s3_file_path": "tapxr/4.0/KNERON/1.x.x/1.1.x/1.1.22_1d0a_4.0_20250324/ota_long_chip_erase/all_1.1.22_1d0a_4.0_20250904.bin"
+    }
+  ],
+  "is_valid": true,
+  "updates_count": 2,
+  "message": "",
+  "tapxr": true
+}
+
+==== Tap Strap 2 Payload && Response ====
+
+{"hw_version":30300,"fw_version":20600,"kfw_version":0,"mver_version":"N","bl_version":101,"env_id":1,"app_version":"a:1.5.9","tap_sn":"<insert SN>"}
+
+
+
+=================================
+The TapXR has two separate processor chips, each needing its own firmware:
+
+  Older Tap — single chip:
+  - One Nordic BLE SoC handles everything
+  - One firmware file → s3_file_path (Nordic DFU .zip)
+
+  TapXR — two chips:
+  - Nordic chip (BLE + main logic) → nfw → s3_file_path (the NRF .zip)
+  - Kneron AI chip (gesture recognition/ML inference) → unified/kfw → multiple paths
+
+  The Kneron update has four variants because there are two axes of choice:
+
+  ┌──────────────────┬───────────────────────────────┬───────────────────────────────────┐
+  │                  │          Kneron only          │     Kneron + Nordic together      │
+  ├──────────────────┼───────────────────────────────┼───────────────────────────────────┤
+  │ Normal OTA       │ kfw_s3_file_path (.zip)       │ unified_s3_file_path (.bin)       │
+  ├──────────────────┼───────────────────────────────┼───────────────────────────────────┤
+  │ Long chip erase  │ kfw_packets_s3_file_path      │ unified_packets_s3_file_path      │
+  │ OTA              │ (.bin)                        │ (.bin)                            │
+  └──────────────────┴───────────────────────────────┴───────────────────────────────────┘
+
+  The "long chip erase" variants (the _packets_ paths) are what the Android app actually uses
+   for OTA — they're the ones passed into VersionDownload.start() via the
+  kfwPacketsS3FilePath param key. The "unified" variants update both chips in one pass; the
+  "kfw" variants update only the Kneron chip when the Nordic firmware is already current.
+
+  So for a full TapXR update you'd need to download two files: the NRF .zip and one of the
+  Kneron .bin files.
+
+
+  Kneron chip BLE accessibility
+
+  The Kneron chip is not directly accessible via BLE — only its version metadata is readable
+  (c3ff000c/c3ff000d). The actual AI/gesture processing happens internally on the chip and
+  its results surface through the same tap/gesture characteristics that older devices also
+  use (c3ff0005 TAP_DATA, c3ff000a AIR_MOUSE_DATA). You can't send commands to the Kneron
+  chip or query its inference results directly over BLE.
+
+  TapXR vs older Tap characteristic differences
+
+  ┌────────────────────────────┬───────────────┬───────┬─────────────────────────────────┐
+  │       Characteristic       │   Older Tap   │ TapXR │              Notes              │
+  ├────────────────────────────┼───────────────┼───────┼─────────────────────────────────┤
+  │ c3ff000b DATA_REQUEST      │ ✅            │ ❌    │ Explicitly disabled for XR      │
+  ├────────────────────────────┼───────────────┼───────┼─────────────────────────────────┤
+  │ c3ff000c MODEL_VER         │ ❌            │ ✅    │ Kneron model version            │
+  ├────────────────────────────┼───────────────┼───────┼─────────────────────────────────┤
+  │ c3ff000d KNERON_FW         │ ❌            │ ✅    │ Kneron firmware version         │
+  ├────────────────────────────┼───────────────┼───────┼─────────────────────────────────┤
+  │ Left-handed mode (in       │ ✅ hw         │ ❌    │ Version-gated out               │
+  │ c3ff0002 SETTINGS)         │ 30200–39999   │       │                                 │
+  ├────────────────────────────┼───────────────┼───────┼─────────────────────────────────┤
+  │ Mouse sensitivity (in      │ ❌            │ ✅    │ Feature ID 59, XR only          │
+  │ c3ff0002 SETTINGS)         │               │       │                                 │
+  ├────────────────────────────┼───────────────┼───────┼─────────────────────────────────┤
+  │ XR state mode (via NUS     │ ❌            │ ✅    │ userControl/tapping/airMouse    │
+  │ 6e400002/03)               │               │       │ states                          │
+  └────────────────────────────┴───────────────┴───────┴─────────────────────────────────┘
+
+  The most significant behavioral difference is the XR state machine — TapXR uses the Nordic
+  UART Service (6e400001) to switch between operating modes (tapping, airMouse, userControl),
+   which is how the Kneron chip's air gesture output gets routed differently depending on
+  what the device is doing. That's all tunneled through the NUS RX/TX characteristics rather
+  than dedicated characteristics.

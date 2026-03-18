@@ -19,7 +19,7 @@ pub(crate) const TAP_SERVICE_UUID: Uuid = Uuid::from_u128(0xC3FF0001_1D8B_40FD_A
 ///
 /// Returns [`BleError::AdapterNotFound`] if the system has no BLE hardware or the
 /// BLE subsystem fails to initialise.
-pub(crate) async fn get_adapter() -> Result<Adapter, BleError> {
+pub async fn get_adapter() -> Result<Adapter, BleError> {
     let manager = Manager::new().await?;
     manager
         .adapters()

@@ -1,0 +1,1 @@
+{"errorMessage": "list index out of range", "errorType": "IndexError", "requestId": "aa1c15fd-ff83-436f-b613-a90428e11874", "stackTrace": ["  File \"/var/task/main.py\", line 675, in handle\n    comps = device[1].split(\".\")\n"]}
