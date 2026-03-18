@@ -1,6 +1,8 @@
 use std::time::Duration;
 
-use btleplug::api::{Central, Manager as _, Peripheral as _};
+use btleplug::api::Manager as _;
+#[cfg(any(test, not(target_os = "linux")))]
+use btleplug::api::{Central, Peripheral as _};
 use btleplug::platform::{Adapter, Manager};
 use uuid::Uuid;
 
@@ -46,8 +48,7 @@ pub(crate) async fn get_adapter() -> Result<Adapter, BleError> {
 pub async fn discover_devices(timeout_ms: u64) -> Result<Vec<TapDeviceInfo>, BleError> {
     #[cfg(target_os = "linux")]
     {
-        let adapter = get_adapter().await?;
-        return discover_devices_le(&adapter, timeout_ms).await;
+        discover_devices_le(timeout_ms).await
     }
 
     #[cfg(not(target_os = "linux"))]
@@ -70,16 +71,33 @@ pub async fn discover_devices(timeout_ms: u64) -> Result<Vec<TapDeviceInfo>, Ble
 /// `connect` call. This ensures discovered peripherals are registered in the same
 /// btleplug session, avoiding stale-session issues after the temporary `bluez-async`
 /// session is dropped.
+///
+/// After the scan window, `session.get_devices()` is queried directly and filtered by
+/// `TAP_SERVICE_UUID`. BlueZ populates `DeviceInfo.services` from advertisement data, so
+/// this is a reliable post-scan filter that is immune to btleplug's unfiltered event
+/// stream and to BlueZ's cross-client filter merging behaviour.
 #[cfg(target_os = "linux")]
 pub(crate) async fn discover_devices_le(
-    adapter: &Adapter,
     timeout_ms: u64,
 ) -> Result<Vec<TapDeviceInfo>, BleError> {
-    use bluez_async::{BluetoothSession, DiscoveryFilter, Transport};
+    use std::collections::HashMap;
+    use std::str::FromStr as _;
+
+    use btleplug::api::BDAddr;
+    use bluez_async::{BluetoothEvent, DeviceEvent, DeviceId, BluetoothSession, DiscoveryFilter, Transport};
+    use futures::StreamExt as _;
 
     // BluetoothSession::new() internally spawns the D-Bus resource task via tokio::spawn;
     // the returned future handle does not need to be awaited or kept alive.
     let (_task, session) = BluetoothSession::new()
+        .await
+        .map_err(|e| BleError::Btleplug(btleplug::Error::RuntimeError(e.to_string())))?;
+
+    // Subscribe before starting discovery so no PropertiesChanged signals are missed.
+    // RSSI is only delivered via PropertiesChanged, not via GetManagedObjects, so we
+    // must collect it from the event stream rather than from get_devices().
+    let mut event_stream = session
+        .event_stream()
         .await
         .map_err(|e| BleError::Btleplug(btleplug::Error::RuntimeError(e.to_string())))?;
 
@@ -105,17 +123,63 @@ pub(crate) async fn discover_devices_le(
         .await
         .map_err(|e| BleError::Btleplug(btleplug::Error::RuntimeError(e.to_string())))?;
 
-    tokio::time::sleep(Duration::from_millis(timeout_ms)).await;
+    // Drive the event stream for the scan window, collecting the most recent RSSI
+    // per device from PropertiesChanged signals.
+    let mut rssi_map: HashMap<DeviceId, i16> = HashMap::new();
+    let deadline = tokio::time::Instant::now() + Duration::from_millis(timeout_ms);
+    loop {
+        tokio::select! {
+            _ = tokio::time::sleep_until(deadline) => break,
+            event = event_stream.next() => match event {
+                Some(BluetoothEvent::Device { id, event: DeviceEvent::Rssi { rssi } }) => {
+                    rssi_map.insert(id, rssi);
+                }
+                None => break,
+                Some(_) => {}
+            },
+        }
+    }
 
     // Ignore "No discovery started" on stop: BlueZ may have already cleaned up the
     // discovery session (e.g. the adapter suppressed scanning while a device was
-    // connected). The sleep has elapsed and peripherals are already cached in BlueZ,
-    // so a stop failure is harmless — the session drop will clean up automatically.
+    // connected). RSSI values are already collected, so a stop failure is harmless.
     if let Err(e) = session.stop_discovery_on_adapter(&bluez_adapter.id).await {
         log::warn!("stop_discovery_on_adapter: {e} (ignored)");
     }
 
-    collect_peripherals(adapter).await
+    // Fetch all devices and retain only those that advertised TAP_SERVICE_UUID.
+    // Merge in RSSI from the event stream; fall back to device_info.rssi if no
+    // PropertiesChanged event was seen for that device (defensive).
+    let all_devices = session
+        .get_devices()
+        .await
+        .map_err(|e| BleError::Btleplug(btleplug::Error::RuntimeError(e.to_string())))?;
+
+    let mut devices: Vec<TapDeviceInfo> = Vec::new();
+    for device_info in all_devices {
+        if !device_info.services.contains(&TAP_SERVICE_UUID) {
+            continue;
+        }
+        let address =
+            BDAddr::from_str(&device_info.mac_address.to_string()).map_err(|e| {
+                BleError::Btleplug(btleplug::Error::RuntimeError(e.to_string()))
+            })?;
+        let rssi = rssi_map.get(&device_info.id).copied().or(device_info.rssi);
+        devices.push(TapDeviceInfo {
+            name: device_info.name,
+            address,
+            rssi,
+        });
+    }
+
+    devices.sort_by(|a, b| match (a.rssi, b.rssi) {
+        (Some(ra), Some(rb)) => rb.cmp(&ra),
+        (Some(_), None) => std::cmp::Ordering::Less,
+        (None, Some(_)) => std::cmp::Ordering::Greater,
+        (None, None) => std::cmp::Ordering::Equal,
+    });
+
+    Ok(devices)
 }
 
 /// Inner scan logic, generic over any [`Central`] adapter.
@@ -148,8 +212,18 @@ where
 
 /// Query btleplug's peripheral list and return a sorted [`TapDeviceInfo`] vec.
 ///
+/// Only used by [`scan_with_adapter`] on non-Linux platforms (and in tests). The Linux
+/// path ([`discover_devices_le`]) queries `bluez-async` directly instead.
+///
 /// btleplug maintains one Peripheral entry per hardware address (deduplicated by BlueZ);
 /// properties reflect the most recent advertisement seen during the scan.
+///
+/// A secondary service-UUID filter is applied: if a peripheral's properties include a
+/// non-empty `services` list that does not contain [`TAP_SERVICE_UUID`], the peripheral is
+/// skipped. Peripherals with an empty `services` list are retained — some platforms only
+/// populate `services` after a full GATT discovery, so absence of the UUID in advertisement
+/// properties does not mean the device is not a Tap.
+#[cfg(any(test, not(target_os = "linux")))]
 async fn collect_peripherals<C>(adapter: &C) -> Result<Vec<TapDeviceInfo>, BleError>
 where
     C: Central,
@@ -159,6 +233,14 @@ where
     for peripheral in peripherals {
         let address = peripheral.address();
         let props = peripheral.properties().await?;
+
+        // Secondary filter: skip devices that advertise services but not the Tap UUID.
+        if let Some(ref p) = props {
+            if !p.services.is_empty() && !p.services.contains(&TAP_SERVICE_UUID) {
+                continue;
+            }
+        }
+
         let (name, rssi) = props.map_or((None, None), |p| (p.local_name, p.rssi));
         devices.push(TapDeviceInfo {
             name,
@@ -201,6 +283,9 @@ mod tests {
         address: BDAddr,
         name: Option<String>,
         rssi: Option<i16>,
+        /// Services reported in advertisement properties. `None` means no `services` field
+        /// (empty vec in btleplug terms); `Some(uuids)` means those UUIDs are present.
+        services: Vec<Uuid>,
     }
 
     #[async_trait]
@@ -222,6 +307,7 @@ mod tests {
                 address: self.address,
                 local_name: self.name.clone(),
                 rssi: self.rssi,
+                services: self.services.clone(),
                 ..Default::default()
             }))
         }
@@ -349,6 +435,16 @@ mod tests {
             address: BDAddr::default(),
             name: None,
             rssi,
+            services: vec![TAP_SERVICE_UUID],
+        }
+    }
+
+    fn mock_peripheral_with_services(rssi: Option<i16>, services: Vec<Uuid>) -> MockPeripheral {
+        MockPeripheral {
+            address: BDAddr::default(),
+            name: None,
+            rssi,
+            services,
         }
     }
 
@@ -412,5 +508,43 @@ mod tests {
         assert_eq!(devices[0].rssi, Some(-60));
         assert!(devices[1].rssi.is_none());
         assert!(devices[2].rssi.is_none());
+    }
+
+    #[tokio::test]
+    async fn collect_peripherals_non_tap_device_with_different_service_uuid_is_excluded() {
+        let other_uuid = Uuid::from_u128(0xDEADBEEF_0000_0000_0000_000000000000);
+        let adapter = mock_adapter(vec![
+            mock_peripheral_with_services(Some(-60), vec![other_uuid]),
+        ]);
+
+        let devices = scan_with_adapter(&adapter, 0).await.expect("scan failed");
+
+        assert!(
+            devices.is_empty(),
+            "non-Tap device should be excluded by secondary service UUID filter"
+        );
+    }
+
+    #[tokio::test]
+    async fn collect_peripherals_tap_device_with_correct_service_uuid_is_included() {
+        let adapter = mock_adapter(vec![
+            mock_peripheral_with_services(Some(-60), vec![TAP_SERVICE_UUID]),
+        ]);
+
+        let devices = scan_with_adapter(&adapter, 0).await.expect("scan failed");
+
+        assert_eq!(devices.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn collect_peripherals_device_with_empty_services_is_included() {
+        // Some platforms don't populate services from advertisement data; trust the scan filter.
+        let adapter = mock_adapter(vec![
+            mock_peripheral_with_services(Some(-60), vec![]),
+        ]);
+
+        let devices = scan_with_adapter(&adapter, 0).await.expect("scan failed");
+
+        assert_eq!(devices.len(), 1);
     }
 }

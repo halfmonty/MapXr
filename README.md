@@ -1,85 +1,30 @@
-# mapxr
+# MapXr
 
-**mapxr** is a desktop application for creating and managing custom keyboard mappings for [Tap Strap](https://www.tapwithus.com/) wearable devices. Tap Straps are finger-worn Bluetooth keyboards that detect which fingers you tap and send those chord codes over BLE. mapxr receives those codes, resolves them against your profiles, and fires keystrokes, macros, or layer switches on your desktop.
+**MapXr** is what I always wished the TAP Strap and TapXr to be. At it's core, it's a highly customizable mapping tool that most importantly, supports mapping **Two Tap devices simultaneously!**
 
-Built with [Tauri](https://tauri.app/) (Rust backend) and [Svelte 5](https://svelte.dev/) (frontend).
+![image](/screenshot.png)
 
----
+Map Xr is a desktop application for creating and managing custom keyboard mappings for [Tap Strap and TapXr](https://www.tapwithus.com/) wearable devices. Tap is a finger-worn or wrist-worn Bluetooth keyboard that detect which fingers you tap and send those chord codes over BLE. MapXr receives those codes, resolves them against your profiles, and fires keystrokes, macros, or layer switches on your desktop.
 
-## Table of contents
+MapXr is a fantastic replacement for the default mapping tool but the real magic happens when you connect 2 Tap devices at once. MapXr allows for defining 2 device map profiles, enabling single tap combos that use all 10 fingers. 1 Tap device can only support 31 different single tap combinations with 5 fingers. With all 10 fingers 2 Tap devices can support 1023 different singel tap combinations meaning you will won't need to reach for double-tap and triple-tap mappings.
 
-1. [Features](#features)
-2. [Requirements](#requirements)
-3. [Building and running](#building-and-running)
-4. [Concepts](#concepts)
-   - [Finger pattern notation](#finger-pattern-notation)
-   - [Profiles and layers](#profiles-and-layers)
-   - [Triggers](#triggers)
-   - [Actions](#actions)
-   - [Variables](#variables)
-   - [Settings and timing](#settings-and-timing)
-5. [Using the application](#using-the-application)
-   - [Devices page](#devices-page)
-   - [Profiles page](#profiles-page)
-   - [Profile editor](#profile-editor)
-   - [Debug panel](#debug-panel)
-6. [Profile file format](#profile-file-format)
-7. [Example profiles](#example-profiles)
+## What is wrong with double and triple taps?
+The main issue with double and triple taps comes from overloading an already mapped single tap action. For example, if this tap pattern ●○○○○ is bound to the letter 'a', and a double tap of ●○○○○ is 'v', as is the case in the default single tap map, there are limited ways to determine which letter you actually want to send.
+
+**Eager approach** - The first tap is detected and the letter 'a' is sent, then the second tap is detected, identified as a double tap, 'backspace' is then sent to delete the 'a' and then 'v' is sent.
+
+This is the approach that the Tap implements by default. This behavior prevents using double or triple taps in any sort of mutli-key shortcuts because the initial key being sent will mess up the shortcut.
+
+**Patient Approach** - The software uses a window of time to determine if a double tap has occured that it ensures has elapsed to determine if a tap was single or double.
+
+The downside to this approach is that every tap now takes longer to send because it must wait the double tap timeout before knowing which key to send. This is exacerbated further with triple taps.
+
+
+#### Two Tap Solution
+By having 1023 single taps available between 10 fingers, plus the ability to switch as many `layers` as you want, there is effectively no reason to need double and triple taps. As a result MapXr will determine if your map file doesn't include any single or double taps and will eliminate any unecessary delay making your taps more responsive.
 
 ---
 
-## Features
-
-- **BLE device management** — scan for nearby Tap Strap devices, connect them, assign roles (solo, left, right), and auto-reconnect on subsequent launches.
-- **Profile system** — JSON-based profiles stored as plain files. Human-readable and hand-editable. Live-reloaded when files change.
-- **Layer stack** — push temporary layers onto a stack and pop them off. Layers can be permanent, count-limited, or timeout-based. Passthrough lets unmatched codes fall through to lower layers.
-- **Rich trigger types** — single tap, double tap, triple tap, two-hand combos (dual profiles), and multi-step sequences.
-- **Rich action types** — individual keys with modifiers, key chords, typed strings, multi-step macros with delays, layer control, and named boolean/integer variables.
-- **Visual finger pattern editor** — click or keyboard-navigate circles to compose tap patterns. Supports single-hand and two-hand (dual) profiles.
-- **Live sidebar** — shows the active layer stack, variable values, and a per-device live finger visualiser that flashes when a tap arrives.
-- **Debug panel** — real-time stream of resolved, unmatched, and combo-timeout events with visual timing bars, filtering, pause/resume, and JSONL export.
-
----
-
-## Requirements
-
-- Rust toolchain (1.82 or later)
-- Node.js 20+ and npm
-- A Tap Strap 2 device (or compatible)
-- Linux, macOS, or Windows
-
----
-
-## Building and running
-
-```bash
-# Install frontend dependencies
-npm install
-
-# Run in development mode (hot-reload frontend + Rust rebuild on change)
-npm run tauri dev
-
-# Build a production binary (Linux / macOS)
-npm run tauri build
-```
-
-Profile files are stored in the `profiles/` directory next to the application binary. On a development build they are read from `profiles/` at the project root.
-
-### Building for Windows from Linux
-
-Tauri's bundler must run on Windows to produce a proper `.msi` / NSIS installer. Use the included GitHub Actions workflow:
-
-1. Push the repository to GitHub (the `.github/workflows/build-windows.yml` file must be on the branch).
-2. Go to **Actions → Build Windows → Run workflow** for a manual build, or push a tag matching `v*` (e.g. `v0.2.0`) to trigger automatically.
-3. Download the `mapxr-windows` artifact when the run completes. It contains the `.msi` installer and the NSIS `.exe`.
-
-> **Note on `GITHUB_TOKEN`:** this token is injected automatically by GitHub — no setup required.
-> Your repository must have **Settings → Actions → General → Workflow permissions** set to
-> **"Read and write permissions"** for the action to attach artifacts to a GitHub Release.
-
----
-
-## Concepts
 
 ### Finger pattern notation
 
@@ -391,6 +336,35 @@ A sequence trigger requires multiple chords in order within a time window, usefu
   "action": { "type": "key", "key": "q", "modifiers": ["ctrl"] }
 }
 ```
+---
+
+## Building and running
+
+```bash
+# Install frontend dependencies
+npm install
+
+# Run in development mode (hot-reload frontend + Rust rebuild on change)
+npm run tauri dev
+
+# Build a production binary (Linux / macOS)
+npm run tauri build
+```
+
+Profile files are stored in the `profiles/` directory next to the application binary. On a development build they are read from `profiles/` at the project root.
+
+### Building for Windows from Linux
+
+Tauri's bundler must run on Windows to produce a proper `.msi` / NSIS installer. Use the included GitHub Actions workflow:
+
+1. Push the repository to GitHub (the `.github/workflows/build-windows.yml` file must be on the branch).
+2. Go to **Actions → Build Windows → Run workflow** for a manual build, or push a tag matching `v*` (e.g. `v0.2.0`) to trigger automatically.
+3. Download the `mapxr-windows` artifact when the run completes. It contains the `.msi` installer and the NSIS `.exe`.
+
+> **Note on `GITHUB_TOKEN`:** this token is injected automatically by GitHub — no setup required.
+> Your repository must have **Settings → Actions → General → Workflow permissions** set to
+> **"Read and write permissions"** for the action to attach artifacts to a GitHub Release.
+
 
 ---
 

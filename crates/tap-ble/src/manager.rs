@@ -101,7 +101,7 @@ impl BleManager {
     /// the subsequent `connect` call.
     pub async fn scan(&mut self, timeout_ms: u64) -> Result<Vec<TapDeviceInfo>, BleError> {
         #[cfg(target_os = "linux")]
-        return discover_devices_le(&self.adapter, timeout_ms).await;
+        return discover_devices_le(timeout_ms).await;
 
         #[cfg(not(target_os = "linux"))]
         return scan_with_adapter(&self.adapter, timeout_ms).await;
