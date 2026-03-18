@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "kind": "single",
+  "name": "Starter (Right Hand)",
+  "description": "A starter profile for right-hand use. Single-finger taps produce common editing shortcuts; two-finger combos produce navigation and further shortcuts. Customize or replace to suit your workflow.",
+  "layer_id": "starter-right",
+  "hand": "right",
+  "passthrough": false,
+  "settings": {
+    "combo_window_ms": 60,
+    "double_tap_window_ms": 200,
+    "triple_tap_window_ms": 350,
+    "overload_strategy": "patient"
+  },
+  "mappings": [
+    { "label": "Copy",        "trigger": { "type": "tap", "code": "xoooo" }, "action": { "type": "key_chord", "keys": ["ctrl", "c"] } },
+    { "label": "Paste",       "trigger": { "type": "tap", "code": "oxooo" }, "action": { "type": "key_chord", "keys": ["ctrl", "v"] } },
+    { "label": "Undo",        "trigger": { "type": "tap", "code": "ooxoo" }, "action": { "type": "key_chord", "keys": ["ctrl", "z"] } },
+    { "label": "Tab",         "trigger": { "type": "tap", "code": "oooxo" }, "action": { "type": "key", "key": "tab" } },
+    { "label": "Escape",      "trigger": { "type": "tap", "code": "oooox" }, "action": { "type": "key", "key": "escape" } },
+    { "label": "Save",        "trigger": { "type": "tap", "code": "xxooo" }, "action": { "type": "key_chord", "keys": ["ctrl", "s"] } },
+    { "label": "Select All",  "trigger": { "type": "tap", "code": "xoxoo" }, "action": { "type": "key_chord", "keys": ["ctrl", "a"] } },
+    { "label": "Cut",         "trigger": { "type": "tap", "code": "xooxo" }, "action": { "type": "key_chord", "keys": ["ctrl", "x"] } },
+    { "label": "Redo",        "trigger": { "type": "tap", "code": "xooox" }, "action": { "type": "key_chord", "keys": ["ctrl", "shift", "z"] } },
+    { "label": "Arrow Up",    "trigger": { "type": "tap", "code": "oxxoo" }, "action": { "type": "key", "key": "up_arrow" } },
+    { "label": "Arrow Down",  "trigger": { "type": "tap", "code": "oxoxo" }, "action": { "type": "key", "key": "down_arrow" } },
+    { "label": "Arrow Left",  "trigger": { "type": "tap", "code": "ooxxo" }, "action": { "type": "key", "key": "left_arrow" } },
+    { "label": "Arrow Right", "trigger": { "type": "tap", "code": "oooxx" }, "action": { "type": "key", "key": "right_arrow" } },
+    { "label": "Backspace",   "trigger": { "type": "tap", "code": "oxoox" }, "action": { "type": "key", "key": "backspace" } },
+    { "label": "Enter",       "trigger": { "type": "tap", "code": "ooxox" }, "action": { "type": "key", "key": "return" } }
+  ]
+}

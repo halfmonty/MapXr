@@ -3,7 +3,7 @@ name: Deploy site
 on:
   push:
     branches: [main]
-    paths: ['mapxr-site/**']
+    paths: ['apps/site/**']
 
 jobs:
   deploy:
@@ -14,10 +14,10 @@ jobs:
         with:
           node-version: 20
       - run: npm ci
-        working-directory: mapxr-site
+        working-directory: apps/site
       - run: npm run build
-        working-directory: mapxr-site
+        working-directory: apps/site
       - uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: mapxr-site/build
+          publish_dir: apps/site/build

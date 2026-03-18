@@ -1,3 +1,51 @@
+## 2026-03-18 — Starter profile seeding on first launch
+
+**Tasks completed:** out-of-plan maintenance (default profile seeding)
+**Tasks in progress:** none
+
+**Files changed:**
+
+- `apps/desktop/src-tauri/profiles/starter-right.json` — new starter profile: 15 right-hand single mappings (copy/paste/undo/save/nav arrows etc.)
+- `apps/desktop/src-tauri/src/state.rs` — added `STARTER_PROFILES` constant (`include_str!`), `seed_profiles_dir()` helper, and a call to it in `build_app_state` before the registry loads; added `tests::starter_profiles_all_parse_and_validate`
+- `profiles/` (root) — deleted; superseded by `apps/desktop/src-tauri/profiles/`
+
+**Notes:**
+Seeding is a no-op if any `.json` file already exists in the config dir, so existing users and developers with profiles are unaffected. The `profiles/` dir next to the executable (used by `platform::profile_dir` as a dev override) still works — during `tauri dev`, the working exe is under `target/`, so the override does not trigger and the OS config dir is used instead. To use the dev override, symlink or copy `apps/desktop/src-tauri/profiles/` next to the binary.
+
+The `key_chord` action uses a flat `keys` array (all keys including modifiers), not a `key` + `modifiers` split — that is `Action::Key`'s format.
+
+**Next:** Resume the implementation plan from where it was left off
+
+---
+
+## 2026-03-18 — Monorepo reorganisation into apps/ structure
+
+**Tasks completed:** monorepo restructure (out-of-plan maintenance)
+**Tasks in progress:** none
+
+**Files changed:**
+
+- `Cargo.toml` — workspace member updated from `"src-tauri"` to `"apps/desktop/src-tauri"`
+- `apps/desktop/src-tauri/Cargo.toml` — relative paths to `mapping-core` and `tap-ble` updated from `../crates/` to `../../../crates/`
+- `apps/desktop/src-tauri/tauri.conf.json` — no path changes needed (all paths relative to src-tauri/ itself are unchanged)
+- `src/` → `apps/desktop/src/` — Svelte frontend
+- `src-tauri/` → `apps/desktop/src-tauri/` — Rust Tauri backend
+- `static/` → `apps/desktop/static/` — static assets
+- `package.json`, `package-lock.json`, `svelte.config.js`, `vite.config.js`, `tsconfig.json`, `eslint.config.js`, `.prettierrc` → `apps/desktop/`
+- `mapxr-site/` → `apps/site/` — documentation website
+- `.github/workflows/build-linux.yml` — added `working-directory: apps/desktop`, `projectPath: apps/desktop`, updated artifact paths
+- `.github/workflows/build-windows.yml` — same changes as linux workflow
+- `.github/workflows/deploy-site.yml` — `paths` trigger, `working-directory`, and `publish_dir` updated to `apps/site`
+- `.gitignore` — root-level SvelteKit/build/Tauri paths updated to `apps/desktop/` prefixes
+- `CLAUDE.md` — file layout reference updated to reflect new structure
+
+**Notes:**
+The `tauri.conf.json` `frontendDist: "../build"` path is still correct: relative to `src-tauri/`, it resolves to `apps/desktop/build/`, which is where SvelteKit outputs when invoked from `apps/desktop/`. Tauri must now be invoked from `apps/desktop/` (e.g. `cd apps/desktop && npm run tauri dev`), not the workspace root. The Cargo workspace root is still at the repo root, so `cargo check`/`cargo test` still work from root.
+
+**Next:** Resume the implementation plan from where it was left off (check `docs/plan/implementation-plan.md` for next incomplete task)
+
+---
+
 ## 2026-03-18 — Project website (mapxr-site) — full implementation
 
 **Tasks completed:** website (out-of-plan deliverable)

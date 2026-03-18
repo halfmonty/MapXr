@@ -91,6 +91,9 @@ pub async fn build_app_state(
     let device_registry = DeviceRegistry::load(&devices_json_path)
         .map_err(|e| anyhow::anyhow!("failed to load device registry: {e}"))?;
 
+    // Seed default profiles on first launch (no-op if any .json files exist).
+    seed_profiles_dir(&profiles_dir);
+
     // Load layer registry (scan profiles_dir, ignore empty-dir errors).
     let mut layer_registry = LayerRegistry::new(&profiles_dir);
     let _ = layer_registry.reload();
@@ -210,6 +213,44 @@ pub(crate) async fn auto_reconnect(app: tauri::AppHandle, state: Arc<AppState>) 
     }
 }
 
+// ── Starter profile seeding ───────────────────────────────────────────────────
+
+/// Embedded starter profiles shipped with the application.
+///
+/// Each entry is `(filename, json_bytes)`. The JSON is compiled into the binary
+/// so no additional files need to be bundled at runtime.
+const STARTER_PROFILES: &[(&str, &str)] = &[(
+    "starter-right.json",
+    include_str!("../profiles/starter-right.json"),
+)];
+
+/// Write starter profiles into `profiles_dir` if it contains no `.json` files.
+///
+/// Called once at startup. If the user has already created profiles (or deleted
+/// the starters) this function is a no-op.
+fn seed_profiles_dir(profiles_dir: &std::path::Path) {
+    let has_json = std::fs::read_dir(profiles_dir)
+        .ok()
+        .map(|entries| {
+            entries
+                .filter_map(|e| e.ok())
+                .any(|e| e.path().extension().is_some_and(|ext| ext == "json"))
+        })
+        .unwrap_or(false);
+
+    if has_json {
+        return;
+    }
+
+    for (filename, contents) in STARTER_PROFILES {
+        let path = profiles_dir.join(filename);
+        match std::fs::write(&path, contents) {
+            Ok(()) => log::info!("seeded starter profile: {filename}"),
+            Err(e) => log::warn!("failed to seed starter profile {filename}: {e}"),
+        }
+    }
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 /// A minimal valid profile used when no profile files are present at startup,
@@ -230,5 +271,21 @@ pub(crate) fn builtin_default_profile() -> mapping_core::types::Profile {
         on_enter: None,
         on_exit: None,
         mappings: vec![],
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn starter_profiles_all_parse_and_validate() {
+        for (filename, contents) in STARTER_PROFILES {
+            let profile: mapping_core::types::Profile = serde_json::from_str(contents)
+                .unwrap_or_else(|e| panic!("{filename}: failed to deserialise: {e}"));
+            profile
+                .validate()
+                .unwrap_or_else(|e| panic!("{filename}: failed validation: {e}"));
+        }
     }
 }
