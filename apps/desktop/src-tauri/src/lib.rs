@@ -61,6 +61,7 @@ pub fn run() {
             commands::scan_devices,
             commands::connect_device,
             commands::disconnect_device,
+            commands::reassign_device_role,
             commands::list_profiles,
             commands::load_profile,
             commands::save_profile,

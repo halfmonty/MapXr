@@ -202,7 +202,7 @@ pub(crate) async fn discover_devices_le(
         let rssi_appeared_this_scan =
             event_rssi.is_some() || (pre_rssi_was_absent && device_info.rssi.is_some());
 
-        let rssi = event_rssi.or_else(|| if rssi_appeared_this_scan { device_info.rssi } else { None });
+        let rssi = event_rssi.or(if rssi_appeared_this_scan { device_info.rssi } else { None });
         // A device that is currently connected to the OS has its BLE slot occupied and
         // is not advertising, so it will never appear in rssi_map.  It is still
         // definitively present — mark it separately so the UI can show the right state.

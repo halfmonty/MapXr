@@ -1,3 +1,29 @@
+## 2026-03-18 — Live device role reassignment without reconnecting
+
+**Tasks completed:** out-of-plan QoL improvement (role reassignment while connected)
+**Tasks in progress:** none
+
+**Files changed:**
+
+- `crates/tap-ble/src/tap_device.rs` — added `TapDevice::reassign(new_device_id, adapter, event_tx, status_tx)`: cancels background tasks (keepalive, notification, connection monitor), writes `ENTER_CONTROLLER_MODE` immediately to reset the device's keepalive timer, then respawns all three tasks under the new `DeviceId`; removed `#[allow(dead_code)]` from `tap_data` field now that it is used here
+- `crates/tap-ble/src/manager.rs` — added `BleManager::reassign_role(old_id, new_id)`: moves the `TapDevice` entry in the connected map, calls `reassign()`, emits `BleStatusEvent::Disconnected` (old role) then `BleStatusEvent::Connected` (new role) so the existing Tauri event pump updates the frontend automatically
+- `crates/tap-ble/src/scanner.rs` — fixed pre-existing clippy `unnecessary_lazy_evaluations` warning (`or_else` → `or`)
+- `apps/desktop/src-tauri/src/commands.rs` — added `#[tauri::command] reassign_device_role(address, new_role)`: looks up the current role for the address, calls `reassign_role`, updates and persists the device registry; fixed lifetime issue by saving the iterator result to a named binding before dropping the `MutexGuard`
+- `apps/desktop/src-tauri/src/lib.rs` — registered `commands::reassign_device_role` in `invoke_handler`
+- `apps/desktop/src/lib/commands.ts` — added `reassignDeviceRole(address, newRole)` wrapper with JSDoc
+- `apps/desktop/src/routes/devices/+page.svelte` — connected devices table: reordered columns (Device first, then Address, then Role, then action); added solo/left/right role selector buttons per row with current role highlighted as btn-primary; buttons disabled when role matches current or is occupied by another device (`canReassignTo` helper using `connectedRoles` derived set); Disconnect button disabled while a reassign is in progress; added reassign error alert
+
+**Notes:**
+The key insight is that `DeviceId` (role) is just a label stamped onto events — the underlying BLE connection, GATT characteristics, controller mode, and notification subscription are all properties of the `Peripheral` object and are unaffected by a role change. The only work needed is restarting the three background tasks with the new `DeviceId`.
+
+The UI prevents role conflicts entirely: a role button is enabled only when `candidate !== device.role && !connectedRoles.has(candidate)`. The Rust layer still validates (returns `DeviceNotFound` for an unknown old_id), but the conflict path (new role already occupied) is unreachable from the UI.
+
+`DeviceRegistry::assign` already handles deduplication: it retains only entries whose address differs from the new one, so reassigning "solo" → "right" automatically removes the old "solo" entry without extra code.
+
+**Next:** Resume the implementation plan — Epic 8.1 (add `tap-cli` binary crate to the workspace)
+
+---
+
 ## 2026-03-18 — Connected device name display
 
 **Tasks completed:** out-of-plan bug fixes (connected device name)

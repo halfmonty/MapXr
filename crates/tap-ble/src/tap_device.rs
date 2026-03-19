@@ -51,8 +51,7 @@ pub struct TapDevice {
     address: BDAddr,
     device_id: DeviceId,
     nus_rx: Characteristic,
-    // Retained so that `connection_monitor_task` can re-subscribe after a reconnect.
-    #[allow(dead_code)]
+    // Retained for `connection_monitor_task` reconnect re-subscription and role reassignment.
     tap_data: Characteristic,
     /// Send `true` to stop all background tasks.
     cancel_tx: watch::Sender<bool>,
@@ -155,6 +154,61 @@ impl TapDevice {
         }
 
         Ok(())
+    }
+
+    /// Reassign this device to a new logical role without dropping the BLE connection.
+    ///
+    /// Cancels the existing background tasks (keepalive, notification, connection monitor)
+    /// and immediately respawns them under `new_device_id`. The BLE connection, controller
+    /// mode, and notification subscription are all preserved.
+    ///
+    /// An `ENTER_CONTROLLER_MODE` packet is written before spawning the new tasks to reset
+    /// the device's 10-second keepalive timer, preventing a lapse in controller mode.
+    pub async fn reassign(
+        &mut self,
+        new_device_id: DeviceId,
+        adapter: &Adapter,
+        event_tx: broadcast::Sender<RawTapEvent>,
+        status_tx: broadcast::Sender<BleStatusEvent>,
+    ) {
+        // Stop the existing background tasks.
+        let _ = self.cancel_tx.send(true);
+
+        // Reset the keepalive timer on the device immediately.  Best-effort: if the write
+        // fails the device is mid-reconnect and the new tasks will re-enter controller mode.
+        let _ = self
+            .peripheral
+            .write(&self.nus_rx, ENTER_CONTROLLER_MODE, WriteType::WithoutResponse)
+            .await;
+
+        let (cancel_tx, cancel_rx) = watch::channel(false);
+
+        tokio::spawn(keepalive_task(
+            self.peripheral.clone(),
+            self.nus_rx.clone(),
+            cancel_rx.clone(),
+        ));
+
+        tokio::spawn(notification_task(
+            self.peripheral.clone(),
+            new_device_id.clone(),
+            event_tx.clone(),
+            cancel_rx.clone(),
+        ));
+
+        tokio::spawn(connection_monitor_task(
+            self.peripheral.clone(),
+            adapter.clone(),
+            self.nus_rx.clone(),
+            self.tap_data.clone(),
+            new_device_id.clone(),
+            event_tx,
+            status_tx,
+            cancel_rx,
+        ));
+
+        self.device_id = new_device_id;
+        self.cancel_tx = cancel_tx;
     }
 
     /// The logical role string assigned to this device.

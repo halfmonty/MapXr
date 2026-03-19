@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { scanDevices, connectDevice, disconnectDevice } from "$lib/commands";
+  import { scanDevices, connectDevice, disconnectDevice, reassignDeviceRole } from "$lib/commands";
   import { deviceStore } from "$lib/stores/device.svelte";
   import { engineStore } from "$lib/stores/engine.svelte";
   import { profileStore } from "$lib/stores/profile.svelte";
@@ -65,6 +65,32 @@
       logger.error("connect_device failed", e);
     } finally {
       connectingAddress = null;
+    }
+  }
+
+  // ── Reassign state ──────────────────────────────────────────────────────────
+
+  let reassigningAddress = $state<string | null>(null);
+  let reassignError = $state<string | null>(null);
+
+  /** Set of roles currently occupied by any connected device. */
+  let connectedRoles = $derived(new Set(deviceStore.connected.map((d) => d.role)));
+
+  /** A role button is enabled only when the role is unoccupied and differs from the device's current role. */
+  function canReassignTo(deviceRole: string, candidate: string): boolean {
+    return candidate !== deviceRole && !connectedRoles.has(candidate);
+  }
+
+  async function handleReassign(address: string, newRole: string) {
+    reassigningAddress = address;
+    reassignError = null;
+    try {
+      await reassignDeviceRole(address, newRole);
+    } catch (e) {
+      reassignError = e instanceof Error ? e.message : String(e);
+      logger.error("reassign_device_role failed", e);
+    } finally {
+      reassigningAddress = null;
     }
   }
 
@@ -248,25 +274,38 @@
           <table class="table table-sm">
             <thead>
               <tr>
-                <th>Role</th>
                 <th>Device</th>
                 <th>Address</th>
+                <th>Role</th>
                 <th></th>
               </tr>
             </thead>
             <tbody>
               {#each deviceStore.connected as device}
                 <tr>
-                  <td>
-                    <span class="badge badge-success">{device.role}</span>
-                  </td>
                   <td class="font-medium">{device.name ?? "—"}</td>
                   <td class="font-mono text-xs">{device.address}</td>
+                  <td>
+                    <div class="join">
+                      {#each ["solo", "left", "right"] as role}
+                        <button
+                          class="btn join-item btn-xs
+                            {device.role === role ? 'btn-primary' : 'btn-ghost'}"
+                          onclick={() => handleReassign(device.address, role)}
+                          disabled={!canReassignTo(device.role, role) ||
+                            reassigningAddress === device.address}
+                        >
+                          {role}
+                        </button>
+                      {/each}
+                    </div>
+                  </td>
                   <td>
                     <button
                       class="btn btn-sm btn-error btn-outline"
                       onclick={() => (disconnectConfirmRole = device.role)}
-                      disabled={disconnectingRole === device.role}
+                      disabled={disconnectingRole === device.role ||
+                        reassigningAddress === device.address}
                     >
                       {#if disconnectingRole === device.role}
                         <span class="loading loading-spinner loading-xs"></span>
@@ -279,6 +318,12 @@
               {/each}
             </tbody>
           </table>
+        </div>
+      {/if}
+
+      {#if reassignError}
+        <div class="alert alert-error text-sm">
+          <span>{reassignError}</span>
         </div>
       {/if}
     </div>

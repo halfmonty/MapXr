@@ -41,6 +41,24 @@ export async function connectDevice(
 }
 
 /**
+ * Reassign the connected device at `address` to `newRole` without disconnecting.
+ *
+ * The BLE connection is preserved; only the logical role changes. The frontend
+ * will receive a `device-disconnected` event for the old role followed by a
+ * `device-connected` event for the new role.
+ *
+ * @param address - BLE address in "AA:BB:CC:DD:EE:FF" format.
+ * @param newRole - One of "solo", "left", or "right".
+ * @throws If BLE is unavailable, the address is not currently connected, or the role is invalid.
+ */
+export async function reassignDeviceRole(
+  address: string,
+  newRole: string,
+): Promise<void> {
+  return invoke("reassign_device_role", { address, newRole });
+}
+
+/**
  * Disconnect the device assigned to `role`.
  *
  * Returns successfully even if no device is connected under that role.

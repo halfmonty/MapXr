@@ -176,6 +176,71 @@ pub async fn disconnect_device(
     Ok(())
 }
 
+// ── reassign_device_role ──────────────────────────────────────────────────────
+
+/// Reassign the connected device at `address` to `new_role` without disconnecting.
+///
+/// `address` must be a colon-separated hex string (`"AA:BB:CC:DD:EE:FF"`).
+/// `new_role` must be `"solo"`, `"left"`, or `"right"`.
+///
+/// Background tasks are restarted under the new role so subsequent tap events and
+/// status notifications carry the correct identity. The device registry is updated
+/// and persisted so auto-reconnect uses the new role on the next launch.
+#[tauri::command]
+pub async fn reassign_device_role(
+    state: State<'_, Arc<AppState>>,
+    address: String,
+    new_role: String,
+) -> Result<(), String> {
+    state.require_ble()?;
+
+    if !matches!(new_role.as_str(), "solo" | "left" | "right") {
+        return Err(format!(
+            "invalid role '{new_role}': must be 'solo', 'left', or 'right'"
+        ));
+    }
+
+    let addr =
+        BDAddr::from_str(&address).map_err(|_| format!("invalid BLE address: {address}"))?;
+    let new_id = DeviceId::new(&new_role);
+
+    // Find which role currently owns this address.
+    // LOCKING: acquires ble_manager (guard dropped when block exits)
+    let old_id = {
+        let ble = state.ble_manager.as_ref().unwrap().lock().await;
+        // Save to a named binding so the iterator (which borrows `ble`) is
+        // fully evaluated and dropped before `ble` goes out of scope.
+        let result = ble
+            .connected_devices()
+            .find(|(_, a)| *a == addr)
+            .map(|(id, _)| id.clone())
+            .ok_or_else(|| format!("no connected device at address {address}"));
+        result
+    }?;
+
+    // LOCKING: acquires ble_manager
+    state
+        .ble_manager
+        .as_ref()
+        .unwrap()
+        .lock()
+        .await
+        .reassign_role(&old_id, new_id.clone())
+        .await
+        .map_err(|e| e.to_string())?;
+
+    // Persist the updated role → address mapping.
+    // LOCKING: acquires device_registry (std::sync::Mutex)
+    {
+        let mut reg = state.device_registry.lock().map_err(|e| e.to_string())?;
+        reg.assign(new_id, addr);
+        reg.save(&state.devices_json_path)
+            .map_err(|e| e.to_string())?;
+    }
+
+    Ok(())
+}
+
 // ── 4.4 list_profiles ────────────────────────────────────────────────────────
 
 /// List all profiles in the profiles directory.

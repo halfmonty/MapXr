@@ -10,6 +10,15 @@ export type DevlogEntry = {
 
 export const DEVLOG: DevlogEntry[] = [
   {
+    slug: '2026-03-18-ble-ux-and-role-reassignment',
+    date: '2026-03-18',
+    title: 'BLE UX polish, starter profiles, and live role reassignment',
+    body: 'Improved scan UX with seen/paired/cached device states and stale-RSSI fixes. Added connected device name persistence. Seeded a starter profile on first launch. Renamed reference docs. Implemented live device role reassignment without disconnecting.',
+    epicsDone: 7,
+    totalEpics: 9,
+    tags: ['ble', 'ui', 'ux', 'feature'],
+  },
+  {
     slug: '2026-03-18-project-website',
     date: '2026-03-18',
     title: 'Project website launched',

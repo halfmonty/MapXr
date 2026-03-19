@@ -164,6 +164,57 @@ impl BleManager {
         self.connected.iter().map(|(id, dev)| (id, dev.address()))
     }
 
+    /// Reassign the device currently connected under `old_id` to `new_id`.
+    ///
+    /// The BLE connection is preserved; only the logical role changes. Background tasks
+    /// (keepalive, notification, connection monitor) are restarted under `new_id` so that
+    /// subsequent tap events and status notifications carry the correct role.
+    ///
+    /// Emits [`BleStatusEvent::Disconnected`] for `old_id` then [`BleStatusEvent::Connected`]
+    /// for `new_id` so the Tauri event pump updates the frontend automatically.
+    ///
+    /// Returns [`BleError::DeviceNotFound`] if no device is connected under `old_id`.
+    pub async fn reassign_role(
+        &mut self,
+        old_id: &DeviceId,
+        new_id: DeviceId,
+    ) -> Result<(), BleError> {
+        if old_id == &new_id {
+            return Ok(());
+        }
+
+        let mut device =
+            self.connected
+                .remove(old_id)
+                .ok_or_else(|| BleError::DeviceNotFound {
+                    address: old_id.to_string(),
+                })?;
+
+        let address = device.address();
+
+        device
+            .reassign(
+                new_id.clone(),
+                &self.adapter,
+                self.event_tx.clone(),
+                self.status_tx.clone(),
+            )
+            .await;
+
+        self.connected.insert(new_id.clone(), device);
+
+        let _ = self.status_tx.send(BleStatusEvent::Disconnected {
+            device_id: old_id.clone(),
+            address,
+        });
+        let _ = self.status_tx.send(BleStatusEvent::Connected {
+            device_id: new_id,
+            address,
+        });
+
+        Ok(())
+    }
+
     /// Warn if `profile` requires two devices but `registry` has fewer than two entries.
     ///
     /// This is a diagnostic hint for the caller — it does not return an error.
