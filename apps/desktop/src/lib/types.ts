@@ -32,6 +32,19 @@ export interface TapDeviceInfo {
   /** "AA:BB:CC:DD:EE:FF" */
   address: BleAddress;
   rssi: number | null;
+  /**
+   * `true` if the device was actively advertising during the scan window, or
+   * is currently connected to this host.
+   * `false` means the entry is from the OS Bluetooth cache — the device may
+   * be off or out of range and should not be shown as connectable.
+   */
+  seen_in_scan: boolean;
+  /**
+   * `true` if the device currently has an active BLE connection to this host (the OS).
+   * Its connection slot is occupied; our app cannot connect until the OS releases it.
+   * The UI should show a distinct "Connected to OS" state and disable the connect action.
+   */
+  is_connected_to_os: boolean;
 }
 
 /** Payload for the `device-connected` / `device-disconnected` Tauri events. */

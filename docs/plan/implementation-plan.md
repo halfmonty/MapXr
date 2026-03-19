@@ -28,7 +28,7 @@ within an epic tasks can often be parallelised.
 - [x] **0.5** Add ESLint, Prettier, and `svelte-check` to the frontend; wire them into a `pnpm lint` script
 - [ ] **0.6** Set up a GitHub Actions CI pipeline: `cargo test`, `cargo clippy`, `cargo fmt --check`, `npm run lint`, `npm run check` on every pull request _(deferred — revisit at Epic 9 packaging)_
 - [ ] **0.7** Add a `Makefile` or `justfile` with convenience targets: `dev`, `build`, `test`, `lint`, `check-all` _(deferred — revisit alongside 0.6 at Epic 9)_
-- [x] **0.8** Create the `/profiles` directory convention and add a `.gitkeep` and a `README.md` explaining the expected directory structure
+- [x] **0.8** ~~Create the `/profiles` directory convention~~ Root `profiles/` was deleted; starter profiles now live in `apps/desktop/src-tauri/profiles/`, are embedded via `include_str!`, and are seeded into the OS config dir on first launch by `state::seed_profiles_dir()`
 - [x] **0.9** Decide and document the per-OS profile storage path (e.g. `~/.config/mapxr/profiles/` on Linux, `%APPDATA%\mapxr\profiles\` on Windows, `~/Library/Application Support/mapxr/profiles/` on macOS) and implement a `platform::profile_dir()` helper in `src-tauri`
 
 ---

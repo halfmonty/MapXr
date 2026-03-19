@@ -118,6 +118,31 @@ pub(crate) async fn discover_devices_le(
         ..Default::default()
     };
 
+    // Snapshot RSSI values BEFORE discovery starts.
+    //
+    // When a device is connected via btleplug, BlueZ clears the RSSI property on
+    // the Device1 object (RSSI is meaningless during a connection).  After the
+    // device disconnects and re-starts advertising, BlueZ sets RSSI from None →
+    // Some(value), which fires a PropertiesChanged event.  In the normal path that
+    // event is caught by the loop below.  However, BlueZ may emit the signal in the
+    // narrow window AFTER the scan deadline fires and BEFORE stop_discovery
+    // completes, causing the signal to land in device_info.rssi (post-scan
+    // get_devices) but NOT in rssi_map.
+    //
+    // Solution: record which devices had RSSI = None before discovery.  If such a
+    // device has RSSI = Some in the post-scan get_devices() call, it must have
+    // advertised during this scan, so it is genuinely live.  This secondary check
+    // only applies to devices whose pre-scan RSSI was absent; devices with a
+    // stale Some(old) before the scan are NOT treated as "seen" by this fallback,
+    // preserving protection against stale cached signal strength.
+    let pre_scan_rssi: HashMap<DeviceId, Option<i16>> = session
+        .get_devices()
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .map(|d| (d.id, d.rssi))
+        .collect();
+
     session
         .start_discovery_on_adapter_with_filter(&bluez_adapter.id, &filter)
         .await
@@ -148,8 +173,6 @@ pub(crate) async fn discover_devices_le(
     }
 
     // Fetch all devices and retain only those that advertised TAP_SERVICE_UUID.
-    // Merge in RSSI from the event stream; fall back to device_info.rssi if no
-    // PropertiesChanged event was seen for that device (defensive).
     let all_devices = session
         .get_devices()
         .await
@@ -164,11 +187,34 @@ pub(crate) async fn discover_devices_le(
             BDAddr::from_str(&device_info.mac_address.to_string()).map_err(|e| {
                 BleError::Btleplug(btleplug::Error::RuntimeError(e.to_string()))
             })?;
-        let rssi = rssi_map.get(&device_info.id).copied().or(device_info.rssi);
+
+        // Primary: use RSSI captured from PropertiesChanged events during the scan.
+        let event_rssi = rssi_map.get(&device_info.id).copied();
+
+        // Secondary: if the device had no RSSI before the scan (cleared by a prior
+        // connection) and now has RSSI in the post-scan device info, it advertised
+        // during this scan window.  Use device_info.rssi in that case.
+        // This does NOT apply when pre-scan RSSI was Some — that would risk treating
+        // a stale cached value as a live signal.
+        let pre_rssi_was_absent = pre_scan_rssi
+            .get(&device_info.id)
+            .map_or(true, |r| r.is_none());
+        let rssi_appeared_this_scan =
+            event_rssi.is_some() || (pre_rssi_was_absent && device_info.rssi.is_some());
+
+        let rssi = event_rssi.or_else(|| if rssi_appeared_this_scan { device_info.rssi } else { None });
+        // A device that is currently connected to the OS has its BLE slot occupied and
+        // is not advertising, so it will never appear in rssi_map.  It is still
+        // definitively present — mark it separately so the UI can show the right state.
+        let is_connected_to_os = device_info.connected;
+        let seen_in_scan = rssi_appeared_this_scan || is_connected_to_os;
+
         devices.push(TapDeviceInfo {
             name: device_info.name,
             address,
             rssi,
+            seen_in_scan,
+            is_connected_to_os,
         });
     }
 
@@ -242,10 +288,15 @@ where
         }
 
         let (name, rssi) = props.map_or((None, None), |p| (p.local_name, p.rssi));
+        let is_connected_to_os = peripheral.is_connected().await.unwrap_or(false);
         devices.push(TapDeviceInfo {
             name,
             address,
             rssi,
+            // On non-Linux platforms btleplug's peripheral list only contains
+            // devices discovered during this scan session; treat all as seen.
+            seen_in_scan: true,
+            is_connected_to_os,
         });
     }
 
@@ -448,6 +499,7 @@ mod tests {
         }
     }
 
+
     fn mock_adapter(peripherals: Vec<MockPeripheral>) -> MockAdapter {
         MockAdapter {
             peripherals,
@@ -546,5 +598,22 @@ mod tests {
         let devices = scan_with_adapter(&adapter, 0).await.expect("scan failed");
 
         assert_eq!(devices.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn scan_with_adapter_all_returned_devices_are_seen_in_scan() {
+        // On non-Linux, btleplug only returns peripherals from the current scan session,
+        // so all results should be marked seen_in_scan = true regardless of RSSI.
+        let adapter = mock_adapter(vec![
+            mock_peripheral(Some(-60)),
+            mock_peripheral(None),
+        ]);
+
+        let devices = scan_with_adapter(&adapter, 0).await.expect("scan failed");
+
+        assert!(
+            devices.iter().all(|d| d.seen_in_scan),
+            "all non-Linux scan results must be seen_in_scan = true"
+        );
     }
 }

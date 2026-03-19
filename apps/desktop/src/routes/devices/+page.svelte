@@ -12,6 +12,11 @@
   let discovered = $state<TapDeviceInfo[]>([]);
   let scanError = $state<string | null>(null);
 
+  /** Addresses of devices that are currently connected — excluded from the scan list. */
+  let connectedAddresses = $derived(new Set(deviceStore.connected.map((d) => d.address)));
+  /** Scan results with already-connected devices removed. Updates live as devices connect/disconnect. */
+  let availableDevices = $derived(discovered.filter((d) => !connectedAddresses.has(d.address)));
+
   async function handleScan() {
     scanning = true;
     scanError = null;
@@ -45,12 +50,14 @@
   async function handleConnect(address: string) {
     const role = pendingRole[address];
     if (!role) return;
+    // Capture the name before awaiting — availableDevices reactively drops this
+    // device once device-connected fires, so the lookup would return undefined after the await.
+    const name = discovered.find((d) => d.address === address)?.name ?? null;
     connectingAddress = address;
     connectError = null;
     try {
       await connectDevice(address, role);
-      // Remove from discovered list once connected
-      discovered = discovered.filter((d) => d.address !== address);
+      deviceStore.setName(address, name);
       const { [address]: _, ...rest } = pendingRole;
       pendingRole = rest;
     } catch (e) {
@@ -104,6 +111,22 @@
     if (rssi >= -85) return "badge-warning";
     return "badge-error";
   }
+
+  function signalBadgeLabel(device: TapDeviceInfo): string {
+    if (device.is_connected_to_os) return "Paired";
+    if (device.seen_in_scan) return rssiLabel(device.rssi);
+    return "Cached";
+  }
+
+  function signalBadgeClass(device: TapDeviceInfo): string {
+    if (device.is_connected_to_os) return "badge-secondary";
+    if (device.seen_in_scan) return rssiClass(device.rssi);
+    return "badge-ghost";
+  }
+
+  function canConnect(device: TapDeviceInfo): boolean {
+    return device.seen_in_scan;
+  }
 </script>
 
 <div class="mx-auto max-w-2xl space-y-6">
@@ -141,7 +164,7 @@
         </div>
       {/if}
 
-      {#if discovered.length > 0}
+      {#if availableDevices.length > 0}
         <div class="overflow-x-auto">
           <table class="table table-sm">
             <thead>
@@ -154,13 +177,13 @@
               </tr>
             </thead>
             <tbody>
-              {#each discovered as device}
+              {#each availableDevices as device}
                 <tr>
                   <td class="font-medium">{device.name ?? "Unknown"}</td>
                   <td class="font-mono text-xs">{device.address}</td>
                   <td>
-                    <span class="badge badge-sm {rssiClass(device.rssi)}">
-                      {rssiLabel(device.rssi)}
+                    <span class="badge badge-sm {signalBadgeClass(device)}">
+                      {signalBadgeLabel(device)}
                     </span>
                   </td>
                   <td>
@@ -172,6 +195,7 @@
                             ? 'btn-primary'
                             : 'btn-ghost'}"
                           onclick={() => selectRole(device.address, role)}
+                          disabled={!canConnect(device)}
                         >
                           {role}
                         </button>
@@ -183,7 +207,8 @@
                       class="btn btn-sm btn-success"
                       onclick={() => handleConnect(device.address)}
                       disabled={!pendingRole[device.address] ||
-                        connectingAddress === device.address}
+                        connectingAddress === device.address ||
+                        !canConnect(device)}
                     >
                       {#if connectingAddress === device.address}
                         <span class="loading loading-spinner loading-xs"></span>
@@ -224,6 +249,7 @@
             <thead>
               <tr>
                 <th>Role</th>
+                <th>Device</th>
                 <th>Address</th>
                 <th></th>
               </tr>
@@ -234,6 +260,7 @@
                   <td>
                     <span class="badge badge-success">{device.role}</span>
                   </td>
+                  <td class="font-medium">{device.name ?? "—"}</td>
                   <td class="font-mono text-xs">{device.address}</td>
                   <td>
                     <button
@@ -262,7 +289,7 @@
 {#if disconnectConfirmRole}
   <dialog class="modal modal-open">
     <div class="modal-box">
-      <h3 class="text-lg font-bold">Disconnect {disconnectConfirmRole}?</h3>
+      <h3 class="text-lg font-bold">Disconnect {deviceStore.connected.find((d) => d.role === disconnectConfirmRole)?.name ?? disconnectConfirmRole}?</h3>
       <p class="py-4 text-sm">
         The device will exit controller mode and return to text-input mode.
       </p>

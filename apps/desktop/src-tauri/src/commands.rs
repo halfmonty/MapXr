@@ -23,6 +23,12 @@ pub struct TapDeviceInfoDto {
     /// `"AA:BB:CC:DD:EE:FF"` format.
     pub address: String,
     pub rssi: Option<i16>,
+    /// `true` if the device was actively advertising during the current scan window.
+    /// `false` means the entry came from the OS Bluetooth cache and the device may be off.
+    pub seen_in_scan: bool,
+    /// `true` if the device currently has an active BLE connection to this host.
+    /// The device's connection slot is occupied; our app cannot connect until it is released.
+    pub is_connected_to_os: bool,
 }
 
 impl From<&tap_ble::TapDeviceInfo> for TapDeviceInfoDto {
@@ -31,6 +37,8 @@ impl From<&tap_ble::TapDeviceInfo> for TapDeviceInfoDto {
             name: d.name.clone(),
             address: d.address.to_string(),
             rssi: d.rssi,
+            seen_in_scan: d.seen_in_scan,
+            is_connected_to_os: d.is_connected_to_os,
         }
     }
 }
@@ -480,10 +488,14 @@ mod tests {
             name: Some("Tap Strap 2".into()),
             address: BDAddr::from_str("AA:BB:CC:DD:EE:FF").unwrap(),
             rssi: Some(-60),
+            seen_in_scan: true,
+            is_connected_to_os: false,
         };
         let dto = TapDeviceInfoDto::from(&info);
         assert_eq!(dto.address, "AA:BB:CC:DD:EE:FF");
         assert_eq!(dto.name.as_deref(), Some("Tap Strap 2"));
         assert_eq!(dto.rssi, Some(-60));
+        assert!(dto.seen_in_scan);
+        assert!(!dto.is_connected_to_os);
     }
 }

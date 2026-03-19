@@ -1,3 +1,49 @@
+## 2026-03-18 — Connected device name display
+
+**Tasks completed:** out-of-plan bug fixes (connected device name)
+**Tasks in progress:** none
+
+**Files changed:**
+
+- `apps/desktop/src/lib/stores/device.svelte.ts` — `ConnectedDevice` gains `name: string | null`; `DeviceStore` gains a `_names: Map<string, string | null>` backed by `localStorage` under the key `mapxr:device-names`; `_loadNames()` reads on construction; `_saveNames()` writes on every `setName()` call; `onConnected` resolves the name from the map; `setName(address, name)` persists and patches any already-present connected entry
+- `apps/desktop/src/routes/devices/+page.svelte` — `handleConnect` captures the device name from `discovered` synchronously before `await connectDevice(...)` (capturing after the await failed because `availableDevices` reactively removes the device once `device-connected` fires); calls `deviceStore.setName(address, name)` on success; connected devices table gains a Device column showing `device.name ?? "—"`; disconnect confirm modal shows device name instead of role string
+
+**Notes:**
+Two bugs were fixed in sequence:
+1. **Name was `null` after connecting**: the name lookup used `availableDevices.find(...)` *after* the `await`, but `availableDevices` is a `$derived` that filters out addresses already in `deviceStore.connected`. By the time `connectDevice` resolves, the `device-connected` Tauri event has already fired and removed the device from `availableDevices`. Fix: look up from `discovered` (raw, unfiltered) *before* the await.
+2. **Name missing after app restart**: `_names` was an in-memory `Map` — wiped on close. On restart the reconnect loop fires `device-connected` events with no UI interaction, so `setName` is never called. Fix: persist `_names` to `localStorage`; the map is loaded from storage on `DeviceStore` construction, so reconnect events immediately resolve the correct name.
+
+**Next:** Resume the implementation plan — Epic 8.1 (add `tap-cli` binary crate to the workspace)
+
+---
+
+## 2026-03-18 — BLE scan UX fixes: stale RSSI, duplicate connect, cached devices
+
+**Tasks completed:** out-of-plan bug fixes (BLE device scan UX)
+**Tasks in progress:** none
+
+**Files changed:**
+
+- `crates/tap-ble/src/device_info.rs` — added `seen_in_scan: bool` and `is_connected_to_os: bool` fields to `TapDeviceInfo`
+- `crates/tap-ble/src/scanner.rs` — Linux path (`discover_devices_le`): removed stale `.or(device_info.rssi)` RSSI fallback; added pre-scan RSSI snapshot to detect devices whose RSSI was cleared by a prior connection and re-appeared this scan; set `is_connected_to_os` from `device_info.connected`; set `seen_in_scan = rssi_appeared_this_scan || is_connected_to_os`. Non-Linux path (`collect_peripherals`): added `peripheral.is_connected().await` for `is_connected_to_os`; all returned peripherals remain `seen_in_scan = true`. Added `scan_with_adapter_all_returned_devices_are_seen_in_scan` test.
+- `apps/desktop/src-tauri/src/commands.rs` — `TapDeviceInfoDto` gains `seen_in_scan` and `is_connected_to_os` fields; DTO test updated
+- `apps/desktop/src/lib/types.ts` — `TapDeviceInfo` interface gains `seen_in_scan: boolean` and `is_connected_to_os: boolean`
+- `apps/desktop/src/routes/devices/+page.svelte` — scan list filtered to `availableDevices` (excludes already-connected addresses via `deviceStore`); signal badge replaced with `signalBadgeLabel`/`signalBadgeClass` helpers showing "Paired" / signal strength / "Cached"; `canConnect()` helper gates role selector and Connect button; manual post-connect filter removed (reactive `$derived` handles it)
+
+**Notes:**
+Three distinct scan states are now tracked and displayed:
+1. **Seen in scan** (`seen_in_scan=true`, `is_connected_to_os=false`): device was actively advertising; shows signal strength badge; Connect enabled.
+2. **Paired** (`is_connected_to_os=true`): device has an active BLE connection to the OS; BlueZ clears RSSI and the device is not advertising, but it is definitely present; shows "Paired" badge (secondary colour); Connect enabled so the user can attempt to take over the connection.
+3. **Cached** (`seen_in_scan=false`, `is_connected_to_os=false`): device is in the BlueZ cache from a previous scan but was not seen this time (likely off or out of range); shows "Cached" badge (ghost); Connect disabled.
+
+The pre-scan RSSI snapshot (taken via `get_devices()` before `start_discovery`) handles a BlueZ timing edge case: a recently-disconnected device's first RSSI `PropertiesChanged` signal can arrive after the scan event-loop deadline but before `stop_discovery` completes, leaving `rssi_map` empty but `device_info.rssi` populated. The snapshot detects this by checking whether RSSI was absent pre-scan (cleared by the connection) and present post-scan.
+
+Devices that are already connected via our app are excluded from the scan list entirely via a `$derived` filter (`availableDevices`), which reacts live to `deviceStore.connected` changes.
+
+**Next:** Resume the implementation plan — Epic 8.1 (add `tap-cli` binary crate to the workspace)
+
+---
+
 ## 2026-03-18 — Starter profile seeding on first launch
 
 **Tasks completed:** out-of-plan maintenance (default profile seeding)
