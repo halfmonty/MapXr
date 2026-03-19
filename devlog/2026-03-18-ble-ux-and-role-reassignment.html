@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" href="/favicon.ico" type="image/svg+xml" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <script>
+      const stored = localStorage.getItem("theme");
+      const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+      document.documentElement.setAttribute(
+        "data-theme",
+        stored ?? (prefersDark ? "business" : "corporate")
+      );
+    </script>
+    <link href="../_app/immutable/entry/start.CQX3Snwe.js" rel="modulepreload">
+		<link href="../_app/immutable/chunks/CGwnShg4.js" rel="modulepreload">
+		<link href="../_app/immutable/chunks/DbMLuP93.js" rel="modulepreload">
+		<link href="../_app/immutable/entry/app.TgKIBGPU.js" rel="modulepreload">
+		<link href="../_app/immutable/chunks/CFKVnMbq.js" rel="modulepreload">
+		<link href="../_app/immutable/nodes/0.CGEzof0F.js" rel="modulepreload">
+		<link href="../_app/immutable/chunks/D40A1Rfp.js" rel="modulepreload">
+		<link href="../_app/immutable/nodes/4.D5aQ_7kx.js" rel="modulepreload">
+		<link href="../_app/immutable/chunks/Dsjib3ef.js" rel="modulepreload">
+		<link href="../_app/immutable/chunks/2taVHrq1.js" rel="modulepreload">
+		<!--170evqy--><meta name="description" content="Improved scan UX with seen/paired/cached device states and stale-RSSI fixes. Added connected device name persistence. Seeded a starter profile on first launch. Renamed reference docs. Implemented live device role reassignment without disconnecting."/> <meta property="og:title" content="BLE UX polish, starter profiles, and live role reassignment — MapXr Devlog"/> <meta property="og:description" content="Improved scan UX with seen/paired/cached device states and stale-RSSI fixes. Added connected device name persistence. Seeded a starter profile on first launch. Renamed reference docs. Implemented live device role reassignment without disconnecting."/><!----><title>BLE UX polish, starter profiles, and live role reassignment — MapXr Devlog</title>
+		<link href="../_app/immutable/assets/0.CvxRX8s3.css" rel="stylesheet">
+  </head>
+  <body data-sveltekit-preload-data="hover">
+    <div style="display: contents"><!--[--><!--[0--><!--[--><div class="min-h-screen flex flex-col bg-base-100"><div class="navbar bg-base-100 border-b border-base-200 sticky top-0 z-50"><div class="navbar-start"><a href="../" class="btn btn-ghost text-2xl font-bold"><span class="text-primary -mr-1">Map</span>Xr</a></div> <div class="navbar-center hidden md:flex"><ul class="menu menu-horizontal px-1 gap-1"><li><a href="../" class="rounded-btn">Home</a></li> <li><a href="../docs" class="rounded-btn">Docs</a></li> <li><a href="../devlog" class="rounded-btn">Devlog</a></li></ul></div> <div class="navbar-end gap-2"><label class="swap swap-rotate btn btn-ghost btn-circle" aria-label="Toggle theme"><input type="checkbox"/> <svg class="swap-off h-5 w-5 fill-current" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M5.64,17l-.71.71a1,1,0,0,0,0,1.41,1,1,0,0,0,1.41,0l.71-.71A1,1,0,0,0,5.64,17ZM5,12a1,1,0,0,0-1-1H3a1,1,0,0,0,0,2H4A1,1,0,0,0,5,12Zm7-7a1,1,0,0,0,1-1V3a1,1,0,0,0-2,0V4A1,1,0,0,0,12,5ZM5.64,7.05a1,1,0,0,0,.7.29,1,1,0,0,0,.71-.29,1,1,0,0,0,0-1.41l-.71-.71A1,1,0,0,0,4.93,6.34Zm12,.29a1,1,0,0,0,.7-.29l.71-.71a1,1,0,1,0-1.41-1.41L17,5.64a1,1,0,0,0,0,1.41A1,1,0,0,0,17.66,7.34ZM21,11H20a1,1,0,0,0,0,2h1a1,1,0,0,0,0-2Zm-9,8a1,1,0,0,0-1,1v1a1,1,0,0,0,2,0V20A1,1,0,0,0,12,19ZM18.36,17A1,1,0,0,0,17,18.36l.71.71a1,1,0,0,0,1.41,0,1,1,0,0,0,0-1.41ZM12,6.5A5.5,5.5,0,1,0,17.5,12,5.51,5.51,0,0,0,12,6.5Zm0,9A3.5,3.5,0,1,1,15.5,12,3.5,3.5,0,0,1,12,15.5Z"></path></svg> <svg class="swap-on h-5 w-5 fill-current" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21.64,13a1,1,0,0,0-1.05-.14,8.05,8.05,0,0,1-3.37.73A8.15,8.15,0,0,1,9.08,5.49a8.59,8.59,0,0,1,.25-2A1,1,0,0,0,8,2.36,10.14,10.14,0,1,0,22,14.05,1,1,0,0,0,21.64,13Zm-9.5,6.69A8.14,8.14,0,0,1,7.08,5.22v.27A10.15,10.15,0,0,0,17.22,15.63a9.79,9.79,0,0,0,2.1-.22A8.11,8.11,0,0,1,12.14,19.73Z"></path></svg></label> <a href="https://github.com/mapxr/mapxr" target="_blank" rel="noreferrer" class="btn btn-ghost btn-circle" aria-label="GitHub"><svg class="h-5 w-5 fill-current" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"></path></svg></a> <div class="dropdown dropdown-end md:hidden"><button tabindex="0" class="btn btn-ghost btn-circle" aria-label="Menu"><svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg></button> <ul class="menu menu-sm dropdown-content bg-base-100 rounded-box z-[1] mt-3 w-52 p-2 shadow"><li><a href="../">Home</a></li> <li><a href="../docs">Docs</a></li> <li><a href="../devlog">Devlog</a></li></ul></div></div></div><!----> <div class="flex-1"><!--[--><div class="max-w-3xl mx-auto px-4 py-10"><a href="../devlog" class="btn btn-ghost btn-sm mb-8 -ml-2"><svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg> Back to logs</a> <div class="flex flex-wrap items-center gap-2 mb-6"><span class="font-mono text-sm text-base-content/50">2026-03-18</span> <!--[0--><!--[--><span class="badge badge-outline badge-sm">ble</span><span class="badge badge-outline badge-sm">ui</span><span class="badge badge-outline badge-sm">ux</span><span class="badge badge-outline badge-sm">feature</span><!--]--><!--]--></div> <!--[0--><article class="prose prose-base max-w-none"><!--[--><h1>BLE UX polish, starter profiles, and live role reassignment</h1> <p>Today was a housekeeping-and-polish session rather than an epic-level feature push. Several small
+  but noticeable rough edges in the device-management flow got addressed, a quality-of-life
+  improvement was shipped for connected device handling, and the reference docs got a long-overdue
+  rename pass.</p> <h2>BLE scan UX: cached devices, stale RSSI, and the "Paired" state</h2> <p>The scan list was showing stale data in a few scenarios that were easy to reproduce but annoying
+  to diagnose. Three distinct device states needed to be tracked and displayed differently:</p> <ul><li><strong>Seen in scan</strong> — the device was actively advertising during the scan window.
+    Shows a signal-strength badge (Strong / Good / Fair / Weak) and the Connect button is enabled.</li> <li><strong>Paired</strong> — the device has an active BLE connection to the OS (BlueZ, Windows
+    Bluetooth stack, etc.). The OS clears RSSI for connected peripherals and they stop advertising,
+    so no signal reading is available. These show a "Paired" badge and Connect remains enabled so
+    the user can take over the connection from the OS.</li> <li><strong>Cached</strong> — the device is in the OS Bluetooth cache from a previous scan but was
+    not seen this time. It is likely off or out of range. Shows a greyed-out "Cached" badge and
+    Connect is disabled.</li></ul> <p>The Linux path had an extra wrinkle. After a device is connected and then disconnected, BlueZ
+  clears its RSSI entry. On the next scan the device's first <code>PropertiesChanged</code> signal
+  can arrive after the scan event-loop deadline, leaving the RSSI map empty even though the device
+  is genuinely present. The fix is a pre-scan RSSI snapshot taken via <code>get_devices()</code> before <code>start_discovery</code>. If RSSI was absent pre-scan (cleared by the prior
+  connection) and is present post-scan, the device counts as seen.</p> <p>Two new fields were added to <code>TapDeviceInfo</code> — <code>seen_in_scan</code> and <code>is_connected_to_os</code> — and propagated through the DTO, TypeScript types, and
+  Svelte UI.</p> <h2>Connected device name display</h2> <p>Previously the connected-devices panel showed only the role and address — the human-readable
+  device name (e.g. "TapXR_A0363") was lost the moment you clicked Connect.</p> <p>The fix has two parts. First, the name is captured from the scan result <em>before</em> the <code>await connectDevice(...)</code> call, not after. After the await, the Tauri <code>device-connected</code> event has already fired, which reactively removes the device from <code>availableDevices</code> (the filtered scan list). Looking up the name after the await
+  therefore finds nothing.</p> <p>Second, names are persisted to <code>localStorage</code> under <code>mapxr:device-names</code> as
+  an address → name map. On app restart, the auto-reconnect loop fires <code>device-connected</code> events with no UI interaction, so <code>setName</code> is never called. Loading from storage on <code>DeviceStore</code> construction means reconnect events immediately resolve the correct name.</p> <h2>Starter profile seeding on first launch</h2> <p>New installations had no profiles and no obvious way to get started. A <code>starter-right.json</code> profile with 15 right-hand single-finger mappings (copy, paste,
+  undo, save, arrow navigation, etc.) is now embedded in the binary via <code>include_str!</code> and seeded into the OS config directory on first launch.</p> <p>Seeding is a no-op if any <code>.json</code> file already exists in the config dir, so existing
+  users and developers with their own profiles are unaffected.</p> <h2>Reference docs reorganisation</h2> <p>The <code>docs/reference/</code> directory had accumulated six files with names that didn't
+  reflect their contents. Most notably, <code>other-uuids.txt</code> — which is actually the best
+  annotated GATT characteristic map in the project — got renamed to <code>gatt-characteristics.txt</code>. The full rename list:</p> <ul><li><code>api-doc.txt</code> → <code>tap-ble-api.txt</code></li> <li><code>other-uuids.txt</code> → <code>gatt-characteristics.txt</code></li> <li><code>gatt-output.txt</code> → <code>gatt-probe-output.txt</code></li> <li><code>windows-sdk-guid-reference.txt</code> → <code>windows-sdk-guids.cs</code> (it's C# source; now syntax-highlighted in editors)</li> <li><code>gettingfirmware.txt</code> → <code>firmware-update-aws.txt</code></li></ul> <h2>Live role reassignment without disconnecting</h2> <p>The most substantial change today: you can now change a connected device's role (solo → left,
+  left → right, etc.) without disconnecting and reconnecting. Previously this was the only way to
+  reassign, which meant exiting controller mode, dropping the BLE connection, waiting for the OS to
+  release the connection slot, scanning again, and reconnecting.</p> <p>The key insight is that <code>DeviceId</code> (the role) is just a label — it gets stamped onto <code>RawTapEvent</code>s and onto <code>BleStatusEvent</code> notifications, but the underlying
+  BLE connection, GATT characteristic handles, controller mode, and notification subscription are
+  all properties of the <code>btleplug</code> <code>Peripheral</code> object and don't care about
+  the role at all.</p> <p>The complication is that the role is captured by value in three background tasks spawned at
+  connect time: <code>keepalive_task</code>, <code>notification_task</code>, and <code>connection_monitor_task</code>. A new <code>TapDevice::reassign()</code> method handles
+  this by cancelling the existing tasks via the <code>watch</code> channel, writing <code>ENTER_CONTROLLER_MODE</code> immediately to reset the device's 10-second keepalive timer,
+  then respawning all three tasks with the new <code>DeviceId</code>.</p> <p><code>BleManager::reassign_role()</code> moves the entry in the connected map, calls <code>reassign()</code>, then emits <code>BleStatusEvent::Disconnected</code> (old role) followed
+  by <code>BleStatusEvent::Connected</code> (new role). The existing Tauri event pump picks these
+  up and pushes <code>device-disconnected</code> / <code>device-connected</code> events to the
+  frontend — no new plumbing required.</p> <p>On the UI side, the connected-devices table now shows solo / left / right role buttons inline on
+  each row. A role button is disabled if it is the device's current role, or if that role is
+  already occupied by another connected device. This prevents conflicts entirely in the UI rather
+  than returning an error from the backend.</p><!--]--></article><!--]--></div><!--]--><!----></div> <footer class="footer footer-center bg-base-200 text-base-content p-6 mt-auto border-t border-base-300"><aside><p class="font-bold"><span class="text-primary">Map</span>Xr</p> <p class="text-sm text-base-content/60">Map your TAP Strap to anything — keyboard shortcuts, app controls, custom macros.</p> <p class="text-xs text-base-content/40 mt-2">MIT License · Built with Svelte 5 + Tauri + Rust</p> <p class="text-xs text-base-content/30 mt-1">TAP Strap and TapXr are a product of <a href="https://www.tapwithus.com" target="_blank" rel="noreferrer" class="underline hover:text-base-content/50">Tap Systems Inc.</a> MapXr is an independent project and is not affiliated with or endorsed by Tap Systems Inc.</p></aside></footer><!----></div><!--]--><!--]--> <!--[-1--><!--]--><!--]-->
+			
+			<script>
+				{
+					__sveltekit_gbf81g = {
+						base: new URL("..", location).pathname.slice(0, -1),
+						assets: "/mapxr"
+					};
+
+					const element = document.currentScript.parentElement;
+
+					Promise.all([
+						import("../_app/immutable/entry/start.CQX3Snwe.js"),
+						import("../_app/immutable/entry/app.TgKIBGPU.js")
+					]).then(([kit, app]) => {
+						kit.start(app, element, {
+							node_ids: [0, 4],
+							data: [null,null],
+							form: null,
+							error: null
+						});
+					});
+				}
+			</script>
+		</div>
+  </body>
+</html>
