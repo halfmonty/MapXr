@@ -111,14 +111,20 @@
     }
   }
 
-  // ── Missing-roles warning (task 5.12) ──────────────────────────────────────
+  // ── Profile / device compatibility banners ─────────────────────────────────
 
   let activeProfile = $derived(
     profileStore.profiles.find((p) => p.layer_id === engineStore.activeLayerId),
   );
+  /** Dual profile active but fewer than two devices connected. */
   let showDualWarning = $derived(
     activeProfile?.kind === "dual" && deviceStore.connected.length < 2,
   );
+  /** Two devices connected but only a single-hand profile is active. */
+  let showSingleSuggestion = $derived(
+    deviceStore.connected.length === 2 && activeProfile?.kind === "single",
+  );
+  let dismissedSingleSuggestion = $state(false);
 
   // ── Signal strength label ───────────────────────────────────────────────────
 
@@ -158,10 +164,24 @@
 <div class="mx-auto max-w-2xl space-y-6">
   <h1 class="text-2xl font-bold">Devices</h1>
 
-  <!-- Missing roles warning -->
+  <!-- Dual profile needs a second device -->
   {#if showDualWarning}
     <div class="alert alert-warning">
-      <span>This profile requires two connected devices.</span>
+      <span>The active profile requires two connected devices.</span>
+    </div>
+  {/if}
+
+  <!-- Two devices connected but only a single-hand profile is active -->
+  {#if showSingleSuggestion && !dismissedSingleSuggestion}
+    <div class="alert alert-info">
+      <span>You have two devices connected. Consider switching to a dual profile.</span>
+      <div class="flex gap-2">
+        <a href="/profiles" class="btn btn-sm btn-ghost">Go to Profiles</a>
+        <button
+          class="btn btn-sm btn-ghost"
+          onclick={() => (dismissedSingleSuggestion = true)}
+        >Dismiss</button>
+      </div>
     </div>
   {/if}
 

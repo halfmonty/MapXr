@@ -1,8 +1,9 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
 use mapping_core::{engine::ComboEngine, LayerRegistry};
+use serde::{Deserialize, Serialize};
 use tap_ble::{BleManager, BleStatusEvent, DeviceRegistry};
 use tokio::sync::{broadcast, Mutex};
 
@@ -50,6 +51,9 @@ pub struct AppState {
 
     /// Absolute path to `devices.json` (parent of `profiles_dir`).
     pub devices_json_path: PathBuf,
+
+    /// Absolute path to `preferences.json` (sibling of `devices.json`).
+    pub preferences_path: PathBuf,
 }
 
 impl AppState {
@@ -82,14 +86,18 @@ pub async fn build_app_state(
     anyhow::Error,
 > {
     let profiles_dir = platform::profile_dir(app).map_err(anyhow::Error::msg)?;
-    let devices_json_path = profiles_dir
+    let config_dir = profiles_dir
         .parent()
-        .ok_or_else(|| anyhow::anyhow!("profiles_dir has no parent"))?
-        .join("devices.json");
+        .ok_or_else(|| anyhow::anyhow!("profiles_dir has no parent"))?;
+    let devices_json_path = config_dir.join("devices.json");
+    let preferences_path = config_dir.join("preferences.json");
 
     // Load device registry (empty if file absent).
     let device_registry = DeviceRegistry::load(&devices_json_path)
         .map_err(|e| anyhow::anyhow!("failed to load device registry: {e}"))?;
+
+    // Load user preferences (empty/default if file absent).
+    let preferences = Preferences::load(&preferences_path);
 
     // Seed default profiles on first launch (no-op if any .json files exist).
     seed_profiles_dir(&profiles_dir);
@@ -98,12 +106,24 @@ pub async fn build_app_state(
     let mut layer_registry = LayerRegistry::new(&profiles_dir);
     let _ = layer_registry.reload();
 
-    // Select default profile: first by name, or a minimal built-in.
-    let default_profile = layer_registry
-        .profiles()
-        .min_by_key(|p| &p.name)
-        .cloned()
-        .unwrap_or_else(builtin_default_profile);
+    // Select the startup profile.
+    //
+    // If the user explicitly deactivated all profiles before closing, honour
+    // that and start with the built-in empty profile (no mappings).
+    //
+    // Otherwise prefer the last explicitly-activated profile, fall back to
+    // alphabetically-first (covers first launch), then to the built-in default.
+    let default_profile = if preferences.profile_active {
+        preferences
+            .last_active_profile_id
+            .as_deref()
+            .and_then(|id| layer_registry.get(id))
+            .cloned()
+            .or_else(|| layer_registry.profiles().min_by_key(|p| &p.name).cloned())
+            .unwrap_or_else(builtin_default_profile)
+    } else {
+        builtin_default_profile()
+    };
 
     let engine = ComboEngine::new(default_profile.clone());
 
@@ -134,6 +154,7 @@ pub async fn build_app_state(
         device_registry: std::sync::Mutex::new(device_registry),
         profiles_dir,
         devices_json_path,
+        preferences_path,
     };
 
     Ok((state, event_rx, status_rx))
@@ -248,6 +269,89 @@ fn seed_profiles_dir(profiles_dir: &std::path::Path) {
             Ok(()) => log::info!("seeded starter profile: {filename}"),
             Err(e) => log::warn!("failed to seed starter profile {filename}: {e}"),
         }
+    }
+}
+
+// ── Preferences ───────────────────────────────────────────────────────────────
+
+/// On-disk representation of `preferences.json`.
+#[derive(Serialize, Deserialize)]
+struct StoredPreferences {
+    version: u32,
+    /// `false` only when the user has explicitly called `deactivate_profile`.
+    /// Absent in older files (before this field was added); treated as `true`
+    /// so existing installations keep their current behaviour.
+    #[serde(default = "default_true")]
+    profile_active: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    last_active_profile_id: Option<String>,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+/// User preferences persisted across sessions.
+///
+/// Stored as `preferences.json` in the app config directory alongside
+/// `devices.json`.  The file is written every time the user explicitly
+/// activates or deactivates a profile.
+pub(crate) struct Preferences {
+    /// `false` only when the user has explicitly deactivated all profiles.
+    ///
+    /// Defaults to `true` so that first launch (no preferences file) still
+    /// picks a sensible startup profile.
+    pub profile_active: bool,
+    /// The `layer_id` of the last profile the user explicitly activated.
+    pub last_active_profile_id: Option<String>,
+}
+
+impl Default for Preferences {
+    fn default() -> Self {
+        Self {
+            profile_active: true,
+            last_active_profile_id: None,
+        }
+    }
+}
+
+impl Preferences {
+    /// Load from `path`.  Returns a default `Preferences` if the file does not
+    /// exist or cannot be parsed; errors are logged but not propagated so a
+    /// corrupt preferences file never prevents the app from starting.
+    pub fn load(path: &Path) -> Self {
+        let text = match std::fs::read_to_string(path) {
+            Ok(t) => t,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Self::default(),
+            Err(e) => {
+                log::warn!("failed to read preferences: {e}");
+                return Self::default();
+            }
+        };
+        match serde_json::from_str::<StoredPreferences>(&text) {
+            Ok(stored) => Self {
+                profile_active: stored.profile_active,
+                last_active_profile_id: stored.last_active_profile_id,
+            },
+            Err(e) => {
+                log::warn!("failed to parse preferences: {e}");
+                Self::default()
+            }
+        }
+    }
+
+    /// Persist to `path` using a write-then-rename strategy for atomicity.
+    pub fn save(&self, path: &Path) -> Result<(), anyhow::Error> {
+        let stored = StoredPreferences {
+            version: 1,
+            profile_active: self.profile_active,
+            last_active_profile_id: self.last_active_profile_id.clone(),
+        };
+        let json = serde_json::to_string_pretty(&stored)?;
+        let tmp = path.with_extension("json.tmp");
+        std::fs::write(&tmp, &json)?;
+        std::fs::rename(&tmp, path)?;
+        Ok(())
     }
 }
 

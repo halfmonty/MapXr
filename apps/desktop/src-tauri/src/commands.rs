@@ -351,6 +351,15 @@ pub async fn activate_profile(
     // LOCKING: acquires engine
     state.engine.lock().await.set_profile(profile);
 
+    // Persist so this profile is restored on the next launch.
+    let prefs = crate::state::Preferences {
+        profile_active: true,
+        last_active_profile_id: Some(layer_id),
+    };
+    if let Err(e) = prefs.save(&state.preferences_path) {
+        log::warn!("failed to save preferences: {e}");
+    }
+
     crate::pump::emit_layer_changed(&app, &state).await;
     Ok(())
 }
@@ -373,6 +382,15 @@ pub async fn deactivate_profile(
         .lock()
         .await
         .set_profile(crate::state::builtin_default_profile());
+
+    // Clear the persisted profile so the next launch also starts with no active profile.
+    let prefs = crate::state::Preferences {
+        profile_active: false,
+        last_active_profile_id: None,
+    };
+    if let Err(e) = prefs.save(&state.preferences_path) {
+        log::warn!("failed to save preferences: {e}");
+    }
 
     crate::pump::emit_layer_changed(&app, &state).await;
     Ok(())

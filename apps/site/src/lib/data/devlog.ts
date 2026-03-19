@@ -10,6 +10,15 @@ export type DevlogEntry = {
 
 export const DEVLOG: DevlogEntry[] = [
   {
+    slug: '2026-03-18-profile-persistence',
+    date: '2026-03-18',
+    title: 'Profile persistence and startup profile selection',
+    body: 'Replaced alphabetical startup profile selection with a preferences.json that remembers the last activated profile. Fixed a bug where explicit deactivation was indistinguishable from first-launch state, causing a profile to always be selected on restart. Added device-aware suggestion banners.',
+    epicsDone: 7,
+    totalEpics: 9,
+    tags: ['ux', 'feature', 'bug-fix'],
+  },
+  {
     slug: '2026-03-18-ble-ux-and-role-reassignment',
     date: '2026-03-18',
     title: 'BLE UX polish, starter profiles, and live role reassignment',

@@ -1,3 +1,27 @@
+## 2026-03-18 — Profile persistence and device-aware suggestions
+
+**Tasks completed:** out-of-plan QoL improvement (startup profile selection)
+**Tasks in progress:** none
+
+**Files changed:**
+
+- `apps/desktop/src-tauri/src/state.rs` — added `Preferences` / `StoredPreferences` structs with `load` (graceful on missing/corrupt file) and `save` (write-then-rename atomic); added `preferences_path: PathBuf` to `AppState`; updated `build_app_state` to load `preferences.json` and use `last_active_profile_id` as the startup profile, falling back to alphabetical-first then built-in default; **follow-up fix:** added `profile_active: bool` field to `Preferences` (default `true`); startup now checks `profile_active` before selecting a profile — `false` skips all fallbacks and starts with the built-in empty profile; `StoredPreferences` uses `#[serde(default = "default_true")]` for backwards compatibility with existing files
+- `apps/desktop/src-tauri/src/commands.rs` — `activate_profile` writes `profile_active: true` and `last_active_profile_id` to `preferences.json`; `deactivate_profile` writes `profile_active: false` and clears `last_active_profile_id`
+- `apps/desktop/src/routes/devices/+page.svelte` — added `showSingleSuggestion` derived (`connected.length === 2 && activeProfile.kind === "single"`); added dismissible `alert-info` banner with "Go to Profiles" link and Dismiss button; refined existing dual warning copy
+
+**Notes:**
+Profile persistence lives on the Rust side so the engine starts with the correct profile before the frontend loads. A frontend `localStorage` approach would have caused a brief flicker of the wrong profile during initialisation.
+
+`Preferences::load` treats any error (missing file, corrupt JSON) as a default/empty result rather than propagating it, so a damaged `preferences.json` never blocks startup. Errors are logged at `warn` level.
+
+**Bug found and fixed:** The initial implementation stored `last_active_profile_id: None` on deactivate, which was indistinguishable from a first-launch state (no preferences file). Both fell through to the alphabetical fallback, so the app always activated a profile on restart even if the user had explicitly deactivated. The fix adds `profile_active: bool` — `false` is only set by an explicit `deactivate_profile` call, while `default_true` ensures existing files and first-launch both behave as before.
+
+The "Switch to dual?" suggestion is dismissible for the session via `$state(false)`. It reappears on the next app launch — the suggestion is only relevant when device state actively changes, and the user should be reminded on a fresh session if the condition still holds.
+
+**Next:** Resume the implementation plan — Epic 8.1 (add `tap-cli` binary crate to the workspace)
+
+---
+
 ## 2026-03-18 — Live device role reassignment without reconnecting
 
 **Tasks completed:** out-of-plan QoL improvement (role reassignment while connected)
