@@ -1,6 +1,6 @@
 [package]
 name = "mapxr"
-version = "0.1.1"
+version = "0.1.2"
 description = "Tap Strap keyboard remapper"
 authors = ["mapxr contributors"]
 edition = "2021"

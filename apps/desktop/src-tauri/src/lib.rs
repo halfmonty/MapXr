@@ -64,21 +64,13 @@ pub fn run() {
 
             // ── System tray ───────────────────────────────────────────────────
 
-            let icon = Image::from_path(
-                app_handle
-                    .path()
-                    .resource_dir()
-                    .unwrap_or_default()
-                    .join("icons/32x32.png"),
-            )
-            .or_else(|_| {
-                // Fallback: load from the source tree (works during `cargo tauri dev`).
-                Image::from_path(
-                    std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-                        .join("icons/32x32.png"),
-                )
-            })
-            .unwrap_or_else(|_| Image::new(&[], 0, 0));
+            // Embed icon bytes at compile time so they're always available
+            // regardless of install path (RPM, DEB, AppImage, dev).
+            let icon = Image::from_bytes(include_bytes!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/icons/32x32.png"
+            )))
+            .expect("embedded tray icon is valid PNG");
 
             let menu = build_tray_menu(&app_handle, "No profile active")?;
 
