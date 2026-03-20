@@ -16,16 +16,27 @@ Pre-release builds use the suffix convention `v1.2.3-beta.1`, `v1.2.3-rc.1`, etc
 
 ## [Unreleased]
 
+---
+
+## [1.0.0] — 2026-03-20
+
+Initial release.
+
 ### Added
-- Mouse click and scroll actions (`mouse_click`, `mouse_double_click`, `mouse_scroll`)
-- Device renaming via BLE GATT characteristic
-- Context-aware automatic profile switching (Linux and Windows)
-- System tray with background operation and start-at-login support
-- Design system shared between desktop app and marketing site
-- Desktop notifications for device connect/disconnect and profile/layer changes
-- Extended keyboard key support: F1–F24, media keys, and system keys
-- Haptic feedback via Tap Strap vibration motor: explicit action type and event-driven triggers
-- In-app update checking via `tauri-plugin-updater`
+- **Two-device support** — connect a left and right Tap Strap simultaneously for up to 1023 unique single-tap chords across 10 fingers
+- **Profile editor** — create and manage tap mappings in-app without editing JSON
+- **Layer stack** — push, pop, and switch layers programmatically; build modal and context-sensitive input systems
+- **Full action vocabulary** — `key`, `key_chord`, `type_string`, `macro`, `push_layer`, `pop_layer`, `switch_layer`, `toggle_variable`, `set_variable`, `block`, `alias`, `mouse_click`, `mouse_double_click`, `mouse_scroll`, `vibrate`
+- **Extended key support** — F1–F24, media keys (play/pause, next/prev, volume), and system keys (Insert, Print Screen, Scroll Lock, etc.)
+- **Trigger types** — single tap, double tap, triple tap, and ordered sequence triggers
+- **Variables** — named boolean/integer values in profiles; `toggle_variable` enables single-tap toggle actions (e.g. mute/unmute)
+- **Device renaming** — assign friendly names to Tap devices via BLE
+- **Context-aware profile switching** — automatically activate profiles based on the focused application (Linux and Windows)
+- **System tray** — runs in the background with a tray icon; close-to-tray behaviour and start-at-login configurable in Settings
+- **Desktop notifications** — OS notifications for device connect/disconnect and profile/layer changes; each event type independently toggleable
+- **Haptic feedback** — vibration patterns on tap confirmation, layer switch, and profile switch; explicit `vibrate` action type for custom sequences
+- **In-app updater** — checks for new releases automatically; dismissible banner and install-and-restart dialog
+- **Debug panel** — live event stream with resolved/unmatched/combo-timeout events, timing bars, and export to JSONL
 
 ---
 
