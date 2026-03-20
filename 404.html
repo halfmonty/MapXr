@@ -1,29 +1,31 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <link rel="icon" href="/favicon.ico" type="image/svg+xml" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <script>
-      const stored = localStorage.getItem("theme");
-      const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-      document.documentElement.setAttribute(
-        "data-theme",
-        stored ?? (prefersDark ? "business" : "corporate")
-      );
-    </script>
-    <link href="/mapxr/_app/immutable/entry/start.CXnHapnO.js" rel="modulepreload">
+    <head>
+        <meta charset="utf-8" />
+        <link rel="icon" href="/mapxr/favicon.ico" type="image/x-icon" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <script>
+            const stored = localStorage.getItem("theme");
+            const prefersDark = window.matchMedia(
+                "(prefers-color-scheme: dark)",
+            ).matches;
+            document.documentElement.setAttribute(
+                "data-theme",
+                stored ?? (prefersDark ? "business" : "corporate"),
+            );
+        </script>
+        <link href="/mapxr/_app/immutable/entry/start.C52J93SD.js" rel="modulepreload">
 		<link href="/mapxr/_app/immutable/chunks/CGwnShg4.js" rel="modulepreload">
-		<link href="/mapxr/_app/immutable/chunks/Bt3lyPTy.js" rel="modulepreload">
-		<link href="/mapxr/_app/immutable/entry/app.Du89H3th.js" rel="modulepreload">
+		<link href="/mapxr/_app/immutable/chunks/CyUtBfIa.js" rel="modulepreload">
+		<link href="/mapxr/_app/immutable/entry/app.CFdIDFkL.js" rel="modulepreload">
 		<link href="/mapxr/_app/immutable/chunks/CFKVnMbq.js" rel="modulepreload">
 		
-  </head>
-  <body data-sveltekit-preload-data="hover">
-    <div style="display: contents">
+    </head>
+    <body data-sveltekit-preload-data="hover">
+        <div style="display: contents">
 			<script>
 				{
-					__sveltekit_8p4tck = {
+					__sveltekit_14k5p3t = {
 						base: "/mapxr",
 						assets: "/mapxr"
 					};
@@ -31,13 +33,13 @@
 					const element = document.currentScript.parentElement;
 
 					Promise.all([
-						import("/mapxr/_app/immutable/entry/start.CXnHapnO.js"),
-						import("/mapxr/_app/immutable/entry/app.Du89H3th.js")
+						import("/mapxr/_app/immutable/entry/start.C52J93SD.js"),
+						import("/mapxr/_app/immutable/entry/app.CFdIDFkL.js")
 					]).then(([kit, app]) => {
 						kit.start(app, element);
 					});
 				}
 			</script>
 		</div>
-  </body>
+    </body>
 </html>

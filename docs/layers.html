@@ -1,86 +1,54 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <link rel="icon" href="/favicon.ico" type="image/svg+xml" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <script>
-      const stored = localStorage.getItem("theme");
-      const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-      document.documentElement.setAttribute(
-        "data-theme",
-        stored ?? (prefersDark ? "business" : "corporate")
-      );
-    </script>
-    <link href="../_app/immutable/entry/start.CXnHapnO.js" rel="modulepreload">
+    <head>
+        <meta charset="utf-8" />
+        <link rel="icon" href="../favicon.ico" type="image/x-icon" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <script>
+            const stored = localStorage.getItem("theme");
+            const prefersDark = window.matchMedia(
+                "(prefers-color-scheme: dark)",
+            ).matches;
+            document.documentElement.setAttribute(
+                "data-theme",
+                stored ?? (prefersDark ? "business" : "corporate"),
+            );
+        </script>
+        <link href="../_app/immutable/entry/start.C52J93SD.js" rel="modulepreload">
 		<link href="../_app/immutable/chunks/CGwnShg4.js" rel="modulepreload">
-		<link href="../_app/immutable/chunks/Bt3lyPTy.js" rel="modulepreload">
-		<link href="../_app/immutable/entry/app.Du89H3th.js" rel="modulepreload">
+		<link href="../_app/immutable/chunks/CyUtBfIa.js" rel="modulepreload">
+		<link href="../_app/immutable/entry/app.CFdIDFkL.js" rel="modulepreload">
 		<link href="../_app/immutable/chunks/CFKVnMbq.js" rel="modulepreload">
-		<link href="../_app/immutable/nodes/0.ZDN_rQc3.js" rel="modulepreload">
+		<link href="../_app/immutable/nodes/0.C93o40Xj.js" rel="modulepreload">
 		<link href="../_app/immutable/chunks/D40A1Rfp.js" rel="modulepreload">
-		<link href="../_app/immutable/nodes/6.CdA52ScY.js" rel="modulepreload">
-		<link href="../_app/immutable/chunks/DkbABERa.js" rel="modulepreload">
-		<link href="../_app/immutable/chunks/Cni--8-y.js" rel="modulepreload">
+		<link href="../_app/immutable/nodes/6.Dn0YhoGT.js" rel="modulepreload">
+		<link href="../_app/immutable/chunks/Dijf7hSe.js" rel="modulepreload">
+		<link href="../_app/immutable/chunks/BNRw7wyT.js" rel="modulepreload">
 		<!--11o795e--><meta name="description" content="MapXr documentation: Layers"/> <meta property="og:title" content="Layers — MapXr Docs"/><!----><title>Layers — MapXr Docs</title>
-		<link href="../_app/immutable/assets/0.Cv-PGx23.css" rel="stylesheet">
-  </head>
-  <body data-sveltekit-preload-data="hover">
-    <div style="display: contents"><!--[--><!--[0--><!--[--><div class="min-h-screen flex flex-col bg-base-100"><div class="navbar bg-base-100 border-b border-base-200 sticky top-0 z-50"><div class="navbar-start"><a href="../" class="btn btn-ghost text-2xl font-bold"><span class="text-primary -mr-1">Map</span>Xr</a></div> <div class="navbar-center hidden md:flex"><ul class="menu menu-horizontal px-1 gap-1"><li><a href="../" class="rounded-btn">Home</a></li> <li><a href="../docs" class="rounded-btn">Docs</a></li> <li><a href="../devlog" class="rounded-btn">Devlog</a></li></ul></div> <div class="navbar-end gap-2"><label class="swap swap-rotate btn btn-ghost btn-circle" aria-label="Toggle theme"><input type="checkbox"/> <svg class="swap-off h-5 w-5 fill-current" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M5.64,17l-.71.71a1,1,0,0,0,0,1.41,1,1,0,0,0,1.41,0l.71-.71A1,1,0,0,0,5.64,17ZM5,12a1,1,0,0,0-1-1H3a1,1,0,0,0,0,2H4A1,1,0,0,0,5,12Zm7-7a1,1,0,0,0,1-1V3a1,1,0,0,0-2,0V4A1,1,0,0,0,12,5ZM5.64,7.05a1,1,0,0,0,.7.29,1,1,0,0,0,.71-.29,1,1,0,0,0,0-1.41l-.71-.71A1,1,0,0,0,4.93,6.34Zm12,.29a1,1,0,0,0,.7-.29l.71-.71a1,1,0,1,0-1.41-1.41L17,5.64a1,1,0,0,0,0,1.41A1,1,0,0,0,17.66,7.34ZM21,11H20a1,1,0,0,0,0,2h1a1,1,0,0,0,0-2Zm-9,8a1,1,0,0,0-1,1v1a1,1,0,0,0,2,0V20A1,1,0,0,0,12,19ZM18.36,17A1,1,0,0,0,17,18.36l.71.71a1,1,0,0,0,1.41,0,1,1,0,0,0,0-1.41ZM12,6.5A5.5,5.5,0,1,0,17.5,12,5.51,5.51,0,0,0,12,6.5Zm0,9A3.5,3.5,0,1,1,15.5,12,3.5,3.5,0,0,1,12,15.5Z"></path></svg> <svg class="swap-on h-5 w-5 fill-current" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21.64,13a1,1,0,0,0-1.05-.14,8.05,8.05,0,0,1-3.37.73A8.15,8.15,0,0,1,9.08,5.49a8.59,8.59,0,0,1,.25-2A1,1,0,0,0,8,2.36,10.14,10.14,0,1,0,22,14.05,1,1,0,0,0,21.64,13Zm-9.5,6.69A8.14,8.14,0,0,1,7.08,5.22v.27A10.15,10.15,0,0,0,17.22,15.63a9.79,9.79,0,0,0,2.1-.22A8.11,8.11,0,0,1,12.14,19.73Z"></path></svg></label> <a href="https://github.com/mapxr/mapxr" target="_blank" rel="noreferrer" class="btn btn-ghost btn-circle" aria-label="GitHub"><svg class="h-5 w-5 fill-current" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"></path></svg></a> <div class="dropdown dropdown-end md:hidden"><button tabindex="0" class="btn btn-ghost btn-circle" aria-label="Menu"><svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg></button> <ul class="menu menu-sm dropdown-content bg-base-100 rounded-box z-[1] mt-3 w-52 p-2 shadow"><li><a href="../">Home</a></li> <li><a href="../docs">Docs</a></li> <li><a href="../devlog">Devlog</a></li></ul></div></div></div><!----> <div class="flex-1"><!--[--><div class="max-w-5xl mx-auto px-4 py-10 flex gap-8 min-h-[70vh]"><aside class="w-56 shrink-0 hidden md:block"><ul class="menu menu-sm bg-base-200 rounded-box p-2 sticky top-20"><!--[--><li class="menu-title">Basics</li> <!--[--><li><a href="../docs/getting-started">Getting Started</a></li><li><a href="../docs/profiles">Profiles</a></li><!--]--><li class="menu-title">Mapping</li> <!--[--><li><a href="../docs/triggers">Triggers</a></li><li><a href="../docs/actions">Actions</a></li><!--]--><li class="menu-title">Advanced</li> <!--[--><li><a href="../docs/layers" class="active">Layers</a></li><!--]--><!--]--></ul></aside><!----> <main class="flex-1 min-w-0 prose prose-base max-w-none"><!--[0--><!--[--><h1>Layers</h1> <p><strong>Layers</strong> let you define multiple sets of mappings within a single profile and
-  switch between them at runtime. Think of layers like the Fn key on a laptop keyboard —
-  the same physical key produces different output depending on the active layer.</p> <h2>Defining layers</h2> <p>Each layer is a named object inside the <code>layers</code> map in your profile:</p> <pre><code>{
-  "default_layer": "base",
-  "layers": {
-    "base": {
-      "mappings": [ ... ]
-    },
-    "nav": {
-      "mappings": [ ... ]
-    },
-    "symbols": {
-      "mappings": [ ... ]
-    }
-  }
-}</code></pre> <h2>The layer stack</h2> <p>mapxr maintains a <strong>layer stack</strong>. At startup the stack contains only the <code>default_layer</code>. You can push additional layers on top or pop back to previous layers.</p> <p>When resolving a trigger, mapxr searches from the top of the stack downward.
-  The first matching mapping wins.</p> <pre><code>Stack (top to bottom):
+		<link href="../_app/immutable/assets/0.BdFf_rzI.css" rel="stylesheet">
+    </head>
+    <body data-sveltekit-preload-data="hover">
+        <div style="display: contents"><!--[--><!--[0--><!--[--><div class="min-h-screen flex flex-col bg-base-100"><div class="navbar bg-base-100 border-b border-base-200 sticky top-0 z-50"><div class="navbar-start"><a href="../" class="btn btn-ghost text-2xl font-bold"><span class="text-primary -mr-1">Map</span>Xr</a></div> <div class="navbar-center hidden md:flex"><ul class="menu menu-horizontal px-1 gap-1"><li><a href="../" class="rounded-btn">Home</a></li> <li><a href="../docs" class="rounded-btn">Docs</a></li> <li><a href="../devlog" class="rounded-btn">Devlog</a></li></ul></div> <div class="navbar-end gap-2"><label class="swap swap-rotate btn btn-ghost btn-circle" aria-label="Toggle theme"><input type="checkbox"/> <svg class="swap-off h-5 w-5 fill-current" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M5.64,17l-.71.71a1,1,0,0,0,0,1.41,1,1,0,0,0,1.41,0l.71-.71A1,1,0,0,0,5.64,17ZM5,12a1,1,0,0,0-1-1H3a1,1,0,0,0,0,2H4A1,1,0,0,0,5,12Zm7-7a1,1,0,0,0,1-1V3a1,1,0,0,0-2,0V4A1,1,0,0,0,12,5ZM5.64,7.05a1,1,0,0,0,.7.29,1,1,0,0,0,.71-.29,1,1,0,0,0,0-1.41l-.71-.71A1,1,0,0,0,4.93,6.34Zm12,.29a1,1,0,0,0,.7-.29l.71-.71a1,1,0,1,0-1.41-1.41L17,5.64a1,1,0,0,0,0,1.41A1,1,0,0,0,17.66,7.34ZM21,11H20a1,1,0,0,0,0,2h1a1,1,0,0,0,0-2Zm-9,8a1,1,0,0,0-1,1v1a1,1,0,0,0,2,0V20A1,1,0,0,0,12,19ZM18.36,17A1,1,0,0,0,17,18.36l.71.71a1,1,0,0,0,1.41,0,1,1,0,0,0,0-1.41ZM12,6.5A5.5,5.5,0,1,0,17.5,12,5.51,5.51,0,0,0,12,6.5Zm0,9A3.5,3.5,0,1,1,15.5,12,3.5,3.5,0,0,1,12,15.5Z"></path></svg> <svg class="swap-on h-5 w-5 fill-current" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21.64,13a1,1,0,0,0-1.05-.14,8.05,8.05,0,0,1-3.37.73A8.15,8.15,0,0,1,9.08,5.49a8.59,8.59,0,0,1,.25-2A1,1,0,0,0,8,2.36,10.14,10.14,0,1,0,22,14.05,1,1,0,0,0,21.64,13Zm-9.5,6.69A8.14,8.14,0,0,1,7.08,5.22v.27A10.15,10.15,0,0,0,17.22,15.63a9.79,9.79,0,0,0,2.1-.22A8.11,8.11,0,0,1,12.14,19.73Z"></path></svg></label> <a href="https://www.buymeacoffee.com/halfmonty" target="_blank" rel="noreferrer" class="btn btn-ghost btn-circle" aria-label="Buy me a coffee"><svg class="h-5 w-5 fill-current" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 3H4v10c0 2.21 1.79 4 4 4h6c2.21 0 4-1.79 4-4v-3h2c1.11 0 2-.89 2-2V5c0-1.11-.89-2-2-2zm0 5h-2V5h2v3zM4 19h16v2H4z"></path></svg></a> <a href="https://github.com/halfmonty/mapxr" target="_blank" rel="noreferrer" class="btn btn-ghost btn-circle" aria-label="GitHub"><svg class="h-5 w-5 fill-current" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"></path></svg></a> <div class="dropdown dropdown-end md:hidden"><button tabindex="0" class="btn btn-ghost btn-circle" aria-label="Menu"><svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg></button> <ul class="menu menu-sm dropdown-content bg-base-100 rounded-box z-[1] mt-3 w-52 p-2 shadow"><li><a href="../">Home</a></li> <li><a href="../docs">Docs</a></li> <li><a href="../devlog">Devlog</a></li></ul></div></div></div><!----> <div class="flex-1"><!--[--><div class="max-w-5xl mx-auto px-4 py-10 flex gap-8 min-h-[70vh]"><aside class="w-56 shrink-0 hidden md:block"><ul class="menu menu-sm bg-base-200 rounded-box p-2 sticky top-20"><!--[--><li class="menu-title">Basics</li> <!--[--><li><a href="../docs/getting-started">Getting Started</a></li><li><a href="../docs/profiles">Profiles</a></li><!--]--><li class="menu-title">Profile Features</li> <!--[--><li><a href="../docs/actions">Actions</a></li><li><a href="../docs/layers" class="active">Layers</a></li><li><a href="../docs/profilesettings">Profile Settings</a></li><li><a href="../docs/aliases">Aliases</a></li><li><a href="../docs/variables">Variables</a></li><li><a href="../docs/lifecycle">Lifecycle</a></li><!--]--><li class="menu-title">Advanced</li> <!--[--><li><a href="../docs/autoswitch">Autoswitch</a></li><li><a href="../docs/debug">Debug</a></li><li><a href="../docs/settings">Settings</a></li><!--]--><!--]--></ul></aside><!----> <main class="flex-1 min-w-0 prose prose-base max-w-none"><!--[0--><!--[--><h1>Layers</h1> <p><strong>Layers</strong> let you define multiple profiles of mappings and switch
+    between them at runtime. Think of layers like the Fn key on a laptop keyboard
+    — the same physical key produces different output depending on the active layer.</p> <h2>Defining layers</h2> <p>A layer is just a profile that is loaded into the layer stack when
+    activated. So defining a profile and then activating it with a layer action
+    is all you need to do to use a profile as a layer.</p> <h2>The layer stack</h2> <p>mapxr maintains a <strong>layer stack</strong>. At startup the stack
+    contains only the <code>default_layer</code>. You can push additional layers on top or pop
+    back to previous layers.</p> <p>When resolving a trigger, mapxr searches from the top of the stack downward.
+    The first matching mapping wins.</p> <pre><code>Stack (top to bottom):
   nav      ← searched first
-  base     ← searched second (fallback)</code></pre> <h2>Switching layers</h2> <p>Use layer actions in your mappings to navigate the stack:</p> <pre><code>// Enter nav layer (stacks on top of base)
-{ "type": "push_layer", "layer": "nav" }
-
-// Return to base
-{ "type": "pop_layer" }
-
-// Jump directly to symbols, clearing the stack
-{ "type": "activate_layer", "layer": "symbols" }</code></pre> <h2>Example: nav layer</h2> <pre><code>{
-  "name": "Productivity",
-  "default_layer": "base",
-  "layers": {
-    "base": {
-      "mappings": [
-        {
-          "trigger": { "type": "single", "device": "left", "fingers": [1,1,0,0,0] },
-          "action":  { "type": "push_layer", "layer": "nav" }
-        }
-      ]
-    },
-    "nav": {
-      "mappings": [
-        {
-          "trigger": { "type": "single", "device": "left", "fingers": [0,0,0,0,1] },
-          "action":  { "type": "pop_layer" }
-        },
-        {
-          "trigger": { "type": "single", "device": "right", "fingers": [1,0,0,0,0] },
-          "action":  { "type": "key", "key": "up" }
-        }
-      ]
-    }
-  }
-}</code></pre> <div class="alert alert-info mt-6"><span>Layer actions are documented in full on the <a href="../docs/actions" class="link">Actions</a> page.</span></div><!--]--><!--]--><!----></main></div><!--]--><!----></div> <footer class="footer footer-center bg-base-200 text-base-content p-6 mt-auto border-t border-base-300"><aside><p class="font-bold"><span class="text-primary">Map</span>Xr</p> <p class="text-sm text-base-content/60">Map your TAP Strap to anything — keyboard shortcuts, app controls, custom macros.</p> <p class="text-xs text-base-content/40 mt-2">MIT License · Built with Svelte 5 + Tauri + Rust</p> <p class="text-xs text-base-content/30 mt-1">TAP Strap and TapXr are a product of <a href="https://www.tapwithus.com" target="_blank" rel="noreferrer" class="underline hover:text-base-content/50">Tap Systems Inc.</a> MapXr is an independent project and is not affiliated with or endorsed by Tap Systems Inc.</p></aside></footer><!----></div><!--]--><!--]--> <!--[-1--><!--]--><!--]-->
+  base     ← searched second (fallback)</code></pre> <h2>Switching layers</h2> <p>Use layer actions in your mappings to navigate the stack:</p> <p>A push layer action pushes the specified profile onto the stack above the
+    current layer.</p> <p>A pop layer action removes the top layer from the stack, returning to the
+    previous layer.</p> <p>An activate layer action clears the stack and pushes the specified profile
+    onto it, making it the new top layer.</p> <h2>Layer Passthrough</h2> <p><strong>Layer passthrough</strong> allows you to define a layer that passes through
+    to the base layer when no matching mapping is found. So if you have layer 'A'
+    above a layer 'B' with passthrough enabled, and no mapping is found for a trigger
+    on 'A', mapxr will search layer 'B'.</p> <p>To use layer passthrough, set the <code>passthrough</code> property to <code>true</code> in your profile settings tab</p> <p>To prevent a trigger from being passed through to the base layer, you can
+    set that trigger's action to <code>block</code></p><!--]--><!--]--><!----></main></div><!--]--><!----></div> <footer class="footer footer-center bg-base-200 text-base-content p-6 mt-auto border-t border-base-300"><aside><p class="font-bold"><span class="text-primary">Map</span>Xr</p> <p class="text-sm text-base-content/60">Map your TAP Strap to anything — keyboard shortcuts, app controls, custom macros.</p> <p class="text-xs text-base-content/40 mt-2">MIT License · Built with Svelte 5 + Tauri + Rust</p> <a href="https://www.buymeacoffee.com/halfmonty" target="_blank" rel="noreferrer" class="text-xs text-base-content/50 hover:text-primary transition-colors mt-2">☕ Buy me a coffee</a> <p class="text-xs text-base-content/30 mt-1">TAP Strap and TapXr are a product of <a href="https://www.tapwithus.com" target="_blank" rel="noreferrer" class="underline hover:text-base-content/50">Tap Systems Inc.</a> MapXr is an independent project and is not affiliated with or endorsed by Tap Systems Inc.</p></aside></footer><!----></div><!--]--><!--]--> <!--[-1--><!--]--><!--]-->
 			
 			<script>
 				{
-					__sveltekit_8p4tck = {
+					__sveltekit_14k5p3t = {
 						base: new URL("..", location).pathname.slice(0, -1),
 						assets: "/mapxr"
 					};
@@ -88,8 +56,8 @@
 					const element = document.currentScript.parentElement;
 
 					Promise.all([
-						import("../_app/immutable/entry/start.CXnHapnO.js"),
-						import("../_app/immutable/entry/app.Du89H3th.js")
+						import("../_app/immutable/entry/start.C52J93SD.js"),
+						import("../_app/immutable/entry/app.CFdIDFkL.js")
 					]).then(([kit, app]) => {
 						kit.start(app, element, {
 							node_ids: [0, 6],
@@ -101,5 +69,5 @@
 				}
 			</script>
 		</div>
-  </body>
+    </body>
 </html>
