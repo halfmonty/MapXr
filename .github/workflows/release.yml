@@ -67,6 +67,13 @@ jobs:
           projectPath: apps/desktop
           args: --bundles appimage,deb,rpm
 
+      - name: Upload Linux .sig files as artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-sigs
+          path: apps/desktop/src-tauri/target/release/bundle/appimage/*.sig
+          if-no-files-found: warn
+
   build-windows:
     name: Build (Windows)
     runs-on: windows-latest
@@ -110,3 +117,76 @@ jobs:
           prerelease: ${{ contains(github.ref_name, '-') }}
           projectPath: apps/desktop
           args: --bundles msi,nsis
+
+      - name: Upload Windows .sig files as artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-sigs
+          path: apps/desktop/src-tauri/target/release/bundle/nsis/*.sig
+          if-no-files-found: warn
+
+  create-update-manifest:
+    name: Create update manifest (latest.json)
+    needs: [build-linux, build-windows]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download Linux sig
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-sigs
+          path: sigs/linux
+
+      - name: Download Windows sig
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-sigs
+          path: sigs/windows
+
+      - name: Build latest.json
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ github.ref_name }}"
+          VERSION="${TAG#v}"
+          REPO="${{ github.repository }}"
+          BASE_URL="https://github.com/${REPO}/releases/download/${TAG}"
+
+          LINUX_SIG_FILE=$(ls sigs/linux/*.AppImage.sig 2>/dev/null | head -1)
+          WINDOWS_SIG_FILE=$(ls sigs/windows/*.sig 2>/dev/null | head -1)
+
+          if [ -z "$LINUX_SIG_FILE" ] || [ -z "$WINDOWS_SIG_FILE" ]; then
+            echo "ERROR: missing .sig file(s) — signing may not have run."
+            echo "  Linux sig:   ${LINUX_SIG_FILE:-<not found>}"
+            echo "  Windows sig: ${WINDOWS_SIG_FILE:-<not found>}"
+            exit 1
+          fi
+
+          LINUX_SIG=$(cat "$LINUX_SIG_FILE")
+          WINDOWS_SIG=$(cat "$WINDOWS_SIG_FILE")
+          LINUX_APPIMAGE=$(basename "$LINUX_SIG_FILE" .sig)
+          WINDOWS_EXE=$(basename "$WINDOWS_SIG_FILE" .sig)
+
+          jq -n \
+            --arg version "$VERSION" \
+            --arg pub_date "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --arg linux_url "${BASE_URL}/${LINUX_APPIMAGE}" \
+            --arg linux_sig "$LINUX_SIG" \
+            --arg win_url "${BASE_URL}/${WINDOWS_EXE}" \
+            --arg win_sig "$WINDOWS_SIG" \
+            '{
+              version: $version,
+              notes: "See CHANGELOG.md for release notes.",
+              pub_date: $pub_date,
+              platforms: {
+                "linux-x86_64": { url: $linux_url, signature: $linux_sig },
+                "windows-x86_64": { url: $win_url, signature: $win_sig }
+              }
+            }' > latest.json
+
+          echo "--- latest.json ---"
+          cat latest.json
+
+          gh release upload "$TAG" latest.json \
+            --repo "$REPO" \
+            --clobber
