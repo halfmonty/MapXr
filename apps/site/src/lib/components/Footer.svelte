@@ -11,6 +11,12 @@
     <p class="text-xs text-base-content/40 mt-2">
       MIT License · Built with Svelte 5 + Tauri + Rust
     </p>
+    <a
+      href="https://www.buymeacoffee.com/halfmonty"
+      target="_blank"
+      rel="noreferrer"
+      class="text-xs text-base-content/50 hover:text-primary transition-colors mt-2"
+    >☕ Buy me a coffee</a>
     <p class="text-xs text-base-content/30 mt-1">
       TAP Strap and TapXr are a product of <a
         href="https://www.tapwithus.com"

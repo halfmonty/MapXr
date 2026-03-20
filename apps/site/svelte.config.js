@@ -6,6 +6,9 @@ const config = {
     adapter: adapter({
       fallback: '404.html',
     }),
+    files: {
+      assets: 'public',
+    },
     paths: {
       base: process.env.NODE_ENV === 'production' ? '/mapxr' : '',
     },

@@ -1,81 +1,138 @@
+<script>
+    import { base } from "$app/paths";
+</script>
+
 <h1>Actions</h1>
 
 <p>
-  An <strong>action</strong> is what happens when a trigger fires. mapxr supports keyboard output,
-  mouse control, layer switching, and sticky modifier keys.
+    An <strong>action</strong> is what happens when a map tap binding fires. MapXr
+    supports keyboard output, mouse buttons, layer switching, and sticky modifier
+    keys, macros, key chords, altering variables and more.
 </p>
 
 <h2>Key action</h2>
 
-<p>Send a key combination to the active window:</p>
-
-<pre><code>{`{ "type": "key", "key": "ctrl+shift+p" }`}</code></pre>
-
 <p>
-  Key strings follow the format <code>modifier+key</code>. Multiple modifiers can be chained:
-  <code>ctrl+alt+delete</code>. Key names match the
-  <a href="https://docs.rs/enigo/latest/enigo/enum.Key.html" target="_blank" rel="noreferrer">enigo key list</a>.
+    Send a key combination to the active window, optionally with the modifiers
+    selected also pressed.
 </p>
 
-<h2>Type action</h2>
+<h2>Key Chord</h2>
 
-<p>Type a string of text character by character:</p>
+<p>Send multiple keys at once.</p>
 
-<pre><code>{`{ "type": "type", "text": "Hello, world!" }`}</code></pre>
-
-<h2>Mouse action</h2>
-
-<pre><code>{`{ "type": "mouse_click", "button": "left" }
-{ "type": "mouse_click", "button": "right" }
-{ "type": "mouse_scroll", "direction": "up", "amount": 3 }`}</code></pre>
-
-<h2>Layer action</h2>
-
-<p>Push a new layer onto the layer stack, or pop back to the previous one:</p>
-
-<pre><code>{`{ "type": "push_layer",    "layer": "nav" }
-{ "type": "pop_layer" }
-{ "type": "activate_layer", "layer": "symbols" }`}</code></pre>
+<h2>Type String</h2>
 
 <p>
-  <code>push_layer</code> adds a layer on top — pop it later with <code>pop_layer</code>.<br />
-  <code>activate_layer</code> replaces the entire stack with a single layer.
+    Allows you to define a string of letters to type. Perhaps if you type
+    something frequently enough this could be useful.
 </p>
 
-<h2>Hold modifier action</h2>
+<h2>Macro</h2>
 
-<p>Simulate a sticky modifier key that stays held until released by a second tap:</p>
+<p>
+    A macro is a sequence of actions. If you want a tap to perform multiple
+    actions, you can define a macro for it and even specify a delay between each
+    action.
+</p>
 
-<pre><code>{`{
-  "type": "hold_modifier",
-  "key": "shift",
-  "mode": { "type": "toggle" }
-}`}</code></pre>
+<h2>Push Layer</h2>
 
-<div class="overflow-x-auto">
-  <table class="table">
-    <thead>
-      <tr><th>Mode</th><th>Behaviour</th></tr>
-    </thead>
-    <tbody>
-      <tr>
-        <td><code>toggle</code></td>
-        <td>First tap holds the key; second tap releases it</td>
-      </tr>
-      <tr>
-        <td><code>count</code></td>
-        <td>Holds for N taps then auto-releases</td>
-      </tr>
-      <tr>
-        <td><code>timeout</code></td>
-        <td>Auto-releases after N milliseconds</td>
-      </tr>
-    </tbody>
-  </table>
-</div>
+<p>
+    Pushed the specified profile onto the layer stack, for more info see the <a
+        class="link link-primary"
+        href="{base}/docs/layers">layers page</a
+    >.
+</p>
 
-<h2>No-op action</h2>
+<h2>Pop Layer</h2>
 
-<pre><code>{`{ "type": "noop" }`}</code></pre>
+<p>
+    Removes the current layer from the stack, for more info see the <a
+        class="link link-primary"
+        href="{base}/docs/layers">layers page</a
+    >.
+</p>
 
-<p>Explicitly consume a trigger without doing anything. Useful for disabling inherited mappings in a child layer.</p>
+<h2>Switch Layer</h2>
+
+<p>
+    Ignoring the layer stack, this action just switches the current active layer
+    to the specified profile. For more info see the <a
+        class="link link-primary"
+        href="{base}/docs/layers">layers page</a
+    >.
+</p>
+
+<h2>Toggle Variable</h2>
+
+<p>
+    Toggles a variable from true to false and from false to true. For more info
+    see the variables page.
+</p>
+
+<h2>Set Variable</h2>
+
+<p>
+    Explicitly sets a variable to a specific value. For more info see the
+    variables page.
+</p>
+
+<h2>Conditional</h2>
+
+<p>
+    Branching action logic based on the state of a specified variable. For more
+    info see the variables page.
+</p>
+
+<h2>Block</h2>
+
+<p>
+    An explicitly empty action that will do nothing even if the current layer
+    has passthrough enabled. For more info see the <a
+        class="link link-primary"
+        href="{base}/docs/layers">layers page</a
+    >.
+</p>
+
+<h2>Alias</h2>
+
+<p>
+    This will call a pre-defined action by name. For more info see the <a
+        class="link link-primary"
+        href="{base}/docs/aliases">aliases page</a
+    >.
+</p>
+
+<h2>Hold Modifier</h2>
+
+<p>
+    This will hold the specified modifier keys for the next registered tap
+    actions. It has the modes toggle, count and timeout.
+    <br />
+    Toggle just turns the modifiers on and will turn them off when repeated.
+    <br />
+    Count turns the modifiers on for a specified number of next taps and then turns
+    them off.
+    <br />
+    Timeout turns the modifiers on for a specified duration and then turns them off.
+</p>
+
+<h2>Mouse Click</h2>
+
+<p>Fires a selected mouse click at the current cursor position.</p>
+
+<h2>Mouse Double Click</h2>
+
+<p>Fires a selected mouse double click at the current cursor position.</p>
+
+<h2>Mouse Scroll</h2>
+
+<p>Performs a mouse scroll action in the specified direction.</p>
+
+<h2>Vibrate</h2>
+
+<p>
+    You can specify a vibration pattern to send to the device. Not useful on
+    it's own but can be paired with a macro.
+</p>

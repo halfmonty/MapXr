@@ -1,5 +1,19 @@
 @import "tailwindcss";
 @plugin "daisyui" {
-  themes: corporate, business --prefersdark;
+    themes:
+        corporate,
+        business --prefersdark;
 }
 @import "../../../packages/design-tokens/base.css";
+
+h1 {
+    @apply text-3xl mt-4 mb-4;
+}
+
+h2 {
+    @apply text-2xl mt-4 mb-4;
+}
+
+h3 {
+    @apply text-xl mt-4 mb-2;
+}

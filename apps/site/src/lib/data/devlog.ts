@@ -10,6 +10,15 @@ export type DevlogEntry = {
 
 export const DEVLOG: DevlogEntry[] = [
   {
+    slug: '2026-03-20-first-release-and-distribution',
+    date: '2026-03-20',
+    title: 'First public release: three bugs, two platforms, one coffee button',
+    body: 'Shipped v0.1.2 — the first release where the full pipeline works end-to-end: build, sign, publish, auto-update. Getting there required hunting down three separate bugs: a missing config key that silently suppressed the auto-updater manifest, a Windows API breaking change in the focus monitor, and a tray icon crash that took down the app before the first window opened.',
+    epicsDone: 17,
+    totalEpics: 18,
+    tags: ['release', 'bug-fix', 'infrastructure'],
+  },
+  {
     slug: '2026-03-19-extended-keys-and-notifications',
     date: '2026-03-19',
     title: 'Extended key support, OS notifications, and six silent bugs fixed',
