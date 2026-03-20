@@ -1,6 +1,6 @@
 [package]
 name = "mapxr"
-version = "0.1.0"
+version = "0.1.1"
 description = "Tap Strap keyboard remapper"
 authors = ["mapxr contributors"]
 edition = "2021"
@@ -45,4 +45,3 @@ windows = { version = "0.58", features = [
     "Win32_System_Threading",
 ] }
 winreg = "0.52"
-
