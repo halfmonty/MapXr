@@ -27,17 +27,13 @@ pub fn query() -> Option<FocusedWindow> {
     // SAFETY: all Win32 calls here follow documented usage patterns.
     unsafe {
         let hwnd = GetForegroundWindow();
-        if hwnd.0 == 0 {
+        if hwnd.0.is_null() {
             return None;
         }
 
         // Window title.
         let mut title_buf = [0u16; 512];
-        let title_len = GetWindowTextW(
-            hwnd,
-            windows::core::PWSTR(title_buf.as_mut_ptr()),
-            title_buf.len() as i32,
-        );
+        let title_len = GetWindowTextW(hwnd, &mut title_buf);
         let title = String::from_utf16_lossy(&title_buf[..title_len as usize]);
 
         // Process ID.
