@@ -55,7 +55,9 @@ pub enum KeyDefError {
 /// Sorted list of all valid key name strings.
 ///
 /// Must remain sorted for [`binary_search`](slice::binary_search) to work.
+/// See `docs/spec/extended-keys-spec.md` for the complete platform availability matrix.
 pub const VALID_KEYS: &[&str] = &[
+    // ── Digits ────────────────────────────────────────────────────────────────
     "0",
     "1",
     "2",
@@ -66,21 +68,40 @@ pub const VALID_KEYS: &[&str] = &[
     "7",
     "8",
     "9",
+    // ── Letters ───────────────────────────────────────────────────────────────
     "a",
     "b",
+    // ── Punctuation ───────────────────────────────────────────────────────────
     "backslash",
+    // ── Navigation ────────────────────────────────────────────────────────────
     "backspace",
+    // ── System (platform-limited) ─────────────────────────────────────────────
+    "brightness_down",
+    "brightness_up",
+    // ── Letters ───────────────────────────────────────────────────────────────
     "c",
+    // ── Navigation ────────────────────────────────────────────────────────────
     "caps_lock",
+    // ── Punctuation ───────────────────────────────────────────────────────────
     "comma",
+    // ── Letters ───────────────────────────────────────────────────────────────
     "d",
+    // ── Navigation ────────────────────────────────────────────────────────────
     "delete",
     "down_arrow",
+    // ── Letters ───────────────────────────────────────────────────────────────
     "e",
+    // ── System (platform-limited) ─────────────────────────────────────────────
+    "eject",
+    // ── Navigation ────────────────────────────────────────────────────────────
     "end",
+    // ── Punctuation ───────────────────────────────────────────────────────────
     "equals",
+    // ── Navigation ────────────────────────────────────────────────────────────
     "escape",
+    // ── Letters ───────────────────────────────────────────────────────────────
     "f",
+    // ── Function keys ─────────────────────────────────────────────────────────
     "f1",
     "f10",
     "f11",
@@ -105,49 +126,88 @@ pub const VALID_KEYS: &[&str] = &[
     "f7",
     "f8",
     "f9",
+    // ── Letters ───────────────────────────────────────────────────────────────
     "g",
+    // ── Punctuation ───────────────────────────────────────────────────────────
     "grave",
+    // ── Letters ───────────────────────────────────────────────────────────────
     "h",
+    // ── Navigation ────────────────────────────────────────────────────────────
     "home",
+    // ── Letters ───────────────────────────────────────────────────────────────
     "i",
+    // ── Navigation ────────────────────────────────────────────────────────────
     "insert",
+    // ── Letters ───────────────────────────────────────────────────────────────
     "j",
     "k",
     "l",
+    // ── Navigation ────────────────────────────────────────────────────────────
     "left_arrow",
+    // ── Punctuation ───────────────────────────────────────────────────────────
     "left_bracket",
+    // ── Letters ───────────────────────────────────────────────────────────────
     "m",
+    // ── Media ─────────────────────────────────────────────────────────────────
     "media_next",
     "media_play",
     "media_prev",
+    "media_stop",
+    // ── System (platform-limited) ─────────────────────────────────────────────
+    "mic_mute",
+    // ── Punctuation ───────────────────────────────────────────────────────────
     "minus",
+    // ── Letters ───────────────────────────────────────────────────────────────
     "n",
+    // ── Navigation ────────────────────────────────────────────────────────────
     "num_lock",
+    // ── Letters ───────────────────────────────────────────────────────────────
     "o",
     "p",
+    // ── Navigation ────────────────────────────────────────────────────────────
     "page_down",
     "page_up",
+    // ── System (platform-limited) ─────────────────────────────────────────────
+    "pause",
+    // ── Punctuation ───────────────────────────────────────────────────────────
     "period",
+    // ── Navigation ────────────────────────────────────────────────────────────
     "print_screen",
+    // ── Letters ───────────────────────────────────────────────────────────────
     "q",
+    // ── Punctuation ───────────────────────────────────────────────────────────
     "quote",
+    // ── Letters ───────────────────────────────────────────────────────────────
     "r",
+    // ── Navigation ────────────────────────────────────────────────────────────
     "return",
     "right_arrow",
+    // ── Punctuation ───────────────────────────────────────────────────────────
     "right_bracket",
+    // ── Letters ───────────────────────────────────────────────────────────────
     "s",
+    // ── Navigation ────────────────────────────────────────────────────────────
     "scroll_lock",
+    // ── Punctuation ───────────────────────────────────────────────────────────
     "semicolon",
     "slash",
+    // ── Navigation ────────────────────────────────────────────────────────────
     "space",
+    // ── Letters ───────────────────────────────────────────────────────────────
     "t",
+    // ── Navigation ────────────────────────────────────────────────────────────
     "tab",
+    // ── Letters ───────────────────────────────────────────────────────────────
     "u",
+    // ── Navigation ────────────────────────────────────────────────────────────
     "up_arrow",
+    // ── Letters ───────────────────────────────────────────────────────────────
     "v",
+    // ── Volume ────────────────────────────────────────────────────────────────
     "volume_down",
     "volume_mute",
     "volume_up",
+    // ── Letters ───────────────────────────────────────────────────────────────
     "w",
     "x",
     "y",
@@ -195,6 +255,102 @@ mod tests {
         let json = serde_json::to_string(&kd).unwrap();
         assert_eq!(json, r#""space""#);
         let parsed: KeyDef = serde_json::from_str(&json).unwrap();
+        assert_eq!(kd, parsed);
+    }
+
+    // ── New keys added in Epic 17 ─────────────────────────────────────────────
+
+    #[test]
+    fn key_def_validate_accepts_arrow_keys_with_suffix() {
+        for key in ["left_arrow", "right_arrow", "up_arrow", "down_arrow"] {
+            let kd = KeyDef::new_unchecked(key);
+            assert!(kd.validate().is_ok(), "expected {key:?} to be valid");
+        }
+    }
+
+    #[test]
+    fn key_def_validate_accepts_f_keys_lowercase() {
+        for n in 1u8..=24 {
+            let name = format!("f{n}");
+            let kd = KeyDef::new_unchecked(&name);
+            assert!(kd.validate().is_ok(), "expected {name:?} to be valid");
+        }
+    }
+
+    #[test]
+    fn key_def_validate_accepts_punctuation_keys() {
+        for key in [
+            "grave", "minus", "equals", "left_bracket", "right_bracket",
+            "backslash", "semicolon", "quote", "comma", "period", "slash",
+        ] {
+            let kd = KeyDef::new_unchecked(key);
+            assert!(kd.validate().is_ok(), "expected {key:?} to be valid");
+        }
+    }
+
+    #[test]
+    fn key_def_validate_accepts_media_and_volume_keys() {
+        for key in [
+            "media_play", "media_next", "media_prev", "media_stop",
+            "volume_up", "volume_down", "volume_mute",
+        ] {
+            let kd = KeyDef::new_unchecked(key);
+            assert!(kd.validate().is_ok(), "expected {key:?} to be valid");
+        }
+    }
+
+    #[test]
+    fn key_def_validate_accepts_system_keys() {
+        for key in [
+            "caps_lock", "insert", "num_lock", "scroll_lock", "print_screen",
+            "pause", "brightness_down", "brightness_up", "eject", "mic_mute",
+        ] {
+            let kd = KeyDef::new_unchecked(key);
+            assert!(kd.validate().is_ok(), "expected {key:?} to be valid");
+        }
+    }
+
+    #[test]
+    fn key_def_validate_rejects_old_broken_arrow_names() {
+        // These were the incorrect names present in the old pump.rs (bug 1).
+        for key in ["left", "right", "up", "down"] {
+            let kd = KeyDef::new_unchecked(key);
+            assert!(
+                kd.validate().is_err(),
+                "expected old arrow name {key:?} to be rejected"
+            );
+        }
+    }
+
+    #[test]
+    fn key_def_validate_rejects_uppercase_f_key_names() {
+        // These were the incorrect names present in the old pump.rs (bug 2).
+        for key in ["F1", "F2", "F12"] {
+            let kd = KeyDef::new_unchecked(key);
+            assert!(
+                kd.validate().is_err(),
+                "expected uppercase F-key name {key:?} to be rejected"
+            );
+        }
+    }
+
+    #[test]
+    fn key_def_f_key_round_trips_via_serde() {
+        for n in [1u8, 12, 13, 20, 24] {
+            let name = format!("f{n}");
+            let kd = KeyDef::new_unchecked(&name);
+            let json = serde_json::to_string(&kd).expect("serialize");
+            let parsed: KeyDef = serde_json::from_str(&json).expect("deserialize");
+            assert_eq!(kd, parsed, "round-trip failed for {name:?}");
+        }
+    }
+
+    #[test]
+    fn key_def_media_stop_round_trips_via_serde() {
+        let kd = KeyDef::new_unchecked("media_stop");
+        let json = serde_json::to_string(&kd).expect("serialize");
+        assert_eq!(json, r#""media_stop""#);
+        let parsed: KeyDef = serde_json::from_str(&json).expect("deserialize");
         assert_eq!(kd, parsed);
     }
 }

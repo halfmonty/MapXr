@@ -1,6 +1,5 @@
 @import "tailwindcss";
 @plugin "daisyui" {
-  themes:
-    corporate,
-    business --prefersdark;
+  themes: corporate, business --prefersdark;
 }
+@import "../../../packages/design-tokens/base.css";

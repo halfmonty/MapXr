@@ -1,3 +1,9 @@
+---
+covers: Epic 7 (live finger visualiser and debug panel)
+status: Approved and fully implemented
+last-updated: 2026-03-19
+---
+
 # live visualiser and debug panel — Epic 7 specification
 
 ## Table of contents

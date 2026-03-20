@@ -15,7 +15,8 @@
         "title": "mapxr",
         "width": 900,
         "height": 600,
-        "dragDropEnabled": false
+        "dragDropEnabled": false,
+        "decorations": false
       }
     ],
     "security": {
@@ -31,6 +32,31 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "publisher": "mapxr contributors",
+    "copyright": "© 2026 mapxr contributors",
+    "category": "Utility",
+    "shortDescription": "Tap Strap keyboard remapper",
+    "longDescription": "mapxr maps Tap Strap BLE wearable devices to keyboard shortcuts, mouse actions, and custom automation profiles.",
+    "linux": {
+      "deb": {
+        "depends": ["libwebkit2gtk-4.1-0", "libappindicator3-1"]
+      }
+    },
+    "windows": {
+      "wix": {
+        "language": "en-US"
+      },
+      "nsis": {
+        "displayLanguageSelector": false,
+        "languages": ["English"]
+      }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDk4MDZEN0IwMTYzRkFFMjIKUldRaXJqOFdzTmNHbU41ZTNMZ2I1bDhSUnFWbVI0WmNITzk5R3FLQUg5NllkTHBsL0FaWSttUk0K",
+      "endpoints": ["https://github.com/halfmonty/mapxr/releases/latest/download/latest.json"]
+    }
   }
 }

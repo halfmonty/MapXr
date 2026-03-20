@@ -1,3 +1,9 @@
+---
+covers: Epic 6 (finger pattern widget component)
+status: Approved and fully implemented
+last-updated: 2026-03-19
+---
+
 # finger-pattern widget — Epic 6 specification
 
 ## Table of contents

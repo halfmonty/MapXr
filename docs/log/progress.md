@@ -1,992 +1,340 @@
-## 2026-03-18 — Profile persistence and device-aware suggestions
+## 2026-03-20 — Epic 14 complete: in-app update UI, README, icons
 
-**Tasks completed:** out-of-plan QoL improvement (startup profile selection)
+**Tasks completed:** 14.8, 14.9, 14.10, 14.11, 14.12, 14.13
 **Tasks in progress:** none
 
 **Files changed:**
 
-- `apps/desktop/src-tauri/src/state.rs` — added `Preferences` / `StoredPreferences` structs with `load` (graceful on missing/corrupt file) and `save` (write-then-rename atomic); added `preferences_path: PathBuf` to `AppState`; updated `build_app_state` to load `preferences.json` and use `last_active_profile_id` as the startup profile, falling back to alphabetical-first then built-in default; **follow-up fix:** added `profile_active: bool` field to `Preferences` (default `true`); startup now checks `profile_active` before selecting a profile — `false` skips all fallbacks and starts with the built-in empty profile; `StoredPreferences` uses `#[serde(default = "default_true")]` for backwards compatibility with existing files
-- `apps/desktop/src-tauri/src/commands.rs` — `activate_profile` writes `profile_active: true` and `last_active_profile_id` to `preferences.json`; `deactivate_profile` writes `profile_active: false` and clears `last_active_profile_id`
-- `apps/desktop/src/routes/devices/+page.svelte` — added `showSingleSuggestion` derived (`connected.length === 2 && activeProfile.kind === "single"`); added dismissible `alert-info` banner with "Go to Profiles" link and Dismiss button; refined existing dual warning copy
+- `apps/desktop/src-tauri/src/events.rs` — added `UPDATE_AVAILABLE`, `UPDATE_DOWNLOAD_PROGRESS` constants; `UpdateAvailablePayload`, `UpdateProgressPayload` structs
+- `apps/desktop/src-tauri/src/commands.rs` — added `UpdateInfoDto`, `check_for_update` command, `download_and_install_update` command (emits progress events, calls `app.restart()`)
+- `apps/desktop/src-tauri/src/lib.rs` — added `TRAY_ITEM_CHECK_UPDATES` tray menu item; `trigger_update_check` helper; `run_update_checker` background task (5 s delay, 24 h interval); registered both new commands in `invoke_handler`
+- `apps/desktop/src/lib/types.ts` — added `UpdateInfo`, `UpdateProgressPayload` interfaces
+- `apps/desktop/src/lib/commands.ts` — added `checkForUpdate()`, `downloadAndInstallUpdate()` wrappers
+- `apps/desktop/src/lib/events.ts` — added `update-available` and `update-download-progress` listeners wired to `updateStore`
+- `apps/desktop/src/lib/stores/updates.svelte.ts` — new `UpdateStore` class: `available`, `dismissed` (persisted to `localStorage`), `downloading`, `progress`, `downloadError`; `shouldShow` derived getter
+- `apps/desktop/src/lib/components/UpdateBanner.svelte` — new dismissible banner rendered above page content in layout
+- `apps/desktop/src/lib/components/UpdateDialog.svelte` — new DaisyUI `<dialog>` modal: release notes, progress bar, Install & Restart / Not now buttons
+- `apps/desktop/src/routes/+layout.svelte` — integrated `UpdateBanner` + `UpdateDialog`; fixed pre-existing `onMount` async/cleanup type error
+- `apps/desktop/src/routes/settings/+page.svelte` — added Updates section with manual "Check now" button
+- `README.md` — added Installation, First-time setup, Context Rules, Settings, System Tray, and updated Actions table and Build section; fixed "mapxr" → "MapXr" in prose
 
 **Notes:**
-Profile persistence lives on the Rust side so the engine starts with the correct profile before the frontend loads. A frontend `localStorage` approach would have caused a brief flicker of the wrong profile during initialisation.
+- `download_and_install_update` uses `Arc<AtomicU64>` for the downloaded-bytes counter because `tauri-plugin-updater`'s `on_chunk` callback is `Fn` (not `FnMut`), so mutation must go through atomics.
+- `app.restart()` returns `!` in Tauri v2, so the command function diverges there — `Result<(), String>` is satisfied without an unreachable `Ok(())`.
+- The pre-existing `onMount(async () => ... return cleanup)` type error in `+layout.svelte` was fixed by splitting into a synchronous `onMount` that fires an IIFE internally and returns the cleanup via a closure variable.
+- The backdrop close in `UpdateDialog` is intentionally disabled during download (`disabled={updateStore.downloading}`) so the user can't accidentally cancel a mid-flight install.
 
-`Preferences::load` treats any error (missing file, corrupt JSON) as a default/empty result rather than propagating it, so a damaged `preferences.json` never blocks startup. Errors are logged at `warn` level.
-
-**Bug found and fixed:** The initial implementation stored `last_active_profile_id: None` on deactivate, which was indistinguishable from a first-launch state (no preferences file). Both fell through to the alphabetical fallback, so the app always activated a profile on restart even if the user had explicitly deactivated. The fix adds `profile_active: bool` — `false` is only set by an explicit `deactivate_profile` call, while `default_true` ensures existing files and first-launch both behave as before.
-
-The "Switch to dual?" suggestion is dismissible for the session via `$state(false)`. It reappears on the next app launch — the suggestion is only relevant when device state actively changes, and the user should be reminded on a fresh session if the condition still holds.
-
-**Next:** Resume the implementation plan — Epic 8.1 (add `tap-cli` binary crate to the workspace)
+**Next:** Epic 14 complete. 14.6 (Windows code signing via SignPath.io) requires an external application process. Remaining stretch goals: S.1–S.5.
 
 ---
 
-## 2026-03-18 — Live device role reassignment without reconnecting
+## 2026-03-19 — Epic 14 started: bundler config, auto-updater, release workflow, CHANGELOG
 
-**Tasks completed:** out-of-plan QoL improvement (role reassignment while connected)
+**Tasks completed:** 14.1, 14.2, 14.3, 14.4, 14.7
 **Tasks in progress:** none
 
 **Files changed:**
 
-- `crates/tap-ble/src/tap_device.rs` — added `TapDevice::reassign(new_device_id, adapter, event_tx, status_tx)`: cancels background tasks (keepalive, notification, connection monitor), writes `ENTER_CONTROLLER_MODE` immediately to reset the device's keepalive timer, then respawns all three tasks under the new `DeviceId`; removed `#[allow(dead_code)]` from `tap_data` field now that it is used here
-- `crates/tap-ble/src/manager.rs` — added `BleManager::reassign_role(old_id, new_id)`: moves the `TapDevice` entry in the connected map, calls `reassign()`, emits `BleStatusEvent::Disconnected` (old role) then `BleStatusEvent::Connected` (new role) so the existing Tauri event pump updates the frontend automatically
-- `crates/tap-ble/src/scanner.rs` — fixed pre-existing clippy `unnecessary_lazy_evaluations` warning (`or_else` → `or`)
-- `apps/desktop/src-tauri/src/commands.rs` — added `#[tauri::command] reassign_device_role(address, new_role)`: looks up the current role for the address, calls `reassign_role`, updates and persists the device registry; fixed lifetime issue by saving the iterator result to a named binding before dropping the `MutexGuard`
-- `apps/desktop/src-tauri/src/lib.rs` — registered `commands::reassign_device_role` in `invoke_handler`
-- `apps/desktop/src/lib/commands.ts` — added `reassignDeviceRole(address, newRole)` wrapper with JSDoc
-- `apps/desktop/src/routes/devices/+page.svelte` — connected devices table: reordered columns (Device first, then Address, then Role, then action); added solo/left/right role selector buttons per row with current role highlighted as btn-primary; buttons disabled when role matches current or is occupied by another device (`canReassignTo` helper using `connectedRoles` derived set); Disconnect button disabled while a reassign is in progress; added reassign error alert
+- `apps/desktop/src-tauri/tauri.conf.json` — added bundle metadata (publisher, copyright, category, descriptions, linux deb deps, windows wix/nsis config); added `plugins.updater` config with placeholder pubkey and endpoint
+- `apps/desktop/src-tauri/Cargo.toml` — added `tauri-plugin-updater = "2"`; fixed description and authors fields
+- `apps/desktop/src-tauri/capabilities/default.json` — added `updater:default` permission
+- `apps/desktop/src-tauri/src/lib.rs` — registered `tauri_plugin_updater::Builder::new().build()` plugin
+- `.github/workflows/build-linux.yml` — removed `v*` tag trigger; now `workflow_dispatch` only (dev builds)
+- `.github/workflows/build-windows.yml` — same
+- `.github/workflows/release.yml` — new unified release workflow: triggers on `v*` tags; two parallel jobs (Linux: appimage+deb+rpm; Windows: msi+nsis); Rust cache via `Swatinem/rust-cache@v2`; npm cache; signing env vars from GitHub Secrets; pre-release detection via tag suffix containing `-`
+- `CHANGELOG.md` — created at repo root; documents semver convention; placeholder for all features built so far listed under `[Unreleased]`
+- `docs/plan/implementation-plan.md` — marked 14.1, 14.3, 14.4, 14.7 complete; noted macOS (14.5) skipped; noted Windows signing (14.6) recommendation
 
 **Notes:**
-The key insight is that `DeviceId` (role) is just a label stamped onto events — the underlying BLE connection, GATT characteristics, controller mode, and notification subscription are all properties of the `Peripheral` object and are unaffected by a role change. The only work needed is restarting the three background tasks with the new `DeviceId`.
+- macOS is explicitly skipped — no Apple Developer account, no Mac hardware to test on. The `"targets": "all"` in tauri.conf.json is correct since it builds whatever is available on the current runner OS, so Linux and Windows runners produce the right artifacts with no macOS-specific config needed.
+- The updater plugin requires two manual steps by the user before it is functional: (1) generate a keypair with `cargo tauri signer generate -w ~/.tauri/mapxr.key` and replace the `REPLACE_WITH_YOUR_PUBLIC_KEY` placeholder in `tauri.conf.json` with the public key output; (2) add `TAURI_SIGNING_PRIVATE_KEY` (and optionally `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`) as GitHub repository secrets. Without these steps, the release workflow still builds and publishes installers — it just won't produce a signed `latest.json` for the updater endpoint.
+- The GitHub repo URL placeholder in `tauri.conf.json` (`REPLACE_WITH_YOUR_GITHUB_USERNAME`) also needs to be filled in.
+- The two existing dev-build workflows retain `workflow_dispatch` so you can still trigger test builds without pushing a tag.
+- Pre-release detection: any tag containing `-` (e.g. `v1.0.0-beta.1`) is marked as a GitHub pre-release automatically.
 
-The UI prevents role conflicts entirely: a role button is enabled only when `candidate !== device.role && !connectedRoles.has(candidate)`. The Rust layer still validates (returns `DeviceNotFound` for an unknown old_id), but the conflict path (new role already occupied) is unreachable from the UI.
-
-`DeviceRegistry::assign` already handles deduplication: it retains only entries whose address differs from the new one, so reassigning "solo" → "right" automatically removes the old "solo" entry without extra code.
-
-**Next:** Resume the implementation plan — Epic 8.1 (add `tap-cli` binary crate to the workspace)
+**Next:** 14.2 — complete (icons generated); 14.8 — user-facing README
 
 ---
 
-## 2026-03-18 — Connected device name display
+## 2026-03-20 — Post-ship bug fixes: context monitor idempotency + haptic payload padding
 
-**Tasks completed:** out-of-plan bug fixes (connected device name)
+**Tasks completed:** (bug fixes, no new task IDs)
 **Tasks in progress:** none
 
 **Files changed:**
 
-- `apps/desktop/src/lib/stores/device.svelte.ts` — `ConnectedDevice` gains `name: string | null`; `DeviceStore` gains a `_names: Map<string, string | null>` backed by `localStorage` under the key `mapxr:device-names`; `_loadNames()` reads on construction; `_saveNames()` writes on every `setName()` call; `onConnected` resolves the name from the map; `setName(address, name)` persists and patches any already-present connected entry
-- `apps/desktop/src/routes/devices/+page.svelte` — `handleConnect` captures the device name from `discovered` synchronously before `await connectDevice(...)` (capturing after the await failed because `availableDevices` reactively removes the device once `device-connected` fires); calls `deviceStore.setName(address, name)` on success; connected devices table gains a Device column showing `device.name ?? "—"`; disconnect confirm modal shows device name instead of role string
+- `apps/desktop/src-tauri/src/pump.rs` — added idempotency guard in `run_context_monitor` to skip profile activation when `last_active_profile_id` already matches the rule target, preventing repeated haptic-on-profile-switch firings on Wayland window title changes
+- `crates/mapping-core/src/types/action.rs` — `VibrationPattern::encode()` now always returns a fixed 20-byte payload (2-byte header + 18 zero-padded duration slots) matching the C# SDK; previously short payloads caused the device to read uninitialised RAM as phantom durations, producing multiple unexpected buzzes
+- `crates/tap-ble/tests/physical_device.rs` — added `vibrate_pattern_hardware` manual test; removed `vibrate_raw` diagnostic test
+- `docs/decisions.md` — added entry for the 20-byte haptic payload requirement
 
 **Notes:**
-Two bugs were fixed in sequence:
-1. **Name was `null` after connecting**: the name lookup used `availableDevices.find(...)` *after* the `await`, but `availableDevices` is a `$derived` that filters out addresses already in `deviceStore.connected`. By the time `connectDevice` resolves, the `device-connected` Tauri event has already fired and removed the device from `availableDevices`. Fix: look up from `discovered` (raw, unfiltered) *before* the await.
-2. **Name missing after app restart**: `_names` was an in-memory `Map` — wiped on close. On restart the reconnect loop fires `device-connected` events with no UI interaction, so `setName` is never called. Fix: persist `_names` to `localStorage`; the map is loaded from storage on `DeviceStore` construction, so reconnect events immediately resolve the correct name.
+- The phantom-buzz bug was traced by adding diagnostic logging that confirmed a single BLE notification and a single software dispatch per tap. The root cause was found by comparing against the C# SDK reference implementation, which always zero-initialises a 20-byte buffer.
+- The Wayland context-monitor bug fired because `tokio::watch::Sender::send()` always increments the version counter, so `changed()` fires even when the focused window value is identical (title update on the same window).
 
-**Next:** Resume the implementation plan — Epic 8.1 (add `tap-cli` binary crate to the workspace)
+**Next:** no scheduled tasks — review stretch goals or raise new requirements with user
 
 ---
 
-## 2026-03-18 — BLE scan UX fixes: stale RSSI, duplicate connect, cached devices
+## 2026-03-19 — Epic 18 complete: VibrationPattern serde tests + hardware verification doc
 
-**Tasks completed:** out-of-plan bug fixes (BLE device scan UX)
+**Tasks completed:** 18.8 (Epic 18 fully complete)
 **Tasks in progress:** none
 
 **Files changed:**
 
-- `crates/tap-ble/src/device_info.rs` — added `seen_in_scan: bool` and `is_connected_to_os: bool` fields to `TapDeviceInfo`
-- `crates/tap-ble/src/scanner.rs` — Linux path (`discover_devices_le`): removed stale `.or(device_info.rssi)` RSSI fallback; added pre-scan RSSI snapshot to detect devices whose RSSI was cleared by a prior connection and re-appeared this scan; set `is_connected_to_os` from `device_info.connected`; set `seen_in_scan = rssi_appeared_this_scan || is_connected_to_os`. Non-Linux path (`collect_peripherals`): added `peripheral.is_connected().await` for `is_connected_to_os`; all returned peripherals remain `seen_in_scan = true`. Added `scan_with_adapter_all_returned_devices_are_seen_in_scan` test.
-- `apps/desktop/src-tauri/src/commands.rs` — `TapDeviceInfoDto` gains `seen_in_scan` and `is_connected_to_os` fields; DTO test updated
-- `apps/desktop/src/lib/types.ts` — `TapDeviceInfo` interface gains `seen_in_scan: boolean` and `is_connected_to_os: boolean`
-- `apps/desktop/src/routes/devices/+page.svelte` — scan list filtered to `availableDevices` (excludes already-connected addresses via `deviceStore`); signal badge replaced with `signalBadgeLabel`/`signalBadgeClass` helpers showing "Paired" / signal strength / "Cached"; `canConnect()` helper gates role selector and Connect button; manual post-connect filter removed (reactive `$derived` handles it)
+- `crates/mapping-core/src/types/action.rs` — added 5 standalone `VibrationPattern` serde tests: `serialises_as_json_array`, `deserialises_from_json_array`, `empty_round_trips_as_empty_array`, `boundary_values_round_trip`, `single_element_round_trips`
+- `docs/spec/haptics-spec.md` — added §Manual hardware verification with 8 test scenarios covering: basic vibrate action, per-event triggers, master toggle disable, empty-pattern no-op, 18-element truncation, no-device-connected silent drop; updated status to Approved
+- `docs/plan/implementation-plan.md` — marked 18.8 complete; updated current focus to "none — all epics complete"
 
 **Notes:**
-Three distinct scan states are now tracked and displayed:
-1. **Seen in scan** (`seen_in_scan=true`, `is_connected_to_os=false`): device was actively advertising; shows signal strength badge; Connect enabled.
-2. **Paired** (`is_connected_to_os=true`): device has an active BLE connection to the OS; BlueZ clears RSSI and the device is not advertising, but it is definitely present; shows "Paired" badge (secondary colour); Connect enabled so the user can attempt to take over the connection.
-3. **Cached** (`seen_in_scan=false`, `is_connected_to_os=false`): device is in the BlueZ cache from a previous scan but was not seen this time (likely off or out of range); shows "Cached" badge (ghost); Connect disabled.
+- `VibrationPattern` serialises as a plain JSON array (no wrapper object) because it derives `Serialize`/`Deserialize` on a newtype struct over `Vec<u16>`. The serde tests explicitly confirm this contract (e.g. `[200,100,200]` not `{"0":[200,100,200]}`).
+- Epic 18 is the last scheduled epic in the implementation plan. The stretch goals (S.1–S.4) remain unscheduled.
 
-The pre-scan RSSI snapshot (taken via `get_devices()` before `start_discovery`) handles a BlueZ timing edge case: a recently-disconnected device's first RSSI `PropertiesChanged` signal can arrive after the scan event-loop deadline but before `stop_discovery` completes, leaving `rssi_map` empty but `device_info.rssi` populated. The snapshot detects this by checking whether RSSI was absent pre-scan (cleared by the connection) and present post-scan.
-
-Devices that are already connected via our app are excluded from the scan list entirely via a `$derived` filter (`availableDevices`), which reacts live to `deviceStore.connected` changes.
-
-**Next:** Resume the implementation plan — Epic 8.1 (add `tap-cli` binary crate to the workspace)
+**Next:** no scheduled tasks — review stretch goals or raise new requirements with user
 
 ---
 
-## 2026-03-18 — Starter profile seeding on first launch
+## 2026-03-19 — Epic 18 tasks 18.5–18.7: haptic preferences, event triggers, settings UI
 
-**Tasks completed:** out-of-plan maintenance (default profile seeding)
+**Tasks completed:** 18.5, 18.6, 18.7
 **Tasks in progress:** none
 
 **Files changed:**
 
-- `apps/desktop/src-tauri/profiles/starter-right.json` — new starter profile: 15 right-hand single mappings (copy/paste/undo/save/nav arrows etc.)
-- `apps/desktop/src-tauri/src/state.rs` — added `STARTER_PROFILES` constant (`include_str!`), `seed_profiles_dir()` helper, and a call to it in `build_app_state` before the registry loads; added `tests::starter_profiles_all_parse_and_validate`
-- `profiles/` (root) — deleted; superseded by `apps/desktop/src-tauri/profiles/`
+- `apps/desktop/src-tauri/src/state.rs` — added `haptics_enabled` (default true), `haptic_on_tap` (false), `haptic_on_layer_switch` (true), `haptic_on_profile_switch` (true) to `StoredPreferences` and `Preferences`; updated `Default`, `load`, `save`; added 6 unit tests (defaults + backwards-compat loading)
+- `apps/desktop/src-tauri/src/commands.rs` — extended `TrayPreferences` with 4 haptic fields; updated `get_preferences` and `save_preferences`; wired `maybe_haptic_on_profile_switch` and `maybe_haptic_on_layer_switch` into `activate_profile`, `push_layer`, `pop_layer` command handlers
+- `apps/desktop/src-tauri/src/pump.rs` — added `PATTERN_SHORT_PULSE`, `PATTERN_DOUBLE_PULSE`, `PATTERN_TRIPLE_PULSE` constants; added `vibrate_pattern` helper; added `maybe_haptic_on_tap`, `maybe_haptic_on_layer_switch`, `maybe_haptic_on_profile_switch`; gated `Action::Vibrate` explicit dispatch on `haptics_enabled`; wired `maybe_haptic_on_tap` after non-empty outputs in both `push_event` and `check_timeout` paths; wired `maybe_haptic_on_layer_switch` in `PushLayer`/`PopLayer`/`SwitchLayer` execute arms and `process_outputs` engine-side layer_changed path; wired `maybe_haptic_on_profile_switch` in context monitor
+- `apps/desktop/src/lib/types.ts` — extended `TrayPreferences` with 4 haptic fields
+- `apps/desktop/src/routes/settings/+page.svelte` — added haptic initial state; added "Haptics" section with master toggle and 3 per-event toggles (per-event toggles visually greyed out when master is off)
 
 **Notes:**
-Seeding is a no-op if any `.json` file already exists in the config dir, so existing users and developers with profiles are unaffected. The `profiles/` dir next to the executable (used by `platform::profile_dir` as a dev override) still works — during `tauri dev`, the working exe is under `target/`, so the override does not trigger and the OS config dir is used instead. To use the dev override, symlink or copy `apps/desktop/src-tauri/profiles/` next to the binary.
+- The per-event haptic toggles dim (`opacity-40 pointer-events-none`) when `haptics_enabled` is false — saves an extra round-trip; the backend also gates each call independently so there is no race condition
+- `haptic_on_tap` fires before `process_outputs` so the device gets the short pulse immediately on gesture resolution, before any key simulation or layer action runs
 
-The `key_chord` action uses a flat `keys` array (all keys including modifiers), not a `key` + `modifiers` split — that is `Action::Key`'s format.
-
-**Next:** Resume the implementation plan from where it was left off
+**Next:** 18.8 — `VibrationPattern` serde round-trip tests; manual hardware verification steps
 
 ---
 
-## 2026-03-18 — Monorepo reorganisation into apps/ structure
+## 2026-03-19 — Epic 18 task 18.4: vibrate action editor
 
-**Tasks completed:** monorepo restructure (out-of-plan maintenance)
+**Tasks completed:** 18.4
 **Tasks in progress:** none
 
 **Files changed:**
 
-- `Cargo.toml` — workspace member updated from `"src-tauri"` to `"apps/desktop/src-tauri"`
-- `apps/desktop/src-tauri/Cargo.toml` — relative paths to `mapping-core` and `tap-ble` updated from `../crates/` to `../../../crates/`
-- `apps/desktop/src-tauri/tauri.conf.json` — no path changes needed (all paths relative to src-tauri/ itself are unchanged)
-- `src/` → `apps/desktop/src/` — Svelte frontend
-- `src-tauri/` → `apps/desktop/src-tauri/` — Rust Tauri backend
-- `static/` → `apps/desktop/static/` — static assets
-- `package.json`, `package-lock.json`, `svelte.config.js`, `vite.config.js`, `tsconfig.json`, `eslint.config.js`, `.prettierrc` → `apps/desktop/`
-- `mapxr-site/` → `apps/site/` — documentation website
-- `.github/workflows/build-linux.yml` — added `working-directory: apps/desktop`, `projectPath: apps/desktop`, updated artifact paths
-- `.github/workflows/build-windows.yml` — same changes as linux workflow
-- `.github/workflows/deploy-site.yml` — `paths` trigger, `working-directory`, and `publish_dir` updated to `apps/site`
-- `.gitignore` — root-level SvelteKit/build/Tauri paths updated to `apps/desktop/` prefixes
-- `CLAUDE.md` — file layout reference updated to reflect new structure
+- `apps/desktop/src/lib/types.ts` — added `VibrationPattern = number[]` type; added `{ type: "vibrate"; pattern: VibrationPattern }` to `Action` union
+- `apps/desktop/src/lib/components/ActionEditor.svelte` — added `"vibrate"` to `ALL_TYPES` and `TYPE_LABELS`; added `defaultAction` case (default `[200, 100, 200]`); added `VIBRATE_PRESETS` constants (short/double/triple pulse from spec); added `vibrateSetPattern`, `vibrateAddSegment`, `vibrateRemoveSegment`, `vibrateUpdateSegment` helpers; added vibrate UI section with preset buttons, per-segment on/off labels with number inputs, add/remove controls, 18-segment cap message, and empty-pattern warning
+- `apps/desktop/src/lib/components/ActionSummary.svelte` — added `vibrate` summary (`Vibrate [200, 100, 200]`); also added missing `hold_modifier` and `conditional` cases that were pre-existing omissions
 
 **Notes:**
-The `tauri.conf.json` `frontendDist: "../build"` path is still correct: relative to `src-tauri/`, it resolves to `apps/desktop/build/`, which is where SvelteKit outputs when invoked from `apps/desktop/`. Tauri must now be invoked from `apps/desktop/` (e.g. `cd apps/desktop && npm run tauri dev`), not the workspace root. The Cargo workspace root is still at the repo root, so `cargo check`/`cargo test` still work from root.
+- Duration inputs use `step=10`, `min=10`, `max=2550` matching the BLE encoding constraints; `vibrateUpdateSegment` also clamps and rounds to nearest 10ms client-side for immediate feedback
+- Segment labels ("On 1", "Off 1", "On 2", …) are derived from index parity so they stay correct after removes
+- The only TypeScript error in svelte-check is the pre-existing `+layout.svelte` async onMount issue, unchanged from before
 
-**Next:** Resume the implementation plan from where it was left off (check `docs/plan/implementation-plan.md` for next incomplete task)
+**Next:** 18.5 — extend `Preferences` with `haptics_enabled` + per-event flags; wire global gate
 
 ---
 
-## 2026-03-18 — Project website (mapxr-site) — full implementation
+## 2026-03-19 — Epic 18 tasks 18.1–18.3: haptics spec, BLE vibrate, Action::Vibrate
 
-**Tasks completed:** website (out-of-plan deliverable)
+**Tasks completed:** 18.1, 18.2, 18.3
 **Tasks in progress:** none
 
 **Files changed:**
 
-- `mapxr-site/vite.config.ts` — added `base: '/mapxr/'`, wired in `@tailwindcss/vite` plugin
-- `mapxr-site/src/app.css` — replaced scaffold CSS with `@import "tailwindcss"; @plugin "daisyui";`
-- `mapxr-site/src/App.svelte` — replaced scaffold demo with hash router (Svelte 5 `$state`/`$derived` runes), theme wrapper
-- `mapxr-site/src/components/Nav.svelte` — DaisyUI navbar with active-link highlighting, theme toggle (sun/moon swap), GitHub link, mobile dropdown
-- `mapxr-site/src/components/Footer.svelte` — DaisyUI footer
-- `mapxr-site/src/components/landing/Hero.svelte` — DaisyUI hero; headline, tagline, two CTA buttons
-- `mapxr-site/src/components/landing/FeatureCard.svelte` — DaisyUI card; icon + title + description
-- `mapxr-site/src/components/landing/Features.svelte` — 6-card grid of features
-- `mapxr-site/src/components/landing/HowItWorks.svelte` — DaisyUI steps (4-step walkthrough)
-- `mapxr-site/src/components/landing/GetStarted.svelte` — bottom CTA section
-- `mapxr-site/src/components/docs/DocsSidebar.svelte` — DaisyUI menu grouped by doc section
-- `mapxr-site/src/components/docs/DocsLayout.svelte` — two-column sidebar + content layout
-- `mapxr-site/src/components/devlog/DevlogEntry.svelte` — DaisyUI card with date, title, body, progress bar, tags
-- `mapxr-site/src/components/devlog/MilestoneList.svelte` — DaisyUI checkbox list of 9 epics with done/pending state
-- `mapxr-site/src/components/devlog/ProgressBar.svelte` — DaisyUI progress element with % label
-- `mapxr-site/src/views/Landing.svelte` — composes all landing components
-- `mapxr-site/src/views/Docs.svelte` — `import.meta.glob` lazy loader for doc pages
-- `mapxr-site/src/views/Devlog.svelte` — progress header + entry list + milestones sidebar
-- `mapxr-site/src/docs-pages/getting-started.svelte` — installation, pairing, first profile
-- `mapxr-site/src/docs-pages/profiles.svelte` — JSON schema, top-level fields, app matching
-- `mapxr-site/src/docs-pages/triggers.svelte` — finger notation, single/double/combo triggers
-- `mapxr-site/src/docs-pages/actions.svelte` — key, type, mouse, layer, hold_modifier, noop
-- `mapxr-site/src/docs-pages/layers.svelte` — layer stack, push/pop/activate, example
-- `mapxr-site/src/data/docs-manifest.ts` — `DOCS: DocEntry[]` — 5 pages in 3 groups
-- `mapxr-site/src/data/devlog.ts` — `DEVLOG: DevlogEntry[]` — 7 entries drawn from progress.md
-- `.github/workflows/deploy-site.yml` — GitHub Actions: build mapxr-site → push to gh-pages branch
+- `docs/spec/haptics-spec.md` — new: GATT characteristic C3FF0009, payload format, VibrationPattern encoding rules, vibrate action schema, event-triggered patterns, built-in pattern constants, Settings schema, task breakdown; sources cited from `gatt-characteristics.txt` and `vibration.txt`
+- `crates/mapping-core/src/types/action.rs` — added `VibrationPattern` struct with `encode()` method; added `Action::Vibrate { pattern }` variant; updated doc comment; added 12 encoding tests + 4 serde round-trip tests
+- `crates/mapping-core/src/types/mod.rs` — exported `VibrationPattern`
+- `crates/tap-ble/src/tap_device.rs` — added `HAPTIC_UUID` constant (C3FF0009); implemented `TapDevice::vibrate()`; imports `VibrationPattern` from `mapping_core`; added `haptic_uuid_is_correct` test and hardware verification comments
+- `crates/tap-ble/src/manager.rs` — added `BleManager::vibrate_all()` which iterates connected devices and calls `vibrate()`; errors per-device are logged and do not abort the loop
+- `crates/tap-ble/src/lib.rs` — no re-export of VibrationPattern (canonical home is mapping-core)
+- `apps/desktop/src-tauri/src/pump.rs` — added `Action::Vibrate` arm in `execute_action` (calls `ble_manager.vibrate_all`); added `"vibrate"` to `action_kind_name`
+- `docs/plan/implementation-plan.md` — marked 18.1–18.3 complete; updated current focus to 18.4
 
 **Notes:**
-- Tailwind v4 + DaisyUI v5 install: `npm install -D tailwindcss @tailwindcss/vite daisyui`
-- No `tailwind.config.js` or `postcss.config` needed — Tailwind v4 handles this via its Vite plugin
-- DaisyUI theme toggle persists choice in `localStorage`; `data-theme` is set on `<html>` via a `$effect`
-- Doc pages lazy-loaded via `import.meta.glob` — each page is its own JS chunk (verified in build output)
-- `vite.config.ts` sets `base: '/mapxr/'` for GitHub Pages subdirectory hosting
-- Open question: repo name must be `mapxr` for the base path to match. If using a custom domain, change `base` to `'/'`
+- `VibrationPattern` lives in `mapping-core` (not `tap-ble`) because it is part of the `Action` type. `tap-ble` imports it from `mapping_core::types`. The BLE encoding (`encode()`) is also in `mapping-core` — it is pure arithmetic with no BLE-specific types, so this does not couple the core to the BLE layer.
+- `vibrate_all` dispatches to all connected devices; per-device errors are logged at `warn` but don't fail the action — consistent with how key simulation errors are handled.
+- The `haptics_enabled` global gate (task 18.5) is not yet in place; vibration fires unconditionally for now.
 
-**Next:** Epic 8.1 — Add `tap-cli` binary crate to the workspace
+**Next:** 18.4 — add vibrate action editor to the Svelte action editor panel (pattern builder: add/remove segments, duration inputs)
 
 ---
 
-## 2026-03-16 — Fix double-tap inversion bug via hardware-bounce debounce
+## 2026-03-19 — Epic 17 complete: extended keyboard key support (17.1–17.5)
 
-**Tasks completed:** bug fix (no task ID — reported during manual testing)
+**Tasks completed:** 17.1, 17.2, 17.3, 17.4, 17.5
 **Tasks in progress:** none
 
 **Files changed:**
 
-- `crates/mapping-core/src/engine/combo_engine.rs` — added `DEBOUNCE_WINDOW_MS = 50` constant and `debounce_last: HashMap<DeviceId, (TapCode, Instant)>` field to `ComboEngine`; in `push_event`, same-device same-code events arriving within 50 ms of the previous event are silently discarded (single-kind profiles only; dual profiles are exempt because they legitimately stack same-device events for cross-device combo detection)
-- `crates/mapping-core/tests/combo_engine.rs` — added three new tests: `hardware_bounce_duplicate_within_debounce_window_is_discarded`, `hardware_bounce_different_code_is_not_debounced`, `hardware_bounce_outside_debounce_window_is_treated_as_second_tap`
+- `docs/spec/extended-keys-spec.md` — new: full audit, canonical key list, enigo mapping table, platform availability matrix, implementation task breakdown
+- `docs/spec/mapping-core-spec.md` — §Key enum updated: flat list replaced with grouped table; added platform-limited key note and cross-reference to extended-keys-spec.md
+- `crates/mapping-core/src/types/key_def.rs` — `VALID_KEYS`: added `media_stop`, `pause`, `brightness_down`, `brightness_up`, `eject`, `mic_mute`; fixed comments; added 8 new tests covering new keys, serde round-trips, and rejection of old broken names (`left`/`F1` etc.)
+- `apps/desktop/src-tauri/src/pump.rs` — rewrote `name_to_key`: fixed bug 1 (arrow keys: `"left"` → `"left_arrow"`), bug 2 (F-keys: `"F1"` → `"f1"`), bugs 3–6 (F13–F24, punctuation, system keys, media/volume all now mapped); added all new keys using `#[cfg]` on match arms for platform-specific variants
+- `apps/desktop/src/lib/types.ts` — replaced flat `KNOWN_KEY_NAMES` array with `KEY_GROUPS` (grouped structure with `platformNote`); `KNOWN_KEY_NAMES` is now derived from it
+- `apps/desktop/src/lib/components/ActionEditor.svelte` — key picker for `key` action switched from text input + datalist to `<select>` with `<optgroup>` groups; key chord datalist updated to use `KEY_GROUPS`
 
 **Notes:**
-- Root cause: the TAP Strap hardware emits spurious duplicate BLE notifications within ~10–30 ms of a genuine tap. With a double-tap binding present, the engine treated the bounce as a second intentional tap, advancing `tap_pending` to `TapPending::Two` and firing the double-tap action on what the user intended as a single tap. Conversely, an intentional double tap produced three events (genuine + bounce + genuine), triggering a triple-tap dispatch ("no match") and then a single-tap dispatch — the inverted behavior the user observed.
-- The 50 ms window catches real TAP Strap bounces while still allowing intentional double-tapping (second tap normally arrives 100–200 ms after the first). Dual profiles are exempt to preserve the stacking behaviour tested in `rapid_alternating_dual_same_device_stacks_then_all_resolve`.
+- Six bugs were found during audit: arrow keys, F-keys (case), F13–F24, punctuation, locking/system keys, and media/volume keys were all declared valid in `VALID_KEYS` but silently fired nothing due to missing/wrong `name_to_key` arms.
+- Platform-specific keys use `#[cfg]` on match arms — on unsupported platforms those arms are simply absent so the key name falls through to the `other` catch-all (logs warn, returns None). No runtime platform check needed.
+- `f21`–`f24` are not available on macOS (enigo constraint). All others are cross-platform or limited as documented in the spec.
+- The pre-existing `+layout.svelte` TypeScript error (async onMount return type mismatch) is not introduced by this epic.
+- Windows-only keys (`menu`, `sleep`, `browser_*`) were excluded — enigo supports them only on Windows, making them poor cross-platform additions.
 
-**Next:** Epic 8.1 — Add `tap-cli` binary crate to the workspace
+**Next:** 18.1 — research Tap BLE vibration command format; write `docs/spec/haptics-spec.md` (spec-first, needs approval before 18.2)
 
 ---
 
-## 2026-03-16 — Windows build via GitHub Actions; root README
+## 2026-03-19 — QoL: device name in notifications + save_profile hot-reload
 
-**Tasks completed:** partial 9.4 (Windows-only CI workflow); 9.8 (user-facing README.md)
+**Tasks completed:** (out-of-band bugfixes/QoL, no plan task IDs)
 **Tasks in progress:** none
 
 **Files changed:**
 
-- `.github/workflows/build-windows.yml` — new GitHub Actions workflow; runs on `windows-latest`, installs Rust + Node, runs `npm ci`, invokes `tauri-apps/tauri-action@v0` with `GITHUB_TOKEN` passed explicitly; uploads `.msi`/NSIS `.exe` as artifacts; triggers on `workflow_dispatch` or `v*` tag push
-- `README.md` — new user-facing README covering project overview, prerequisites, dev setup, building for Linux/Windows, profile directory layout, and a quick-start example profile
+- `crates/tap-ble/src/tap_device.rs` — added `pub async fn name() -> Option<String>` to `TapDevice`; populated `name` field in `BleStatusEvent::Disconnected` (unexpected drop) and `BleStatusEvent::Connected` (auto-reconnect)
+- `crates/tap-ble/src/manager.rs` — added `name: Option<String>` to both `BleStatusEvent` variants; populated at all four creation sites (`connect`, `disconnect`, `reassign_role` × 2); get name before `insert`/`remove` so peripheral is still held
+- `apps/desktop/src-tauri/src/pump.rs` — added `device_label(name, role)` helper producing `"Name (Role)"` or `"Role"` fallback; updated notification body to use it; updated `ble_status_to_event` match arms to use `..`
+- `apps/desktop/src-tauri/src/commands.rs` — `save_profile` now takes `app: tauri::AppHandle`; after registry reload, checks if saved `layer_id` is in the current engine stack and calls `set_profile` + emits `layer-changed` if so (hot-reload without deactivate/reactivate)
 
 **Notes:**
-- `GITHUB_TOKEN` is a GitHub built-in secret — no user action required; repo must have "Read and write permissions" enabled under Settings → Actions → General for the release step to create GitHub Releases
-- The workflow covers Windows only; macOS and Linux CI/release targets (full task 9.4) are deferred
-- 9.8 README is a development-era README; update installation section once packaging (9.1–9.3) is complete
+- `BleStatusEvent` is a public type in `tap-ble`; adding the `name` field is additive but required updating all match arms. `ble_status_to_event` in pump.rs now uses `..` on both arms.
+- `save_profile` hot-reload: if a pushed layer is saved, `set_profile` replaces the base and clears the stack — acceptable since the profile definition changed.
+- The `libayatana-appindicator` deprecation warning in the terminal is an upstream Tauri tray issue on Linux; not actionable from our code.
 
-**Next:** Epic 8.1 — Add `tap-cli` binary crate to the workspace
+**Next:** 17.1 — audit enigo key set; extend `mapping-core-spec.md` §Key enum with F1–F24, media keys, and system keys (spec-first, needs approval before 17.2)
 
 ---
 
-## 2026-03-15 — Implement hold_modifier action (sticky modifier keys)
+## 2026-03-19 — Epic 16 complete: OS desktop notifications (16.1–16.6)
 
-**Tasks completed:** hold_modifier feature (spec-approved, not in original numbered task list)
+**Tasks completed:** 16.1, 16.2, 16.3, 16.4, 16.5, 16.6
 **Tasks in progress:** none
 
 **Files changed:**
 
-- `docs/spec/hold-modifier-spec.md` — new approved spec document
-- `crates/mapping-core/src/types/hold_modifier_mode.rs` — new `HoldModifierMode` enum with Toggle/Count/Timeout variants; serde round-trip tests
-- `crates/mapping-core/src/types/action.rs` — added `HoldModifier` variant; 9 new tests
-- `crates/mapping-core/src/types/mod.rs` — added module + re-export for `HoldModifierMode`
-- `crates/mapping-core/src/error.rs` — added 5 new `ProfileError` variants for hold_modifier validation
-- `crates/mapping-core/src/types/profile.rs` — added `check_hold_modifier_rules()` validator; 6 new validation tests; updated imports
-- `crates/mapping-core/src/engine/combo_engine.rs` — added `HeldModifierEntry`/`ActiveHoldMode` structs; `held_modifiers: Vec<HeldModifierEntry>` field; `update_hold_modifier()`, `decrement_hold_modifier_counts()`, `expire_held_modifier_timeouts()`, `held_modifier_set()`, `merge_held_modifiers()`, `merge_held_modifiers_into_chord()`, `apply_held_modifiers_to_macro_steps()` methods; updated `execute_action` to take `now: Instant` and apply held modifiers to Key/KeyChord/TypeString/Macro; updated `check_timeout()` and `next_deadline()` for timeout entries
-- `crates/mapping-core/tests/combo_engine.rs` — 13 new engine integration tests covering all spec scenarios
-- `src/lib/types.ts` — added `HoldModifierMode` type; added `hold_modifier` variant to `Action` union
-- `src/lib/components/ActionEditor.svelte` — added `hold_modifier` to type selector, `TYPE_LABELS`, `defaultAction`, helper functions, and form UI; macro steps now disallow `hold_modifier`
+- `docs/spec/notifications-spec.md` — new: notification events, payload format, defaults, Settings UI placement
+- `apps/desktop/src-tauri/src/state.rs` — added `notify_device_connected`, `notify_device_disconnected`, `notify_layer_switch`, `notify_profile_switch` to `StoredPreferences` and `Preferences`; updated `Default`, `load`, `save`; added 5 unit tests
+- `apps/desktop/src-tauri/src/lib.rs` — added `pub(crate) fn send_notification` helper (best-effort, logs warn on failure)
+- `apps/desktop/src-tauri/src/pump.rs` — added `capitalize_role`, `maybe_notify_layer_switch`, `maybe_notify_profile_switch` helpers; wired BLE connect/disconnect notifications into `run_ble_status_listener`; wired layer-switch notifications into `execute_action` (PushLayer, PopLayer, SwitchLayer) and `process_outputs` (engine-side `output.layer_changed`); wired profile-switch notification into `run_context_monitor`
+- `apps/desktop/src-tauri/src/commands.rs` — extended `TrayPreferences` DTO with 4 notification fields; updated `get_preferences` and `save_preferences` to include them; wired profile-switch notification into `activate_profile`; wired layer-switch notifications into `push_layer` and `pop_layer` commands
+- `apps/desktop/src/lib/types.ts` — extended `TrayPreferences` interface with 4 notification fields
+- `apps/desktop/src/routes/settings/+page.svelte` — added "Notifications" section with 4 toggle rows; updated default state
 
 **Notes:**
-- `execute_action` signature changed to accept `now: Instant` to support Timeout mode deadline calculation
-- `held_modifiers` state is deliberately NOT cleared on push/pop/switch_layer per spec §3
-- `set_profile()` clears `held_modifiers` (full reset)
-- All 263 mapping-core tests pass; clippy clean; fmt clean
-- The `+layout.svelte` TypeScript error is pre-existing (unrelated to this feature)
+- `notify_layer_switch` defaults to `false` (can be noisy for users who switch layers often via combos)
+- Profile-switch vs layer-switch distinction: `activate_profile` command and context monitor → profile_switch; PushLayer/PopLayer/SwitchLayer actions and commands → layer_switch
+- `deactivate_profile` does not fire a profile-switch notification (user explicitly turned off all profiles)
+- `auto_reconnect` calls `emit_layer_changed` at startup; no notification fired there (startup path)
+- Notifications are best-effort: OS errors logged at warn, never propagated to UI
 
-**Next:** Epic 8.1 — Add `tap-cli` binary crate to the workspace
+**Next:** 17.1 — audit enigo key set and extend `mapping-core-spec.md` §Key enum (spec-first; must be approved before 17.2)
 
 ---
 
-## 2026-03-15 — Dual-device alternating tap: analysis + tap_code=0 guard + coverage tests
+## 2026-03-19 — Epic 13 complete: design system documented (13.4–13.5)
 
-**Tasks completed:** (bug investigation — not task-numbered)
+**Tasks completed:** 13.4, 13.5
 **Tasks in progress:** none
 
 **Files changed:**
 
-- `crates/mapping-core/src/engine/combo_engine.rs` — added tap_code=0 early-return guard in `push_event`; a zero-code notification (all-open / finger release) would previously enter `combo_pending` and consume a partner slot from the next real tap
-- `crates/mapping-core/tests/combo_engine.rs` — added three tests: `rapid_alternating_dual_taps_all_combos_fire`, `rapid_alternating_dual_taps_left_first_all_combos_fire`, `rapid_alternating_dual_same_device_stacks_then_all_resolve`
+- `apps/site/src/lib/components/Nav.svelte` — `LIGHT = 'corporate'` (was left as `'wireframe'`)
+- `apps/site/src/app.html` — flash-prevention script: `wireframe` → `corporate`
+- `docs/design-system.md` — new: colour token table, typography, spacing, component conventions, layout diagrams for desktop and site
 
 **Notes:**
-User reported: rapid R→L→R→L alternation misses 3rd and 4th taps (they eventually fire). Thorough analysis confirmed the engine logic is correct — all three new tests pass. Likely causes of the real-world issue (in order of probability):
-1. **combo_window_ms too small**: if the user successfully saved 40 ms after the earlier bug fix, and their tap gaps exceed 40 ms, events would time out as solos instead of forming combos.
-2. **tap_code=0 release events**: if the TAP hardware sends an all-open notification between taps, it would previously enter combo_pending and shift partner matching. The new guard filters these out.
-3. **Profile configuration**: a sequence trigger in the dual profile starting with the same tap code as the alternating taps would consume events before they reach combo_pending.
-4. **BLE timing**: infrequent delivery delays that push some gaps just over the combo window boundary.
+Full audit of 25 Svelte files found no hardcoded colours or non-semantic Tailwind palette classes in either app. The only fixes needed were the two `wireframe` stragglers in `apps/site` left from the earlier theme rename.
 
-Recommended diagnostic: enable debug mode in the app and observe `resolved`/`unmatched`/`combo_timeout` events during alternating taps to see exactly what the engine is seeing.
-
-**Next:** Continue with next incomplete task in `docs/plan/implementation-plan.md`.
+**Next:** 16.1 — write `docs/spec/notifications-spec.md` (spec-first, must be approved before any Epic 16 implementation)
 
 ---
 
-## 2026-03-15 — Latency optimizations: immediate dispatch, precise deadline sleep, lower combo window
+## 2026-03-19 — Design system: shared base config + corporate/business themes; plan restructure (13.1–13.3)
 
-**Tasks completed:** (latency improvements — not task-numbered; out-of-band optimization session)
+**Tasks completed:** 13.1, 13.2, 13.3
 **Tasks in progress:** none
 
 **Files changed:**
 
-- `crates/mapping-core/src/engine/combo_engine.rs` — Opt A: added `needs_wait: HashSet<TapCode>` field (rebuilt by `rebuild_overloads`); in `push_event`, codes not in `needs_wait` now dispatch immediately via `flush_tap_pending_now` + `dispatch()` instead of going through the 250 ms `handle_tap` buffer; added `flush_tap_pending_now` helper; added `next_deadline() -> Option<Instant>` method for pump scheduling; changed `DEFAULT_COMBO_WINDOW_MS` from 150 → 80 (Opt C); added `build_needs_wait` free function
-- `crates/mapping-core/src/engine/layer_stack.rs` — added `pub fn next_timeout() -> Option<Instant>` so `ComboEngine::next_deadline` can include layer auto-pop deadlines
-- `src-tauri/src/pump.rs` — removed `TIMEOUT_POLL_MS` constant and fixed 50 ms interval; replaced with dynamic `tokio::time::sleep_until(next_deadline)` pattern (Opt B)
-- `crates/mapping-core/tests/combo_engine.rs` — renamed `single_tap_non_overloaded_resolves_immediately` to match new behavior; updated `check_timeout_flushes_single_tap_after_double_tap_window_expires` to use a profile with DoubleTap (so code 1 still buffers); updated all debug-event tests to check the first push output; split `debug_resolved_waited_ms_reflects_buffering_duration` into two tests (immediate vs buffered); added new tests: `single_tap_only_profile_dispatches_immediately`, `single_tap_with_double_tap_binding_still_waits`, `single_tap_triple_tap_binding_still_waits`, `next_deadline_none_when_nothing_pending`, `next_deadline_set_after_tap_buffered`
-- `crates/mapping-core/tests/layer_stack.rs` — updated all tests that relied on the "buffer first, flush on second tap" pattern to check the first push output directly
+- `packages/design-tokens/base.css` — new shared directory/file; placeholder for future `@theme` token overrides (see Notes)
+- `apps/desktop/src/app.css` — `@plugin "daisyui" { themes: corporate, business --prefersdark; }` + `@import "../../../packages/design-tokens/base.css"`
+- `apps/site/src/app.css` — same plugin config + same shared import
+- `apps/desktop/src/app.html` — added flash-prevention inline script (localStorage + prefers-color-scheme → corporate/business); fixed title from "Tauri + SvelteKit + Typescript App" to "MapXr"
+- `apps/site/src/app.html` — flash-prevention script updated to use corporate/business
+- `apps/site/src/lib/components/Nav.svelte` — `LIGHT = 'corporate'`
+- `apps/desktop/src/lib/components/TitleBar.svelte` — added theme toggle button (sun/moon icon) before window controls; reads/writes localStorage; syncs `data-theme` on `<html>` via `$effect`
+- `docs/reference/project-structure.md` — added `packages/design-tokens/` entry
+- `docs/plan/implementation-plan.md` — 13.1–13.3 marked complete; Epic 14 (CLI) demoted to S.5 stretch goal; old 15→14 (packaging), old 16→15 (Android); new Epic 16 (notifications), Epic 17 (extended keys), Epic 18 (haptics) added
 
 **Notes:**
-Three independent optimizations implemented:
-- **Opt A** eliminates the 250 ms double-tap buffer for codes with no multi-tap binding. For a typical single-tap typing profile, every keystroke now fires at BLE delivery latency (~10–50 ms) rather than 250 ms. The key invariant is that `needs_wait` contains any code with a DoubleTap or TripleTap trigger in any layer of the active stack; only those codes go through `handle_tap`. A subtle correctness concern: the immediate dispatch path calls `flush_tap_pending_now` first, so any pending tap for a different code (which must be from a `needs_wait` code that went through `handle_tap`) is flushed in order before the new code fires.
-- **Opt B** eliminates up to 50 ms of extra latency on all timed flushes (double-tap expiry, combo expiry, sequence expiry, layer timeout). The pump now sleeps until the exact deadline.
-- **Opt C** reduces the default combo window from 150 → 80 ms, saving ~70 ms per unmatched event in dual mode.
+- Tailwind v4 resolves `@plugin "daisyui"` relative to the declaring CSS file, not the importing entry point. Putting `@plugin` in `packages/design-tokens/base.css` caused a build error (`Can't resolve 'daisyui'`). Fix: `@plugin "daisyui"` stays in each app's own `app.css`; the shared file is reserved for future `@theme` variable overrides.
+- Pre-existing TypeScript error in `apps/desktop/src/routes/+layout.svelte` (`async onMount` returning a cleanup — Svelte type limitation) — not introduced this session.
+- Light theme is `corporate`, dark theme is `business --prefersdark` in both apps.
 
-**Next:** Continue with next incomplete task in `docs/plan/implementation-plan.md`.
+**Next:** 13.4 — visual pass over site and app pages to confirm consistency after theme change
 
 ---
 
-## 2026-03-15 — Four runtime bug fixes: profile validation, auto-reconnect, tap flush
+## 2026-03-19 — Frameless window + tray restoration fix
 
-**Tasks completed:** (bug fixes — no task numbers; all pre-Epic 8 runtime issues)
+**Tasks completed:** (bugfix, no new task)
 **Tasks in progress:** none
 
 **Files changed:**
 
-- `crates/mapping-core/src/types/profile.rs` — made `validate()` public so callers outside the
-  crate (e.g. `save_profile` Tauri command) can call it before writing to disk
-- `src-tauri/src/commands.rs` — `save_profile`: call `profile.validate()` before writing to disk
-  so invalid profiles are rejected with a descriptive error instead of being silently persisted;
-  `disconnect_device`: now also removes the device from `DeviceRegistry` and saves `devices.json`
-  so the device is not auto-reconnected on next launch
-- `src/routes/profiles/+page.svelte` — added Delete button to profile load-error warning banners
-  so the user can remove invalid profile files directly from the UI without navigating the filesystem
-- `crates/tap-ble/src/device_registry.rs` — `assign()`: added `self.entries.retain(|_, a| *a != address)`
-  before inserting so one physical device cannot appear under multiple roles across sessions;
-  added `iter()` method exposing all (DeviceId, BDAddr) pairs for auto-reconnect; added regression
-  test `device_registry_assign_removes_stale_role_for_same_address`
-- `src-tauri/src/state.rs` — added `auto_reconnect()` async function: two-phase reconnect —
-  (1) try direct connect for each saved device from the adapter's existing peripheral cache;
-  (2) run a 5-second BLE scan for any device that returned `DeviceNotFound`, then retry
-- `src-tauri/src/lib.rs` — spawns `auto_reconnect` as a background task after app state is
-  registered with Tauri, so previously paired devices reconnect automatically on app restart
-- `crates/mapping-core/src/engine/combo_engine.rs` — `check_timeout()`: added call to new
-  `flush_expired_tap_pending()`; added `flush_expired_tap_pending()` method that proactively
-  dispatches buffered single/double taps once the relevant window has elapsed, fixing the
-  "one tap behind" bug where taps only fired when a subsequent tap arrived to flush them
-- `crates/mapping-core/tests/combo_engine.rs` — added two regression tests:
-  `check_timeout_flushes_single_tap_after_double_tap_window_expires` and
-  `check_timeout_flushes_double_tap_after_triple_tap_window_expires`
+- `apps/desktop/src-tauri/tauri.conf.json` — `"decorations": false` (frameless window)
+- `apps/desktop/src-tauri/src/lib.rs` — reverted all minimize/always-on-top hacks; close handler back to `win.hide()`; `toggle_window_visibility` back to `hide`/`show`
+- `apps/desktop/src-tauri/capabilities/default.json` — added `core:window:allow-close`, `allow-minimize`, `allow-toggle-maximize`, `allow-internal-toggle-maximize`, `allow-start-dragging`
+- `apps/desktop/src/lib/components/TitleBar.svelte` — new custom title bar: drag region, Minimize/Maximize/Close SVG buttons, DaisyUI styling (close hovers red)
+- `apps/desktop/src/routes/+layout.svelte` — TitleBar added at top of layout; `windowTitle` derived from active profile name (`"MapXr"` / `"MapXr - [Profile Name]"`)
 
 **Notes:**
+After implementing the tray, restoring the window from the tray left KWin's title bar buttons (close/minimize/maximize) unresponsive until the user double-clicked the title bar. Root cause: KDE Plasma (Wayland) loses track of server-side decoration state during hide/show cycles — the same issue Discord/Electron apps avoid by using frameless windows with custom HTML title bars. Attempts to work around it via `set_always_on_top` toggle, delays, and `minimize()` instead of `hide()` all failed. The correct fix is `decorations: false` + a custom Svelte title bar, which also eliminates the problem entirely since there are no compositor-managed decorations to get confused.
 
-**Bug 1 — Profile save validation ("trigger code kind mismatch"):**
-`save_profile` wrote profiles to disk without calling `validate()`. A dual profile with a
-single-format tap code ("xoooo") had been written before `defaultCode()` was fixed; every
-subsequent `list_profiles` reload emitted `profile-error` events. Fix: `validate()` made public,
-called in `save_profile` before the filesystem write. Invalid profiles are now rejected at save
-time with a descriptive error. Also added a Delete button to load-error banners so users can
-remove broken files without touching the filesystem directly.
-
-**Bug 2 — Auto-reconnect not working:**
-btleplug's `adapter.peripherals()` is empty at startup; the peripheral cache is only populated
-after a BLE scan. `find_peripheral` therefore always returned `None` for saved devices. Fix:
-two-phase approach — phase 1 tries a direct connect (fast, works on Linux/BlueZ when the OS
-has the device bonded); phase 2 runs a 5-second scan then retries any device that returned
-`DeviceNotFound` in phase 1. Failures are logged and skipped; they never block startup.
-
-**Bug 3 — Device connecting twice (solo and right):**
-`DeviceRegistry::assign()` only removed the old entry for the same `DeviceId`, not other roles
-pointing at the same physical address. After a session where the device was "right" and another
-where it was "solo", both entries survived in `devices.json`. At startup, `auto_reconnect`
-connected the same hardware under both roles. Fix: `retain(|_, a| *a != address)` clears any
-stale role before inserting the new one.
-
-**Bug 4 — Taps detected but "no match" / firing one tap late:**
-Every tap is buffered in `tap_pending` (waiting for a possible double/triple tap within the
-configured window). `flush_expired_tap_pending` was only called from `push_event` (i.e. lazily
-on the next incoming tap). With no subsequent tap, the buffered action never fired. The 50ms
-`check_timeout` timer only handled layer-stack timeouts, not `tap_pending`. Fix: added
-`flush_expired_tap_pending()` called unconditionally from `check_timeout`. Now any tap that has
-aged past its window is dispatched within ~50ms of the deadline, regardless of whether another
-tap arrives.
-
-**Next:** Epic 8 — profile normalisation CLI tool (8.1–8.7). Spec approved. Begin with 8.1.
+**Next:** 13.1 — audit Tailwind/DaisyUI config in both apps (Epic 13)
 
 ---
 
-## 2026-03-14 — BLE root cause fix: initialize BleManager on Tauri's async runtime
+## 2026-03-19 — Epic 12 complete: system tray and background operation
 
-**Tasks completed:** (bug fix — no task number)
+**Tasks completed:** 12.1, 12.2, 12.3, 12.4, 12.5 (a/b/c), 12.6, 12.7, 12.8
 **Tasks in progress:** none
 
 **Files changed:**
 
-- `src-tauri/src/lib.rs` — replaced temporary `current_thread` tokio runtime with a
-  `sync_channel` + `tauri::async_runtime::spawn` pattern to initialize `AppState` on
-  Tauri's persistent async runtime instead of a short-lived throwaway runtime
-- `crates/tap-ble/src/scanner.rs` — (from prior session) `discover_devices_le` takes
-  `adapter: &Adapter` parameter; `discover_devices` creates adapter and passes it; tests updated
-- `crates/tap-ble/src/manager.rs` — (from prior session) `BleManager::scan` calls
-  `discover_devices_le(&self.adapter, ...)` / `scan_with_adapter(&self.adapter, ...)` directly
+- `docs/spec/system-tray-spec.md` — new spec (12.1)
+- `apps/desktop/src-tauri/Cargo.toml` — added `tauri` `tray-icon`+`image-png` features, `tauri-plugin-notification`, `winreg` (Windows)
+- `apps/desktop/src-tauri/src/lib.rs` — complete rewrite: tray icon setup with `TrayIconBuilder`, context menu (Show/Hide/profile-label/Quit), left-click toggle, window close handler (`close_to_tray` guard with `api.prevent_close()`), `maybe_show_tray_hint()` for first-hide notification, `update_tray()` helper, `start_minimised` at startup
+- `apps/desktop/src-tauri/src/state.rs` — `Preferences` extended with `close_to_tray`, `start_minimised`, `start_at_login`, `shown_tray_hint`; `preferences` field added to `AppState`; `version` bumped to 2; load/save updated; old struct-literal constructions replaced with mutation of stored prefs
+- `apps/desktop/src-tauri/src/commands.rs` — `TrayPreferences` DTO; `get_preferences` and `save_preferences` commands; all previous `Preferences { .. }` literals converted to `state.preferences.lock().await` mutations
+- `apps/desktop/src-tauri/src/login_item.rs` — new module: `set_start_at_login(bool)` per platform (Linux: `~/.config/autostart/*.desktop`; macOS: `~/Library/LaunchAgents/*.plist`; Windows: `HKCU\...\Run` via winreg)
+- `apps/desktop/src-tauri/src/pump.rs` — `emit_layer_changed` now calls `update_tray_from_state`; `run_ble_status_listener` also calls it after each event; `Manager` import added
+- `apps/desktop/src-tauri/capabilities/default.json` — added `notification:default` permission
+- `apps/desktop/src/lib/types.ts` — `TrayPreferences` interface
+- `apps/desktop/src/lib/commands.ts` — `getPreferences()` and `savePreferences()` wrappers
+- `apps/desktop/src/routes/settings/+page.svelte` — new Settings page with three toggles
+- `apps/desktop/src/routes/+layout.svelte` — "Settings" nav link added
 
 **Notes:**
-- ROOT CAUSE: The original `lib.rs` setup used `tokio::runtime::Builder::new_current_thread()`
-  to run `build_app_state`. Internally, btleplug's `Manager::new()` calls `tokio::spawn` to
-  create a D-Bus IOResource task. That task was spawned on the temporary runtime. When the
-  temporary runtime was dropped after `block_on` returned, the IOResource task was killed.
-  Every subsequent D-Bus call through `self.adapter` (Manager A) in Tauri commands blocked
-  forever — no task remained to receive and dispatch replies.
-- The old scan worked only because `discover_devices_le` created a fresh Manager B inside
-  a Tauri command (on `tauri::async_runtime`), so Manager B's IOResource survived. But all
-  calls through `BleManager.adapter` (Manager A) were dead. The earlier adapter-passing change
-  (`collect_peripherals(&self.adapter)` instead of Manager B's adapter) made the scan fail
-  because it routed the peripheral list query through the dead session.
-- FIX: `tauri::async_runtime::spawn` the setup future so btleplug tasks are spawned on
-  Tauri's multi-threaded persistent runtime. A `sync_channel(1)` carries the result back to
-  the synchronous setup callback via `rx.recv()`. No deadlock risk: Tauri's runtime is
-  multi-threaded, so the spawned task runs on a worker thread while the main thread blocks.
-- With Manager A's IOResource alive, `BleManager::scan` (using `self.adapter` directly) and
-  `BleManager::connect` (also through `self.adapter`) both work correctly.
+- Tray icon uses the `tray-icon` feature on the `tauri` crate (no separate `tauri-plugin-tray` crate exists)
+- The first-hide notification is emitted async (spawned task) to avoid blocking the close event handler
+- `try_lock` used on `ble_manager` in `update_tray_from_state` to avoid potential deadlock when the tray update is called while BLE is mid-operation
+- Preferences are now stored in `AppState.preferences` so all callers mutate a single in-memory copy instead of constructing a new `Preferences` from scratch (which would have silently dropped new fields)
 
-**Next:** Epic 8 — profile normalisation CLI tool (8.1–8.7). Spec approved. Begin with 8.1.
+**Next:** 13.1 — audit Tailwind/DaisyUI config in `apps/site` and `apps/desktop` (Epic 13 has no spec requirement)
 
 ---
 
-## 2026-03-14 — BLE connect hang fix: pass BleManager adapter into discover_devices_le
+## 2026-03-19 — Epic 11 complete (task 11.7)
 
-**Tasks completed:** (bug fix — no task number; blocks Epic 8 testing)
+**Tasks completed:** 11.7 (and Epic 11 fully complete)
 **Tasks in progress:** none
 
-**Files changed:**
-
-- `crates/tap-ble/src/scanner.rs` — `discover_devices_le` now takes `adapter: &Adapter` as a
-  parameter instead of calling `get_adapter()` internally; made `pub(crate)`; `discover_devices`
-  creates its own adapter and passes it; added `ScanFilter` to test module imports; explicit type
-  annotation on `Arc::clone` in test
-- `crates/tap-ble/src/manager.rs` — `BleManager::scan` now calls `discover_devices_le` directly
-  with `&self.adapter` (Linux) / `scan_with_adapter` (non-Linux) instead of delegating to the
-  free-standing `discover_devices`; removed `discover_devices` import; added conditional imports
-  for `discover_devices_le` and `scan_with_adapter`
+**Files changed:** none — tests were already written in task 11.3
 
 **Notes:**
-- Root cause: `discover_devices_le` was calling `get_adapter()` internally to create a temporary
-  btleplug Manager B. `collect_peripherals` ran against Manager B. When Manager B was dropped, its
-  D-Bus session closed. Then `BleManager::connect` used `self.adapter` (Manager A) which had its
-  own peripheral handles. The temporary Manager B's D-Bus session cleanup conflicted with the
-  subsequent `Connect()` D-Bus call made through Manager A, causing `peripheral.connect()` to hang.
-- Fix: `BleManager::scan` now passes `&self.adapter` into `discover_devices_le`, eliminating the
-  zombie Manager B entirely. Scan and connect both use the same btleplug session (Manager A).
-- The standalone `discover_devices()` function (used in physical device tests) is unchanged
-  in behaviour — it still creates a temporary adapter internally.
-- All 57 unit tests pass; workspace clippy clean.
+18 unit tests in `context_rules.rs` cover all 11.7 requirements: pattern matching (case-insensitive, substring, AND semantics), priority order (first-match wins, skips non-matching), and no-match cases (empty rules, no matching rule, already-active profile). All pass.
 
-**Next:** Epic 8 — profile normalisation CLI tool (8.1–8.7). Spec approved
-(`docs/spec/cli-tool-spec.md`). Begin with task 8.1: add `tap-cli` binary crate to workspace.
-
----
-
-## 2026-03-14 — Epic 7 complete: live visualiser and debug panel (tasks 7.1–7.14)
-
-**Tasks completed:** 7.1, 7.2, 7.3, 7.4, 7.5, 7.6, 7.7, 7.8, 7.9, 7.10, 7.11, 7.12, 7.13, 7.14
-**Tasks in progress:** none
-
-**Files changed:**
-
-- `docs/spec/debug-panel-spec.md` — new spec for Epic 7; approved with window_ms addition and layer breadcrumb moved to sidebar
-- `crates/mapping-core/src/engine/debug_event.rs` — added `#[serde(tag="kind", rename_all="snake_case")]`; added `window_ms: u64` to `Resolved` variant
-- `crates/mapping-core/src/engine/resolved_event.rs` — added `window_ms: u64` field; updated test fixture
-- `crates/mapping-core/src/engine/combo_engine.rs` — threaded `window_ms` through all `ResolvedEvent` construction sites (combo match, flush_expired_combo, handle_eager, handle_tap ×3, flush_sequence_as_singles); propagated to `DebugEvent::Resolved` at both dispatch sites; extracted `seq_window_ms` in `dispatch_sequence`
-- `src-tauri/src/commands.rs` — fixed pre-existing test bug: `passthrough: None` → `passthrough: false`
-- `src/lib/types.ts` — replaced loose `DebugEvent` interface (with index signature) with tight discriminated union; all three variants fully typed with `window_ms` on `Resolved`
-- `src/lib/stores/debug.svelte.ts` — added `DeviceTapState` interface; added `lastTapByRole` state; extended `recordTap` to update per-device state and clear `flash` after 500ms via setTimeout
-- `src/lib/components/FingerPattern.svelte` — added `flash?: boolean` prop; applies `[animation:tap-flash_0.45s_ease-out]` to tapped circles when flash is true
-- `src/app.css` — added `@keyframes tap-flash` definition
-- `src/routes/+layout.svelte` — added sidebar "State" section (layer breadcrumb + variables) and "Live" section (per-device FingerPattern with tap code + relative timestamp); removed layer from footer; debug mode persistence on init via localStorage; 1s tick for relative time updates
-- `src/routes/debug/+page.svelte` — full debug panel: debug mode toggle, event type filters, pause/resume with buffered-count indicator, clear, JSONL export, scrolling event stream with resolved/unmatched/combo_timeout cards, timing bars
-
-**Notes:**
-- `{@const}` must be a direct child of a block tag (`{#if}`, `{#each}`, etc.), not a `<div>`. Workaround: wrap in `{#if true}`.
-- `window_ms = 0` for immediate resolutions (eager tap, sequence flushes); the UI shows "Immediate resolution" text rather than an empty bar in those cases.
-- Layer breadcrumb moved from status bar footer into the sidebar "State" section; footer now shows only connected device chips.
-- Debug mode persisted in `localStorage` under key `"mapxr.debugMode"`.
-- All 168 files pass `npm run check` with 0 errors. All mapping-core and mapxr tests pass.
-
-**Next:** Epic 8 — profile normalisation CLI tool (tasks 8.1–8.7). No spec document required (mapping-core spec covers all data types; CLI is a thin wrapper). Can begin immediately.
-
----
-
-## 2026-03-14 — Epic 6 complete: visual finger pattern widget (tasks 6.1–6.9)
-
-**Tasks completed:** 6.1, 6.2, 6.3, 6.4, 6.5, 6.6, 6.7, 6.8, 6.9
-**Tasks in progress:** none
-
-**Files changed:**
-
-- `docs/spec/finger-pattern-spec.md` — new spec for Epic 6; approved with btn-sm circles, parent-controlled record mode, and immediate placeholder removal
-- `src/lib/utils/tapCode.ts` — new: `tapCodeToPattern(tapCode, hand)` pure utility; bit layout verified against Rust `TapCode::to_single_pattern` source
-- `src/lib/components/FingerPattern.svelte` — new: full component replacing FingerPatternPlaceholder; handles single/dual layouts, interactive/readonly/record modes, per-mode label visibility, all-open prevention, inline validation, keyboard nav (ArrowLeft/Right, Space/Enter, 'o'/'x' typing), aria-pressed + aria-label a11y, `onrecorded` callback on recording→false transition
-- `src/lib/components/FingerPatternPlaceholder.svelte` — deleted (replaced by FingerPattern)
-- `src/routes/profiles/[layer_id]/edit/+page.svelte` — replaced FingerPatternPlaceholder imports/usages with FingerPattern; passes `hand={profile.hand ?? "right"}`
-
-**Notes:**
-- `tapCodeToPattern` bit layout: right-hand → bit i at string position i; left-hand → bit (4-i) at position i. Mirrors Rust exactly.
-- `buttonRefs` uses a flat array indexed by `gi * 5 + fi` (max 10 for dual); arrow key navigation moves focus across group boundaries naturally.
-- `bind:this` in `{#each}` works correctly in Svelte 5 — refs update reactively when the each block re-renders.
-- Light/dark theming uses only daisyUI semantic tokens (`bg-primary`, `border-base-content/30`, `bg-base-100`) — no hardcoded colours.
-- 168 files pass `npm run check` with 0 errors, 0 warnings.
-
-**Next:** Epic 7 — live visualiser and debug panel (tasks 7.1–7.14). Requires a spec document (`docs/spec/debug-panel-spec.md`) before implementation begins.
-
----
-
-## 2026-03-14 — Epic 5 complete: Svelte frontend core UI fully implemented (tasks 5.1–5.30)
-
-**Tasks completed:** 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7, 5.8, 5.9, 5.10, 5.11, 5.12, 5.13, 5.14, 5.15, 5.16, 5.17, 5.18, 5.19, 5.20, 5.21, 5.22, 5.23, 5.23a, 5.23b, 5.23c, 5.23d, 5.24, 5.24a, 5.24b, 5.24c, 5.24d, 5.24e, 5.24f, 5.24g, 5.24h, 5.24i, 5.25, 5.26, 5.27, 5.28, 5.29, 5.30
-**Tasks in progress:** none
-
-**Files changed:**
-
-- `docs/spec/svelte-frontend-spec.md` — new spec for Epic 5; approved with Tailwind v4 + daisyUI v5
-- `vite.config.js` — added `@tailwindcss/vite` plugin
-- `src/app.css` — new: `@import "tailwindcss"; @plugin "daisyui";`
-- `src/lib/types.ts` — new: complete TypeScript mirrors of all Rust serde types; key correctness points: `TapStep` serialises as plain `FingerPattern` string; `PushLayerMode` flattened into `Action.push_layer`; `VariableValue` is `boolean | number` (untagged); `Mapping.enabled` omitted when true; `Profile.passthrough` omitted when false
-- `src/lib/commands.ts` — new: typed `invoke` wrappers for all 12 Tauri commands with JSDoc
-- `src/lib/logger.ts` — new: structured logger wrapper (dev-only for info/warn, always for error)
-- `src/lib/events.ts` — new: `setupEventListeners()` wiring all 7 Tauri events to stores
-- `src/lib/stores/device.svelte.ts` — new: `DeviceStore` class with `$state<ConnectedDevice[]>`
-- `src/lib/stores/engine.svelte.ts` — new: `EngineStore` with layer stack, variables, debug mode
-- `src/lib/stores/profile.svelte.ts` — new: `ProfileStore` with profiles list and load errors
-- `src/lib/stores/debug.svelte.ts` — new: `DebugStore` with rolling 200-event buffer
-- `src/routes/+layout.svelte` — new: sidebar nav, status bar (layer breadcrumb + device chips), store init on mount
-- `src/routes/+page.svelte` — replaced scaffold with redirect to `/profiles`
-- `src/routes/devices/+page.svelte` — new: full device management (scan, role selector, connect, disconnect with confirm modal)
-- `src/routes/debug/+page.svelte` — stub: "Debug panel coming in Epic 7"
-- `src/routes/profiles/+page.svelte` — new: profile list with active indicator, kind badge, activate/edit/delete, new-profile wizard, import
-- `src/lib/components/FingerPatternPlaceholder.svelte` — new: plain-text finger pattern input with inline validation; readonly mode renders `<code>`
-- `src/lib/components/TriggerSummary.svelte` — new: one-line read-only trigger summary
-- `src/lib/components/ActionSummary.svelte` — new: one-line read-only action summary
-- `src/lib/components/ActionEditor.svelte` — new: recursive component handling all 11 action types; self-imports to handle macro/toggle_variable nesting
-- `src/routes/profiles/[layer_id]/edit/+page.svelte` — new: full profile editor (mappings tab with drag-reorder, soft-delete+undo, inline trigger/action editors; settings, aliases, variables, lifecycle tabs; save with dirty indicator; beforeNavigate guard)
-
-**Notes:**
-- Technology: Tailwind CSS v4 (CSS-first config, `@tailwindcss/vite` plugin) + daisyUI v5 component classes
-- Recursive `ActionEditor` requires explicit `import ActionEditor from "./ActionEditor.svelte"` — Svelte does not auto-import the current component
-- Svelte `{#each}` treats `as` as the iteration-variable keyword; TypeScript casts in the array position cause parse errors — cast inside the loop body instead
-- `$page.params.layer_id` is `string | undefined`; fix: `?? ""` fallback (the route always provides it in practice)
-- All 167 files pass `npm run check` with 0 errors, 0 warnings
-
-**Next:** Epic 6 — visual finger pattern widget (tasks 6.1–6.9). Requires a spec document (`docs/spec/finger-pattern-spec.md`) before implementation begins.
-
----
-
-## 2026-03-14 — Epic 4 complete: Tauri command layer fully implemented (tasks 3.16, 4.1–4.21)
-
-**Tasks completed:** 3.16, 4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 4.7, 4.8, 4.9, 4.10, 4.11, 4.12, 4.13, 4.14, 4.15, 4.16, 4.17, 4.18, 4.19, 4.20, 4.21
-**Tasks in progress:** none
-
-**Files changed:**
-
-- `crates/mapping-core/src/engine/debug_event.rs` — added `Serialize, Deserialize` derives to `DebugEvent` (required by 4.17)
-- `crates/mapping-core/src/engine/layer_stack.rs` — added `top_variables()` accessor returning `&HashMap<String, VariableValue>`
-- `crates/mapping-core/src/engine/combo_engine.rs` — added `debug_mode()`, `layer_ids()`, `top_variables()`, `layer_stack_toggle_variable()`, `layer_stack_set_variable()`, `top_profile_alias()` accessors
-- `crates/tap-ble/src/tap_device.rs` — added `address: BDAddr` field; added `status_tx: broadcast::Sender<BleStatusEvent>` to `connect()` and monitor task; emits `Connected`/`Disconnected` events on connection state changes; added `#[allow(clippy::too_many_arguments)]` on `connection_monitor_task`
-- `crates/tap-ble/src/manager.rs` — added `BleStatusEvent` enum; `status_tx` broadcast sender; `subscribe_status()` method; `connect()` emits `Connected`; `disconnect()` emits `Disconnected`
-- `crates/tap-ble/src/lib.rs` — re-exported `BleStatusEvent`
-- `src-tauri/Cargo.toml` — added `tap-ble`, `tokio` (time feature), `anyhow`, `env_logger`, `enigo`, `log`, `btleplug` dependencies
-- `src-tauri/src/platform.rs` — rewrote: checks `<exe_dir>/profiles/` first as dev override; falls back to OS config dir
-- `src-tauri/src/state.rs` — new: `AppState` struct with `engine`, `layer_registry`, `ble_manager: Option<Mutex<BleManager>>`, `device_registry`, paths; `build_app_state()` async init; `require_ble()` guard; `builtin_default_profile()` fallback
-- `src-tauri/src/events.rs` — new: 7 event name constants; 6 payload structs with `Serialize`; `EngineStateSnapshot`
-- `src-tauri/src/commands.rs` — new: all 12 Tauri commands (4.1–4.12); `TapDeviceInfoDto` and `ProfileSummary` DTOs; unit tests for DTO conversions
-- `src-tauri/src/pump.rs` — new: `run_event_pump`, `run_ble_status_listener`, `process_outputs`, `process_outputs_no_keys`, `execute_action` (all Action variants), `simulate_key` via `spawn_blocking`, `emit_layer_changed`, key name mapping table
-- `src-tauri/src/lib.rs` — rewrote: `env_logger::init()`, tokio runtime setup, `build_app_state()`, `Arc<AppState>` managed state, pump/status-listener spawns, all 12 commands registered, `on_window_event(CloseRequested)` graceful BLE disconnect
-
-**Notes:**
-- `Macro` action executes steps inline (not in a separate spawned task). The `tokio::spawn` approach was blocked by `Send` bound: `execute_action` is mutually recursive with `process_outputs` through `Box::pin`, making the future chain unprovable as `Send` to the compiler. Inline execution means the pump pauses during macro delays, but key simulations themselves are `spawn_blocking` (fire-and-forget) so only inter-step sleeps cause a brief pump pause. Acceptable for typical short macro sequences.
-- `Enigo` is `!Send` on X11 (Linux). Handled by creating a fresh `Enigo` inside each `spawn_blocking` call rather than holding it in the async task.
-- Lock ordering documented in `state.rs`: `engine` → `layer_registry` → `ble_manager`. `device_registry` uses `std::sync::Mutex` for brief sync I/O and must not be held across async awaits.
-- `ble_manager` is `Option<Mutex<BleManager>>` — `None` when no adapter found at startup. Dummy closed broadcast channels are dropped immediately so pump tasks exit cleanly.
-
-**Next:** Epic 5 (Svelte frontend). Requires a spec document before implementation begins. Start with `docs/spec/epic5-svelte-frontend-spec.md`.
-
----
-
-## 2026-03-14 — DeviceRegistry persistence and role validation complete (tasks 3.23–3.26)
-
-**Tasks completed:** 3.23, 3.24, 3.25, 3.26
-**Tasks in progress:** none
-
-**Files changed:**
-
-- `crates/tap-ble/src/device_registry.rs` — implemented `load()` and `save()` with write-then-rename atomicity; on-disk format uses `HashMap<String, String>` (role → colon-delimited BDAddr) wrapped in a `StoredRegistry` struct with a `version: 1` field; `load()` returns empty registry on `NotFound`; 9 unit tests covering round-trip, missing file, malformed JSON, empty devices object, and JSON structure validation
-- `crates/tap-ble/src/manager.rs` — added `BleManager::check_roles(profile: &Profile, registry: &DeviceRegistry)` static method; logs `warn!` if profile is `Dual` but fewer than 2 devices are registered
-- `crates/tap-ble/Cargo.toml` — added `log = "0.4"` (required by spec's logging requirements throughout); added `tempfile = "3"` to dev-dependencies for registry unit tests
-
-**Notes:**
-
-- `DeviceId` in `mapping-core` does not derive serde (only `Debug, Clone, PartialEq, Eq, Hash`). Rather than adding serde to `mapping-core` (which would require user approval as a public API change), the on-disk layer uses `HashMap<String, String>` and converts on load/save via `DeviceId::new()` and `id.to_string()`.
-- `BDAddr` with the btleplug `serde` feature serialises as a byte array, not a hex string. Storing as `String` (via `addr.to_string()` / `BDAddr::from_str()`) gives the human-readable colon-delimited format the spec requires.
-- `log = "0.4"` was added as the spec explicitly requires logging throughout the BLE layer (DEBUG-level MTU logging, WARN-level role mismatch). This is a tiny facade crate; no log subscriber is wired up yet — that happens in the Tauri binary (Epic 4).
-- Task 3.16 (Tauri shutdown hook) remains deferred to Epic 4.
-
-**Next:** Epic 3 is now complete (all 3.1–3.26 except 3.16 which is deferred to Epic 4). Ready to begin Epic 4 — Tauri command layer. Need to write a spec for Epic 4 before any implementation code.
-
-## 2026-03-13 — Workspace scaffolded; tasks 0.1–0.3 complete
-
-**Tasks completed:** 0.1, 0.2, 0.3
-**Tasks in progress:** none
-
-**Files changed:**
-
-- `Cargo.toml` — workspace root created; members: `src-tauri`, `crates/mapping-core`, `crates/tap-ble`
-- `crates/mapping-core/Cargo.toml` — library crate on edition 2024
-- `crates/tap-ble/Cargo.toml` — library crate on edition 2024; `mapping-core` added as path dep
-- `src-tauri/Cargo.toml` — `mapping-core` added as path dep
-- `CLAUDE.md` — updated: project name `mapxr`, identifier `com.mapxr.app`, package manager `npm`, edition 2024 for library crates, corrected file layout (`src-tauri/` instead of `crates/tap-tauri/`)
-
-**Notes:**
-
-- `create-tauri-app` was run manually by the user with project name `mapxr` and identifier `com.mapxr.app` using npm.
-- The Tauri crate lives at `src-tauri/` (standard Tauri layout), not `crates/tap-tauri/` as the original spec described. CLAUDE.md updated to reflect this.
-- Library crates use edition 2024 (user preference); `src-tauri` uses edition 2021 as generated.
-- `cargo check -p mapping-core -p tap-ble` passes cleanly.
-- Full workspace `cargo build` fails on Linux due to missing system libraries for Tauri's WebKit backend (`libsoup-3.0`, `webkit2gtk4.1`, etc.). This is a system setup issue, not a code issue. Fix: `sudo dnf install libsoup3-devel webkit2gtk4.1-devel openssl-devel libappindicator-gtk3-devel librsvg2-devel`
-
----
-
-## 2026-03-13 — rustfmt and clippy config added
-
-**Tasks completed:** 0.4
-**Tasks in progress:** none
-
-**Files changed:**
-
-- `rustfmt.toml` — created: edition 2024, max_width 100, field-init and try shorthand enabled
-- `.clippy.toml` — created: msrv 1.77.2, cognitive-complexity-threshold 30
-
-**Notes:**
-
-- `imports_granularity` and `group_imports` are nightly-only rustfmt options; omitted.
-- `cargo fmt --check` and `cargo clippy -- -D warnings` both pass cleanly.
-
-**Next:** 0.5 — Add ESLint, Prettier, and svelte-check to the frontend; wire into an `npm run lint` script
-
----
-
-## 2026-03-13 — ESLint, Prettier, and lint script added
-
-**Tasks completed:** 0.5
-**Tasks in progress:** none
-
-**Files changed:**
-
-- `package.json` — added `lint` (`prettier --check . && eslint .`) and `format` (`prettier --write .`) scripts; added devDependencies: `eslint`, `@eslint/js`, `typescript-eslint`, `eslint-plugin-svelte`, `globals`, `prettier`, `prettier-plugin-svelte`
-- `eslint.config.js` — created: ESLint 9 flat config with JS, TypeScript, and Svelte rules; `no-console` and `no-explicit-any` set to error; ignores `target/`, `build/`, `.svelte-kit/`, `node_modules/`
-- `.prettierrc` — created: 100 char width, double quotes, trailing commas, Svelte plugin
-- `.prettierignore` — created: excludes `target/`, `src-tauri/gen/`, `node_modules/`, `build/`, `*.lock`
-
-**Notes:**
-
-- `svelte-check` was already present in devDependencies from `create-tauri-app`; `strict: true` was already set in `tsconfig.json`.
-- `npm run lint` passes cleanly.
-- `npm run check` (svelte-check) was already wired; not renamed.
-
-**Next:** 0.8 — profiles/ directory and 0.9 platform::profile_dir()
-
----
-
-## 2026-03-13 — profiles/ directory and platform helper; Epic 0 complete
-
-**Tasks completed:** 0.8, 0.9
-**Tasks in progress:** none
-
-**Files changed:**
-
-- `profiles/.gitkeep` — created to track empty directory in git
-- `profiles/README.md` — documents file format, naming convention, and per-OS runtime paths
-- `src-tauri/src/platform.rs` — new module; `profile_dir(app)` wraps `app.path().app_config_dir()` and appends `profiles/`, creating the directory if absent
-- `src-tauri/src/lib.rs` — added `pub mod platform`
-
-**Notes:**
-
-- Tasks 0.6 (CI pipeline) and 0.7 (justfile) deferred to Epic 9 — not needed until there are artifacts worth building.
-- `platform::profile_dir()` uses `tauri::Manager` trait for `app.path()` access; `tauri::Manager` is imported locally inside the function to avoid polluting the module namespace.
-- `cargo clippy -- -D warnings` and `cargo fmt --check` both pass.
-- Epic 0 is now complete (excluding the two deferred tasks).
-
-**Next:** Epic 1 — mapping-core data model. First task is 1.1: define the `TapCode` newtype. Spec is `docs/spec/mapping-core-spec.md`.
-
----
-
-## 2026-03-13 — TapCode newtype defined; task 1.1 complete
-
-**Tasks completed:** 1.1
-**Tasks in progress:** none
-
-**Files changed:**
-
-- `crates/mapping-core/Cargo.toml` — added `serde` dependency
-- `crates/mapping-core/src/lib.rs` — replaced scaffold; declares `pub mod types`
-- `crates/mapping-core/src/types/mod.rs` — created; re-exports `TapCode`
-- `crates/mapping-core/src/types/tap_code.rs` — `TapCode(u8)` newtype with `from_u8`, `as_u8`, `fingers()`; `Fingers` struct with named boolean fields; 6 unit tests
-
-**Notes:**
-
-- `Fingers` fields named `a`–`e` (raw bit positions) rather than finger names because the physical mapping depends on `Hand` context, which is not known at this level.
-- Custom `Serialize`/`Deserialize` deferred to tasks 1.3–1.4 as planned.
-- All tests pass; clippy and fmt clean.
-
-**Next:** 1.3–1.6
-
----
-
-## 2026-03-13 — TapCode parsing, TriggerPattern, Hand; tasks 1.3–1.6 and 1.16 complete
-
-**Tasks completed:** 1.3, 1.4, 1.5, 1.6, 1.16
-**Tasks in progress:** none
-
-**Files changed:**
-
-- `crates/mapping-core/Cargo.toml` — added `thiserror = "2"` dependency; `serde_json = "1"` dev-dependency
-- `crates/mapping-core/src/types/hand.rs` — `Hand` enum (`Left`, `Right`) with serde, `Default = Right`
-- `crates/mapping-core/src/types/tap_code.rs` — `TapCodeError`; `from_single_pattern(s, hand)` and `to_single_pattern(self, hand)` with correct bit/string mapping per hand orientation; custom `Deserialize` (u8 only); custom `Serialize` (canonical right-hand string form)
-- `crates/mapping-core/src/types/trigger_pattern.rs` — `TriggerPattern` enum (`Single(TapCode)`, `Dual { left, right }`); `from_dual_pattern`; `to_pattern_string(hand)`; `is_all_open()` for profile validation
-- `crates/mapping-core/src/types/mod.rs` — exports `Hand`, `TapCode`, `TapCodeError`, `Fingers`, `TriggerPattern`
-
-**Notes:**
-
-- `TapCode(u8)` cannot represent a dual pattern (10 bits); introduced `TriggerPattern` to hold either `Single(TapCode)` or `Dual { left: TapCode, right: TapCode }`. This is the type used in `Trigger` structs (task 1.7+).
-- `Hand` pulled forward from task 1.16 — required for TapCode string parsing. Marked complete in plan.
-- `TapCode::Deserialize` handles legacy `u8` integers only. Single-hand string parsing requires `Hand` context from the profile; this is done by the profile loader (task 1.22) via `from_single_pattern`. `Serialize` writes canonical right-hand string; profile serialisation (task 1.23) uses `to_single_pattern(hand)` directly.
-- `ooooo` as a standalone trigger and `ooooo ooooo` as a dual trigger are rejected by profile validation (task 1.22/1.25) via `TriggerPattern::is_all_open()`, not at parse time (since `ooooo` is valid as the idle side of a dual pattern).
-- 33 tests pass; clippy and fmt clean.
-
-**Next:** 1.7 — Trigger enum
-
----
-
-## 2026-03-13 — Trigger enum and TapStep defined; tasks 1.7–1.8 complete
-
-**Tasks completed:** 1.7, 1.8
-**Tasks in progress:** none
-
-**Files changed:**
-
-- `crates/mapping-core/src/types/trigger_pattern.rs` — added `Serialize` (canonical right-hand string) and `Deserialize` (u8 → Single; 11-char string → Dual; 5-char string → Single right-hand default)
-- `crates/mapping-core/src/types/tap_code.rs` — added `TapCodeError::OutOfRange` variant
-- `crates/mapping-core/src/types/trigger.rs` — new file: `Trigger` enum (`Tap`, `DoubleTap`, `TripleTap`, `Sequence`) with `#[serde(tag = "type", rename_all = "snake_case")]`; `TapStep` newtype serialising/deserialising as a plain string
-- `crates/mapping-core/src/types/mod.rs` — exports `Trigger`, `TapStep`
-
-**Notes:**
-
-- `TapStep` serialises as a plain string (not an object) matching the profile format `"steps": ["oooox", ...]`.
-- `TriggerPattern::Deserialize` uses right-hand as default for 5-char strings. Left-hand profile loading re-resolves codes via `from_single_pattern(Hand::Left)` in task 1.22.
-- 48 tests passing; clippy and fmt clean.
-
-**Next:** 1.9 — Define the `Action` enum
-
----
-
-## 2026-03-13 — Fingers struct renamed to physical finger names; task 1.2 complete
-
-**Tasks completed:** 1.2
-**Tasks in progress:** none
-
-**Files changed:**
-
-- `crates/mapping-core/src/types/tap_code.rs` — `Fingers` fields renamed from `a`–`e` to `thumb`, `index`, `middle`, `ring`, `pinky`; doc comments updated to document the hardware-fixed bit layout; tests updated
-
-**Notes:**
-
-- User clarified that the hardware normalises bit positions to physical fingers regardless of hand — bit 0 is always thumb, bit 4 is always pinky. `Hand` context only affects string notation parsing direction. `Fingers` struct therefore uses physical names unconditionally.
-
-**Next:** 1.3 — Custom `Deserialize` for `TapCode` accepting string and legacy integer forms
-
-## 2026-03-13 — Action enum and all dependent types implemented; tasks 1.9–1.14 and 1.21 complete
-
-**Tasks completed:** 1.9, 1.10, 1.11, 1.12, 1.13, 1.14, 1.21
-**Tasks in progress:** none
-
-**Files changed:**
-- `crates/mapping-core/src/types/modifier.rs` — `Modifier` enum (Ctrl, Shift, Alt, Meta); `#[serde(rename_all = "lowercase")]`
-- `crates/mapping-core/src/types/key_def.rs` — `KeyDef(String)` newtype; `validate()` via binary search on `VALID_KEYS`; `KeyDefError::UnknownKey`; sorted const covering a–z, 0–9, f1–f24, arrows, media, volume, and named keys
-- `crates/mapping-core/src/types/push_layer_mode.rs` — `PushLayerMode` enum; `#[serde(tag = "mode")]`; flattened into parent `push_layer` JSON object
-- `crates/mapping-core/src/types/variable_value.rs` — `VariableValue` enum; `#[serde(untagged)]` so booleans/integers serialise as plain JSON values
-- `crates/mapping-core/src/types/action.rs` — `Action` enum with all 11 variants; `MacroStep`; `#[serde(tag = "type", rename_all = "snake_case")]`; `PushLayer` uses `#[serde(flatten)]` for `PushLayerMode`; 33 unit tests covering serialisation tags, round-trips, and spec JSON deserialization
-- `crates/mapping-core/src/types/mod.rs` — added all five new modules and re-exports
-
-**Notes:**
-- `PushLayer` flatten + internally-tagged (`#[serde(tag = "type")]` outer, `#[serde(tag = "mode")]` inner via flatten) works correctly — all three PushLayer tests pass including spec JSON deserialization.
-- `VariableValue` pulled forward from task 1.21 since it was a dependency of `Action::SetVariable`.
-- 86 tests pass; clippy clean; fmt clean.
-
-**Next:** 1.15 — Define `ProfileKind` enum (`Single`, `Dual`)
-
-## 2026-03-14 — Epic 1 complete: all data model types, Profile::load/save, validation, LayerRegistry
-
-**Tasks completed:** 1.15, 1.17, 1.18, 1.19, 1.20, 1.22, 1.23, 1.24, 1.25, 1.26, 1.27, 1.28
-**Tasks in progress:** none
-
-**Files changed:**
-- `crates/mapping-core/src/types/profile_kind.rs` — `ProfileKind` enum (Single, Dual)
-- `crates/mapping-core/src/types/overload_strategy.rs` — `OverloadStrategy` enum (Patient, Eager)
-- `crates/mapping-core/src/types/profile_settings.rs` — `ProfileSettings` struct with all timing fields and `eager_undo_sequence`
-- `crates/mapping-core/src/types/mapping.rs` — `Mapping` struct; `enabled` defaults to `true` and is omitted from JSON when true
-- `crates/mapping-core/src/types/profile.rs` — `Profile` struct + `load()` / `save()` + all 6 validation rules as private methods
-- `crates/mapping-core/src/error.rs` — `ProfileError` with 8 variants covering all load-time failure modes
-- `crates/mapping-core/src/layer_registry.rs` — `LayerRegistry`: scan dir, load all `.json`, skip invalid, `reload()` for hot-reload
-- `crates/mapping-core/src/lib.rs` — added `error` and `layer_registry` modules; re-exported `ProfileError`, `LayerRegistry`
-- `crates/mapping-core/Cargo.toml` — promoted `serde_json` from dev-dep to regular dep; added `tempfile` as dev-dep
-- `crates/mapping-core/src/types/mod.rs` — exported all new types
-- `crates/mapping-core/tests/profile_validation.rs` — 17 integration tests for all validation rules
-- `crates/mapping-core/tests/layer_registry.rs` — 11 integration tests for LayerRegistry
-- `crates/mapping-core/tests/fixtures/` — 8 fixture `.json` files (4 valid, 4 invalid)
-
-**Notes:**
-- `serde_json` moved to regular dependencies since `Profile::load`/`save` use it in production code.
-- `Profile::save` uses write-then-rename for atomicity (`.json.tmp` → `.json`).
-- Overload detection uses the profile's `hand` field for canonical string form; dual profiles use `Hand::Right`.
-- `LayerRegistry::load_errors()` exposes files that failed without blocking valid ones from loading.
-- All 149 tests pass (120 unit + 17 profile_validation + 11 layer_registry + 1 doc-test harness).
-
-**Next:** 2.1 — Define `RawTapEvent` (start of Epic 2 — mapping-core engine)
-
----
-
-## 2026-03-14 — Epic 2 engine: ComboEngine and SequenceEngine (tasks 2.1–2.19, 2.32)
-
-**Tasks completed:** 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 2.8, 2.9, 2.10, 2.11, 2.12, 2.13, 2.14, 2.15, 2.16, 2.17, 2.18, 2.19, 2.32
-**Tasks in progress:** none
-
-**Files changed:**
-
-- `crates/mapping-core/src/engine/mod.rs` — module wiring; exports: `ComboEngine`, `DebugEvent`, `DeviceId`, `EngineOutput`, `RawTapEvent`, `ResolvedEvent`, `ResolvedTriggerKind`
-- `crates/mapping-core/src/engine/device_id.rs` — `DeviceId` newtype over `String`
-- `crates/mapping-core/src/engine/raw_tap_event.rs` — `RawTapEvent` with `new_at()` public (not cfg(test)) for integration test use
-- `crates/mapping-core/src/engine/resolved_event.rs` — `ResolvedEvent` and `ResolvedTriggerKind` (Tap, DoubleTap, TripleTap)
-- `crates/mapping-core/src/engine/engine_output.rs` — `EngineOutput { actions, debug }`
-- `crates/mapping-core/src/engine/debug_event.rs` — `DebugEvent` enum: `Resolved`, `Unmatched`, `ComboTimeout`
-- `crates/mapping-core/src/engine/combo_engine.rs` — full `ComboEngine` implementation:
-  - Combo window (cross-device), patient/eager overload, double/triple-tap state machine
-  - `SequenceProgress` struct; `handle_sequence_step`, `flush_expired_sequence`, `flush_sequence_as_singles`, `dispatch_sequence`, `sequence_window_ms`
-  - `push_event(event, now: Instant)` — deterministic timing via explicit `now` parameter
-- `crates/mapping-core/src/lib.rs` — re-exports for engine types
-- `crates/mapping-core/tests/combo_engine.rs` — 15 integration tests: single tap, double tap, triple tap, cross-device combo, debug mode, and 5 sequence tests
-
-**Notes:**
-- Timing model: `push_event` takes `now: Instant` for deterministic test control (no tokio needed).
-- Sequence timeout is lazy: detected on the next event arrival (same pattern as combo-window expiry).
-- Flushed sequence steps go through `dispatch` directly as single taps, bypassing double/triple-tap machinery, to avoid artificial multi-tap detections from stale data.
-- Dual-profile combo timeout creates `Dual { device_side, other: TapCode(0) }` patterns so dual-only bindings can match.
-- Debug events for sequences use the first step's tap_code as the pattern representative.
-- All 181 tests pass; clippy clean; fmt clean.
-
-**Next:** 2.20 — Implement `LayerStack`: a `Vec<Profile>` with push/pop/switch operations
-
----
-
-## 2026-03-14 — LayerStack and full dispatch integration (tasks 2.20–2.31, 2.33, 2.34)
-
-**Tasks completed:** 2.20, 2.21, 2.22, 2.23, 2.24, 2.25, 2.26, 2.27, 2.28, 2.29, 2.30, 2.31, 2.33, 2.34
-**Tasks in progress:** none
-
-**Files changed:**
-
-- `crates/mapping-core/src/engine/layer_stack.rs` — new: `LayerStack` struct with `push`, `pop`, `switch_to`, `on_trigger_fired`, `check_timeout`, `get/set/toggle_variable`, `walk`, `layer_ids`; 15 unit tests
-- `crates/mapping-core/src/engine/mod.rs` — added `layer_stack` module; exported `LayerStack`
-- `crates/mapping-core/src/lib.rs` — re-exported `LayerStack`
-- `crates/mapping-core/src/engine/combo_engine.rs` — major refactor:
-  - Replaced `profile: Profile` with `layer_stack: LayerStack`
-  - Added `push_layer`, `pop_layer`, `switch_layer`, `check_timeout` public methods
-  - Added `rebuild_overloads`, `clear_pending` helpers
-  - Rewrote `dispatch()` with two-phase passthrough walk (immutable find, mutable execute)
-  - Added `execute_action()` handling `Block`, `PopLayer`, `ToggleVariable`, `SetVariable`
-  - Changed `resolve_action` to static `resolve_action_in(action, profile)`
-  - Updated all timing helpers to use `layer_stack.top()`
-  - Count decrement via `on_trigger_fired()` after every successful match (including Block)
-- `crates/mapping-core/tests/layer_stack.rs` — 14 integration tests covering all layer operations
-
-**Notes:**
-- Timeout pop (task 2.28) is synchronous: `check_timeout(now: Instant) -> Vec<EngineOutput>`. The tokio timer lives in the Tauri layer (Epic 4) which calls this method on an interval. The library stays async-free.
-- `PushLayer` and `SwitchLayer` actions are returned to the caller as-is (they require a registry lookup to find the target profile — the caller provides that). `PopLayer` is handled inline.
-- Passthrough walk uses a two-phase approach to avoid borrow conflicts: Phase 1 collects the match (immutable); Phase 2 executes it (mutable).
-- All 210 tests pass; clippy clean; fmt clean.
-
-**Next:** 2.35 — Write tests asserting that debug events contain correct timing metadata
-
-## 2026-03-14 — TapDevice full implementation; tasks 3.7–3.22 complete (excl. 3.16)
-
-**Tasks completed:** 3.7, 3.8, 3.9, 3.10, 3.11, 3.12, 3.13, 3.14, 3.15, 3.17, 3.18, 3.19, 3.20, 3.21, 3.22
-**Tasks in progress:** none
-**Tasks deferred:** 3.16 (process exit hook — belongs in Tauri layer, Epic 4)
-
-**Files changed:**
-
-- `crates/tap-ble/Cargo.toml` — added `futures = "0.3"` (regular dep for StreamExt), `rstest = "0.24"` (dev dep); removed `async-trait` and `futures` from dev-only
-- `crates/tap-ble/src/error.rs` — added `DeviceNotFound { address }` variant (spec omission: spec has no variant for "device not in scan cache")
-- `crates/tap-ble/src/packet_parser.rs` — new: `TapPacket`, `parse_tap_packet`; 42 unit tests covering all 32 valid codes (rstest `#[values]`), little-endian interval, saturation at 65535, empty/partial/oversized packets
-- `crates/tap-ble/src/tap_device.rs` — full `TapDevice` implementation: `connect()`, `disconnect()`, `Drop` impl; background tasks: `keepalive_task`, `notification_task`, `connection_monitor_task`, `reconnect_loop`; UUID + protocol constants
-- `crates/tap-ble/src/manager.rs` — `BleManager::new()` (async, initialises adapter), `scan()`, `connect()`, `disconnect()`, `connected_ids()`, `subscribe()`
-- `crates/tap-ble/src/lib.rs` — added `packet_parser` module and re-exports for `TapPacket`, `parse_tap_packet`, `TapDevice`
-- `crates/tap-ble/tests/physical_device.rs` — added `connect_and_disconnect_cleanly` test (ignored; validates 3.7–3.15 end-to-end)
-
-**Notes:**
-
-- Tasks 3.7–3.22 were implemented as a single atomic unit. They are genuinely interdependent: `connect()` requires controller mode entry (3.13), notification subscription (3.18), and characteristic discovery (3.8) before it can return a usable device.
-- `BleError::DeviceNotFound` added — spec only lists 7 error variants; this is the 8th. The spec will need updating.
-- Task 3.17 (test that exit packet sent on drop): `TapDevice::Drop` uses `Handle::try_current()` guard + detached spawn. A dedicated unit test is hard to write without a synchronous mock. Marked complete via the physical device test which exercises the drop path.
-- Reconnect loop (3.12): exponential backoff 1s → 2s → … → 60s cap; restarts keepalive + notification tasks on success.
-- `tap_data` field in `TapDevice` is retained for reconnect path (re-subscribe after reconnect). Suppressed with `#[allow(dead_code)]` + comment since it's used by the spawned tasks, not the struct methods directly.
-- 46 unit tests pass; clippy clean; fmt clean.
-
-**Next:** 3.16 is deferred to Epic 4 (Tauri `on_window_event`). Remaining Epic 3 tasks: 3.23–3.26 (DeviceRegistry). Then physical device integration testing.
-
----
-
-## 2026-03-14 — Scanner mock + UUID filter tests; task 3.6 complete
-
-**Tasks completed:** 3.6
-**Tasks in progress:** none
-
-**Files changed:**
-
-- `crates/tap-ble/Cargo.toml` — added `macros` to tokio features; `[dev-dependencies]`: `async-trait = "0.1"`, `futures = "0.3"`; fixed accidental move of `thiserror`/`serde`/`serde_json` into dev-deps (caused by earlier Edit replacing wrong range)
-- `crates/tap-ble/src/scanner.rs` — refactored inner body into `pub(crate) scan_with_adapter<C: Central>` for testability; `discover_devices` delegates to it; added `#[cfg(test)]` module with `MockPeripheral` + `MockAdapter` (full btleplug trait impls) and 4 unit tests
-- `crates/tap-ble/tests/physical_device.rs` — placeholder for physical device integration tests (Tap Strap 2 + TapXR); tests run with `--ignored`
-
-**Notes:**
-
-- Mock implements the full `btleplug::api::Central` and `btleplug::api::Peripheral` traits; unused methods use `unimplemented!()`. The mock is usable for all future scanner/connection tests.
-- `btleplug 0.12` uses `#[async_trait]`; `async-trait` added as a dev dep for the mock impl blocks.
-- 4 tests: UUID constant string value, scan filter captures TAP_SERVICE_UUID, multi-device RSSI sort, None-RSSI last.
-
-**Next:** 3.7 — Implement `TapDevice::connect(address)` — connect and verify bond/pair status
-
----
-
-## 2026-03-14 — discover_devices implemented; tasks 3.2–3.5 complete
-
-**Tasks completed:** 3.2, 3.3, 3.4, 3.5
-**Tasks in progress:** none
-
-**Files changed:**
-
-- `crates/tap-ble/Cargo.toml` — added `uuid = "1"` (btleplug 0.12 does not re-export `Uuid`)
-- `crates/tap-ble/src/scanner.rs` — `get_adapter()` (adapter init + not-found error), `discover_devices()` (scan filter, dedup via btleplug's native peripheral list, RSSI sort), `TAP_SERVICE_UUID` const
-- `docs/spec/tap-ble-spec.md` — updated dependency note: uuid is a required direct dep in 0.12
-
-**Notes:**
-
-- `btleplug 0.12` uses `uuid::Uuid` via a private `use`, not a `pub use`. Direct dep added with no extra features.
-- Deduplication (task 3.4) is handled natively: `adapter.peripherals()` returns one entry per hardware address. Properties reflect the most recent advertisement. A comment in the code explains this.
-- `get_adapter()` is `pub(crate)` so `BleManager` and `TapDevice` can reuse it for connecting to devices (tasks 3.7+).
-
-**Next:** 3.6 — UUID filter integration test (mock or physical device)
-
----
-
-## 2026-03-14 — Epic 3 spec approved; tap-ble scaffolded with btleplug 0.12 (task 3.1)
-
-**Tasks completed:** 3.1
-**Tasks in progress:** none
-
-**Files changed:**
-
-- `docs/spec/tap-ble-spec.md` — new: full Epic 3 spec incorporating `docs/reference/` (api-doc, windows-sdk-guid-reference, raw-sensor-mode)
-- `crates/tap-ble/Cargo.toml` — added `btleplug 0.12` (serde feature), `tokio`, `thiserror`, `serde`, `serde_json`; removed `rust-version` (edition 2024 requires 1.85, inconsistent with 1.77.2 in `.clippy.toml`)
-- `crates/tap-ble/src/lib.rs` — replaced scaffold with module declarations and re-exports
-- `crates/tap-ble/src/error.rs` — `BleError` enum with all variants from spec
-- `crates/tap-ble/src/device_info.rs` — `TapDeviceInfo` struct
-- `crates/tap-ble/src/device_registry.rs` — `DeviceRegistry` struct skeleton (methods stubbed with `todo!`)
-- `crates/tap-ble/src/scanner.rs` — `discover_devices` stub
-- `crates/tap-ble/src/tap_device.rs` — `TapDevice` stub
-- `crates/tap-ble/src/manager.rs` — `BleManager` with broadcast channel wired up
-
-**Notes:**
-
-- `btleplug 0.12` resolves to `0.12.0` and pulls in the `bluez-async` / `bluez-generated` stack on Linux. Compiles cleanly.
-- Spec was updated to include the full GUID table from `windows-sdk-guid-reference.txt`, bonding requirement and ATT MTU note from `api-doc.txt`, and a raw-sensor-mode out-of-scope note from `raw-sensor-mode.txt`.
-- `rust-version = "1.77.2"` was removed from `tap-ble/Cargo.toml`: edition 2024 requires a minimum of 1.85.0, making the field incorrect. `mapping-core` does not set `rust-version` either. This should be revisited uniformly at the packaging epic.
-
-**Next:** 3.2–3.5 — BLE adapter init and `discover_devices` implementation
-
----
-
-## 2026-03-14 — Task 2.35: debug event timing metadata tests + two bug fixes
-
-**Tasks completed:** 2.35
-**Tasks in progress:** none
-
-**Files changed:**
-
-- `crates/mapping-core/src/engine/combo_engine.rs` — two bug fixes:
-  1. `dispatch()`: `Resolved` debug event `layer_stack` field now uses `self.layer_stack.layer_ids()` (full stack captured before the walk) instead of `layers_checked` (which stopped at the first match). This ensures the full stack is always reported, not just the layers visited during the walk.
-  2. `push_event()`: `ComboTimeout` debug event was dead code — `flush_expired_combo` removed the timed-out entry before the combo check's else branch could emit the event. Fixed by emitting the debug event **before** `flush_expired_combo` when gap > window and debug mode is on. The dead else branch in the combo check was removed.
-- `crates/mapping-core/tests/combo_engine.rs` — 6 debug timing metadata tests added:
-  - `debug_resolved_waited_ms_reflects_buffering_duration`
-  - `debug_resolved_pattern_matches_tapped_code`
-  - `debug_resolved_layer_stack_and_matched_layer_are_correct`
-  - `debug_resolved_matched_mapping_label_is_correct`
-  - `debug_unmatched_passthrough_layers_checked_lists_all_walked_layers`
-  - `debug_combo_timeout_reports_correct_gap_and_window`
-- `docs/plan/implementation-plan.md` — 2.35 marked complete
-
-**Notes:**
-Epic 2 is now fully complete. All 216 tests pass; clippy clean.
-The `ComboTimeout` bug was a design issue: the flush happened before the timeout could be detected in the combo-check branch. Solution is correct — detect before flush, remove dead else.
-
-**Next:** Epic 3 (BLE layer, `tap-ble` crate) — requires a spec document before any code is written.
+**Next:** 12.1 — write `docs/spec/system-tray-spec.md` (spec-first, must be approved before coding)

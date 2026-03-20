@@ -1,5 +1,5 @@
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{atomic::AtomicBool, Arc};
 use std::time::Duration;
 
 use mapping_core::{engine::ComboEngine, LayerRegistry};
@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use tap_ble::{BleManager, BleStatusEvent, DeviceRegistry};
 use tokio::sync::{broadcast, Mutex};
 
+use crate::context_rules::ContextRules;
 use crate::platform;
 
 // ── AppState ─────────────────────────────────────────────────────────────────
@@ -54,6 +55,21 @@ pub struct AppState {
 
     /// Absolute path to `preferences.json` (sibling of `devices.json`).
     pub preferences_path: PathBuf,
+
+    /// Rules for automatic profile activation on window focus change.
+    // LOCKING: acquire after engine, layer_registry, and ble_manager.
+    pub context_rules: Mutex<ContextRules>,
+
+    /// Absolute path to `context-rules.json` (sibling of `devices.json`).
+    pub context_rules_path: PathBuf,
+
+    /// In-memory preferences, mirrored to `preferences_path` on change.
+    // LOCKING: tokio::sync::Mutex — updated from async command handlers.
+    pub(crate) preferences: Mutex<Preferences>,
+
+    /// Mirror of `preferences.close_to_tray` as an atomic so the window close
+    /// handler can read it without an async `block_on` call.
+    pub(crate) close_to_tray: Arc<AtomicBool>,
 }
 
 impl AppState {
@@ -91,10 +107,14 @@ pub async fn build_app_state(
         .ok_or_else(|| anyhow::anyhow!("profiles_dir has no parent"))?;
     let devices_json_path = config_dir.join("devices.json");
     let preferences_path = config_dir.join("preferences.json");
+    let context_rules_path = config_dir.join("context-rules.json");
 
     // Load device registry (empty if file absent).
     let device_registry = DeviceRegistry::load(&devices_json_path)
         .map_err(|e| anyhow::anyhow!("failed to load device registry: {e}"))?;
+
+    // Load context rules (empty if file absent or malformed).
+    let context_rules = ContextRules::load(&context_rules_path);
 
     // Load user preferences (empty/default if file absent).
     let preferences = Preferences::load(&preferences_path);
@@ -147,6 +167,7 @@ pub async fn build_app_state(
         }
     };
 
+    let close_to_tray = Arc::new(AtomicBool::new(preferences.close_to_tray));
     let state = AppState {
         engine: Mutex::new(engine),
         layer_registry: Mutex::new(layer_registry),
@@ -155,6 +176,10 @@ pub async fn build_app_state(
         profiles_dir,
         devices_json_path,
         preferences_path,
+        context_rules: Mutex::new(context_rules),
+        context_rules_path,
+        preferences: Mutex::new(preferences),
+        close_to_tray,
     };
 
     Ok((state, event_rx, status_rx))
@@ -188,16 +213,17 @@ pub(crate) async fn auto_reconnect(app: tauri::AppHandle, state: Arc<AppState>) 
             Ok(r) => r,
             Err(_) => return,
         };
-        reg.iter()
-            .map(|(id, addr)| (id.clone(), *addr))
-            .collect()
+        reg.iter().map(|(id, addr)| (id.clone(), *addr)).collect()
     };
 
     if saved.is_empty() {
         return;
     }
 
-    log::info!("auto_reconnect: {} saved device(s), scanning first", saved.len());
+    log::info!(
+        "auto_reconnect: {} saved device(s), scanning first",
+        saved.len()
+    );
 
     // Scan before connecting. This populates the adapter cache and avoids
     // triggering a scan mid-connection which can drop already-connected devices
@@ -285,6 +311,42 @@ struct StoredPreferences {
     profile_active: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     last_active_profile_id: Option<String>,
+    /// Hide window on close instead of quitting.  Default `true`.
+    #[serde(default = "default_true")]
+    close_to_tray: bool,
+    /// Launch directly to tray without showing the main window.  Default `false`.
+    #[serde(default)]
+    start_minimised: bool,
+    /// Register the app to start at OS login.  Default `false`.
+    #[serde(default)]
+    start_at_login: bool,
+    /// Whether the first-hide "still running" notification has been shown.
+    #[serde(default)]
+    shown_tray_hint: bool,
+    /// Notify when a Tap device connects.  Default `true`.
+    #[serde(default = "default_true")]
+    notify_device_connected: bool,
+    /// Notify when a Tap device disconnects.  Default `true`.
+    #[serde(default = "default_true")]
+    notify_device_disconnected: bool,
+    /// Notify when the active layer switches.  Default `false`.
+    #[serde(default)]
+    notify_layer_switch: bool,
+    /// Notify when the active profile switches.  Default `true`.
+    #[serde(default = "default_true")]
+    notify_profile_switch: bool,
+    /// Master haptic toggle — gates all vibration dispatch.  Default `true`.
+    #[serde(default = "default_true")]
+    haptics_enabled: bool,
+    /// Vibrate on every resolved tap event.  Default `false`.
+    #[serde(default)]
+    haptic_on_tap: bool,
+    /// Vibrate on layer push/pop/switch.  Default `true`.
+    #[serde(default = "default_true")]
+    haptic_on_layer_switch: bool,
+    /// Vibrate on profile activate.  Default `true`.
+    #[serde(default = "default_true")]
+    haptic_on_profile_switch: bool,
 }
 
 fn default_true() -> bool {
@@ -294,8 +356,8 @@ fn default_true() -> bool {
 /// User preferences persisted across sessions.
 ///
 /// Stored as `preferences.json` in the app config directory alongside
-/// `devices.json`.  The file is written every time the user explicitly
-/// activates or deactivates a profile.
+/// `devices.json`.  Written on profile activation/deactivation and when tray
+/// settings change.
 pub(crate) struct Preferences {
     /// `false` only when the user has explicitly deactivated all profiles.
     ///
@@ -304,6 +366,30 @@ pub(crate) struct Preferences {
     pub profile_active: bool,
     /// The `layer_id` of the last profile the user explicitly activated.
     pub last_active_profile_id: Option<String>,
+    /// Hide window on close instead of quitting (default `true`).
+    pub close_to_tray: bool,
+    /// Launch directly to tray without showing the main window (default `false`).
+    pub start_minimised: bool,
+    /// Register the app to start at OS login (default `false`).
+    pub start_at_login: bool,
+    /// Whether the first-hide "still running" notification has been shown.
+    pub shown_tray_hint: bool,
+    /// Notify when a Tap device connects (default `true`).
+    pub notify_device_connected: bool,
+    /// Notify when a Tap device disconnects (default `true`).
+    pub notify_device_disconnected: bool,
+    /// Notify when the active layer switches (default `false`).
+    pub notify_layer_switch: bool,
+    /// Notify when the active profile switches (default `true`).
+    pub notify_profile_switch: bool,
+    /// Master haptic toggle — gates all vibration (default `true`).
+    pub haptics_enabled: bool,
+    /// Vibrate on every resolved tap event (default `false`).
+    pub haptic_on_tap: bool,
+    /// Vibrate on layer push/pop/switch (default `true`).
+    pub haptic_on_layer_switch: bool,
+    /// Vibrate on profile activate (default `true`).
+    pub haptic_on_profile_switch: bool,
 }
 
 impl Default for Preferences {
@@ -311,6 +397,18 @@ impl Default for Preferences {
         Self {
             profile_active: true,
             last_active_profile_id: None,
+            close_to_tray: true,
+            start_minimised: false,
+            start_at_login: false,
+            shown_tray_hint: false,
+            notify_device_connected: true,
+            notify_device_disconnected: true,
+            notify_layer_switch: false,
+            notify_profile_switch: true,
+            haptics_enabled: true,
+            haptic_on_tap: false,
+            haptic_on_layer_switch: true,
+            haptic_on_profile_switch: true,
         }
     }
 }
@@ -332,6 +430,18 @@ impl Preferences {
             Ok(stored) => Self {
                 profile_active: stored.profile_active,
                 last_active_profile_id: stored.last_active_profile_id,
+                close_to_tray: stored.close_to_tray,
+                start_minimised: stored.start_minimised,
+                start_at_login: stored.start_at_login,
+                shown_tray_hint: stored.shown_tray_hint,
+                notify_device_connected: stored.notify_device_connected,
+                notify_device_disconnected: stored.notify_device_disconnected,
+                notify_layer_switch: stored.notify_layer_switch,
+                notify_profile_switch: stored.notify_profile_switch,
+                haptics_enabled: stored.haptics_enabled,
+                haptic_on_tap: stored.haptic_on_tap,
+                haptic_on_layer_switch: stored.haptic_on_layer_switch,
+                haptic_on_profile_switch: stored.haptic_on_profile_switch,
             },
             Err(e) => {
                 log::warn!("failed to parse preferences: {e}");
@@ -343,9 +453,21 @@ impl Preferences {
     /// Persist to `path` using a write-then-rename strategy for atomicity.
     pub fn save(&self, path: &Path) -> Result<(), anyhow::Error> {
         let stored = StoredPreferences {
-            version: 1,
+            version: 2,
             profile_active: self.profile_active,
             last_active_profile_id: self.last_active_profile_id.clone(),
+            close_to_tray: self.close_to_tray,
+            start_minimised: self.start_minimised,
+            start_at_login: self.start_at_login,
+            shown_tray_hint: self.shown_tray_hint,
+            notify_device_connected: self.notify_device_connected,
+            notify_device_disconnected: self.notify_device_disconnected,
+            notify_layer_switch: self.notify_layer_switch,
+            notify_profile_switch: self.notify_profile_switch,
+            haptics_enabled: self.haptics_enabled,
+            haptic_on_tap: self.haptic_on_tap,
+            haptic_on_layer_switch: self.haptic_on_layer_switch,
+            haptic_on_profile_switch: self.haptic_on_profile_switch,
         };
         let json = serde_json::to_string_pretty(&stored)?;
         let tmp = path.with_extension("json.tmp");
@@ -381,6 +503,107 @@ pub(crate) fn builtin_default_profile() -> mapping_core::types::Profile {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ── Notification-gating defaults ──────────────────────────────────────────
+
+    #[test]
+    fn preferences_default_notify_device_connected_is_true() {
+        assert!(Preferences::default().notify_device_connected);
+    }
+
+    #[test]
+    fn preferences_default_notify_device_disconnected_is_true() {
+        assert!(Preferences::default().notify_device_disconnected);
+    }
+
+    #[test]
+    fn preferences_default_notify_layer_switch_is_false() {
+        assert!(!Preferences::default().notify_layer_switch);
+    }
+
+    #[test]
+    fn preferences_default_notify_profile_switch_is_true() {
+        assert!(Preferences::default().notify_profile_switch);
+    }
+
+    #[test]
+    fn preferences_load_missing_notify_fields_falls_back_to_defaults() {
+        // A stored preferences JSON without notification fields must produce the
+        // correct defaults when loaded (backwards compatibility).
+        let json = r#"{"version":2,"close_to_tray":true,"start_minimised":false,"start_at_login":false,"shown_tray_hint":false}"#;
+        let stored: StoredPreferences = serde_json::from_str(json).expect("should parse");
+        assert!(stored.notify_device_connected); // default_true
+        assert!(stored.notify_device_disconnected); // default_true
+        assert!(!stored.notify_layer_switch); // default false
+        assert!(stored.notify_profile_switch); // default_true
+    }
+
+    #[test]
+    fn preferences_load_explicit_notify_fields_are_respected() {
+        let json = r#"{
+            "version": 2,
+            "notify_device_connected": false,
+            "notify_device_disconnected": false,
+            "notify_layer_switch": true,
+            "notify_profile_switch": false
+        }"#;
+        let stored: StoredPreferences = serde_json::from_str(json).expect("should parse");
+        assert!(!stored.notify_device_connected);
+        assert!(!stored.notify_device_disconnected);
+        assert!(stored.notify_layer_switch);
+        assert!(!stored.notify_profile_switch);
+    }
+
+    // ── Haptic defaults ───────────────────────────────────────────────────────
+
+    #[test]
+    fn preferences_default_haptics_enabled_is_true() {
+        assert!(Preferences::default().haptics_enabled);
+    }
+
+    #[test]
+    fn preferences_default_haptic_on_tap_is_false() {
+        assert!(!Preferences::default().haptic_on_tap);
+    }
+
+    #[test]
+    fn preferences_default_haptic_on_layer_switch_is_true() {
+        assert!(Preferences::default().haptic_on_layer_switch);
+    }
+
+    #[test]
+    fn preferences_default_haptic_on_profile_switch_is_true() {
+        assert!(Preferences::default().haptic_on_profile_switch);
+    }
+
+    #[test]
+    fn preferences_load_missing_haptic_fields_falls_back_to_defaults() {
+        // Older preferences.json without haptic fields should get correct defaults.
+        let json = r#"{"version":2,"close_to_tray":true,"start_minimised":false,"start_at_login":false,"shown_tray_hint":false}"#;
+        let stored: StoredPreferences = serde_json::from_str(json).expect("should parse");
+        assert!(stored.haptics_enabled);         // default_true
+        assert!(!stored.haptic_on_tap);          // default false
+        assert!(stored.haptic_on_layer_switch);  // default_true
+        assert!(stored.haptic_on_profile_switch); // default_true
+    }
+
+    #[test]
+    fn preferences_load_explicit_haptic_fields_are_respected() {
+        let json = r#"{
+            "version": 2,
+            "haptics_enabled": false,
+            "haptic_on_tap": true,
+            "haptic_on_layer_switch": false,
+            "haptic_on_profile_switch": false
+        }"#;
+        let stored: StoredPreferences = serde_json::from_str(json).expect("should parse");
+        assert!(!stored.haptics_enabled);
+        assert!(stored.haptic_on_tap);
+        assert!(!stored.haptic_on_layer_switch);
+        assert!(!stored.haptic_on_profile_switch);
+    }
+
+    // ── Starter profiles ──────────────────────────────────────────────────────
 
     #[test]
     fn starter_profiles_all_parse_and_validate() {

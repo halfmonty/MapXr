@@ -26,12 +26,6 @@ fn profile_load_valid_dual_succeeds() {
 }
 
 #[test]
-fn profile_load_valid_overloaded_with_strategy_succeeds() {
-    let json = include_str!("fixtures/valid_overloaded.json");
-    assert!(load_str(json).is_ok());
-}
-
-#[test]
 fn profile_load_valid_aliases_succeeds() {
     let json = include_str!("fixtures/valid_aliases.json");
     assert!(load_str(json).is_ok());
@@ -105,17 +99,13 @@ fn profile_load_circular_alias_returns_error() {
 // ── Overload strategy ─────────────────────────────────────────────────────────
 
 #[test]
-fn profile_load_overloaded_without_strategy_returns_error() {
-    let json = include_str!("fixtures/err_overloaded_no_strategy.json");
-    let err = load_str(json).unwrap_err();
-    assert!(
-        matches!(err, ProfileError::OverloadedCodeWithoutStrategy { .. }),
-        "expected OverloadedCodeWithoutStrategy, got: {err}"
-    );
+fn profile_load_overloaded_codes_succeed() {
+    let json = include_str!("fixtures/valid_overloaded.json");
+    assert!(load_str(json).is_ok());
 }
 
 #[test]
-fn profile_load_non_overloaded_codes_do_not_require_strategy() {
+fn profile_load_non_overloaded_codes_load_successfully() {
     // Different codes in tap vs double_tap — not overloaded.
     let json = r#"{
         "version": 1, "kind": "single", "name": "t", "layer_id": "t",

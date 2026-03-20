@@ -20,7 +20,6 @@
     Trigger,
     Action,
     VariableValue,
-    OverloadStrategy,
   } from "$lib/types";
 
   // ── Load ─────────────────────────────────────────────────────────────────
@@ -720,28 +719,6 @@
               />
             </label>
           {/each}
-
-          <!-- Overload strategy -->
-          <label class="form-control">
-            <div class="label">
-              <span class="label-text">Overload strategy</span>
-              <span class="label-text-alt opacity-60 text-xs"
-                >Required when a code is used for both tap and double/triple-tap.</span
-              >
-            </div>
-            <select
-              class="select select-bordered w-40"
-              value={profile.settings.overload_strategy ?? ""}
-              onchange={(e) => {
-                const v = (e.target as HTMLSelectElement).value;
-                updateSettings("overload_strategy", v === "" ? null : (v as OverloadStrategy));
-              }}
-            >
-              <option value="">None</option>
-              <option value="patient">Patient</option>
-              <option value="eager">Eager</option>
-            </select>
-          </label>
 
           <!-- Passthrough -->
           <label class="form-control">

@@ -65,7 +65,9 @@ async fn discover_devices_finds_at_least_one_tap_device() {
 async fn probe_gatt_characteristics() {
     use btleplug::api::{Central as _, Peripheral as _};
 
-    let adapter = tap_ble::scanner::get_adapter().await.expect("no BLE adapter");
+    let adapter = tap_ble::scanner::get_adapter()
+        .await
+        .expect("no BLE adapter");
 
     // Scan using existing discover_devices to get an address.
     let devices = tap_ble::discover_devices(5000).await.expect("scan failed");
@@ -87,7 +89,10 @@ async fn probe_gatt_characteristics() {
         .expect("peripheral not found in adapter cache after scan");
 
     peripheral.connect().await.expect("connect failed");
-    peripheral.discover_services().await.expect("discover_services failed");
+    peripheral
+        .discover_services()
+        .await
+        .expect("discover_services failed");
 
     println!("\n=== GATT Services & Characteristics ===\n");
     for service in peripheral.services() {
@@ -99,7 +104,10 @@ async fn probe_gatt_characteristics() {
             );
 
             // Attempt to read if the Read property is present.
-            if characteristic.properties.contains(btleplug::api::CharPropFlags::READ) {
+            if characteristic
+                .properties
+                .contains(btleplug::api::CharPropFlags::READ)
+            {
                 match peripheral.read(characteristic).await {
                     Ok(bytes) => {
                         let hex: String = bytes
@@ -118,6 +126,50 @@ async fn probe_gatt_characteristics() {
     }
 
     peripheral.disconnect().await.expect("disconnect failed");
+}
+
+/// Connects to the first discovered device, sends vibration pattern [1000, 100, 200],
+/// waits 5 seconds to let the full pattern play, then disconnects.
+///
+/// Run with:
+///   cargo test -p tap-ble -- --ignored vibrate_pattern_hardware --nocapture --test-threads=1
+///
+/// Expected: one long buzz (~1 s), a brief pause (~100 ms), one short buzz (~200 ms).
+/// No additional buzzes should occur.
+#[tokio::test]
+#[ignore = "requires physical Tap device"]
+async fn vibrate_pattern_hardware() {
+    use mapping_core::types::VibrationPattern;
+
+    let mut manager = tap_ble::BleManager::new().await.expect("no BLE adapter");
+    let devices = manager.scan(5000).await.expect("scan failed");
+    assert!(!devices.is_empty(), "no Tap devices found within 5 s");
+
+    let first = &devices[0];
+    println!("\nConnecting to: {} (name: {:?})", first.address, first.name);
+
+    manager
+        .connect(mapping_core::engine::DeviceId::new("solo"), first.address)
+        .await
+        .expect("connect failed");
+
+    // Give controller mode a moment to settle.
+    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+
+    println!("Sending vibration pattern [1000, 100, 200]…");
+    let pattern = VibrationPattern(vec![1000, 100, 200]);
+    manager.vibrate_all(&pattern).await;
+    println!("Write issued. Waiting 5 s to observe full pattern playback…");
+
+    tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+
+    println!("Disconnecting…");
+    manager
+        .disconnect(&mapping_core::engine::DeviceId::new("solo"))
+        .await
+        .expect("disconnect failed");
+
+    println!("Done. Check that exactly one long+short buzz occurred.");
 }
 
 /// Asserts that a device discovered via the LE scan is connectable.

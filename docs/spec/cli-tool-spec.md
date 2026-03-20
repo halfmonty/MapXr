@@ -1,3 +1,10 @@
+---
+covers: Epic 14 (profile normalisation CLI tool — tap-cli crate)
+status: Approved, not yet implemented
+last-updated: 2026-03-19
+note: Title below says "Epic 8" — this is a doc error; the correct epic is 14
+---
+
 # Epic 8 — Profile normalisation CLI tool (`tap-cli`)
 
 ## Overview

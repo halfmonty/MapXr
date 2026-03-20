@@ -4,7 +4,6 @@
   "name": "valid-overloaded",
   "layer_id": "valid-overloaded",
   "settings": {
-    "overload_strategy": "patient",
     "double_tap_window_ms": 250
   },
   "mappings": [

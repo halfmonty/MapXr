@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};
@@ -105,7 +105,6 @@ impl Profile {
     /// - Any `KeyDef` contains an unknown key name
     /// - Any `Action::Alias` references an undefined alias
     /// - Alias definitions form a circular reference
-    /// - A tap code is overloaded without `overload_strategy` set
     /// - A `Macro` step contains another `Macro`
     /// - A trigger code kind does not match the profile kind
     pub fn load(path: &Path) -> Result<Profile, ProfileError> {
@@ -141,7 +140,6 @@ impl Profile {
         self.check_macro_nesting()?;
         self.check_hold_modifier_rules()?;
         self.check_aliases()?;
-        self.check_overloaded_codes()?;
         Ok(())
     }
 
@@ -241,32 +239,6 @@ impl Profile {
         for start in self.aliases.keys() {
             let mut visited: Vec<&str> = vec![start.as_str()];
             detect_alias_cycle(start, &self.aliases, &mut visited)?;
-        }
-        Ok(())
-    }
-
-    /// Rule: overloaded codes require overload_strategy to be set.
-    fn check_overloaded_codes(&self) -> Result<(), ProfileError> {
-        use crate::types::{Hand, Trigger};
-        if self.settings.overload_strategy.is_some() {
-            return Ok(());
-        }
-        // Use the profile's hand (or Right for dual) for canonical string form.
-        let hand = self.hand.unwrap_or(Hand::Right);
-        let mut tap_codes: HashSet<String> = HashSet::new();
-        for mapping in &self.mappings {
-            match &mapping.trigger {
-                Trigger::Tap { code } => {
-                    tap_codes.insert((*code).to_pattern_string(hand));
-                }
-                Trigger::DoubleTap { code } | Trigger::TripleTap { code } => {
-                    let key = (*code).to_pattern_string(hand);
-                    if tap_codes.contains(&key) {
-                        return Err(ProfileError::OverloadedCodeWithoutStrategy { code: key });
-                    }
-                }
-                Trigger::Sequence { .. } => {}
-            }
         }
         Ok(())
     }
@@ -590,27 +562,6 @@ mod tests {
         assert!(p.on_enter.is_some());
         assert_eq!(p.mappings.len(), 1);
         assert_eq!(p.mappings[0].label, "Unpause");
-    }
-
-    #[test]
-    fn profile_settings_embedded_deserialises_correctly() {
-        let json = r#"{
-            "version": 1,
-            "kind": "dual",
-            "name": "base",
-            "layer_id": "base",
-            "settings": {
-                "combo_window_ms": 150,
-                "overload_strategy": "eager"
-            },
-            "mappings": []
-        }"#;
-        let p: Profile = serde_json::from_str(json).unwrap();
-        assert_eq!(p.settings.combo_window_ms, Some(150));
-        assert_eq!(
-            p.settings.overload_strategy,
-            Some(crate::types::OverloadStrategy::Eager)
-        );
     }
 
     // ── hold_modifier validation ──────────────────────────────────────────────

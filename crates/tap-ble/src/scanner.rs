@@ -77,14 +77,14 @@ pub async fn discover_devices(timeout_ms: u64) -> Result<Vec<TapDeviceInfo>, Ble
 /// this is a reliable post-scan filter that is immune to btleplug's unfiltered event
 /// stream and to BlueZ's cross-client filter merging behaviour.
 #[cfg(target_os = "linux")]
-pub(crate) async fn discover_devices_le(
-    timeout_ms: u64,
-) -> Result<Vec<TapDeviceInfo>, BleError> {
+pub(crate) async fn discover_devices_le(timeout_ms: u64) -> Result<Vec<TapDeviceInfo>, BleError> {
     use std::collections::HashMap;
     use std::str::FromStr as _;
 
+    use bluez_async::{
+        BluetoothEvent, BluetoothSession, DeviceEvent, DeviceId, DiscoveryFilter, Transport,
+    };
     use btleplug::api::BDAddr;
-    use bluez_async::{BluetoothEvent, DeviceEvent, DeviceId, BluetoothSession, DiscoveryFilter, Transport};
     use futures::StreamExt as _;
 
     // BluetoothSession::new() internally spawns the D-Bus resource task via tokio::spawn;
@@ -183,10 +183,8 @@ pub(crate) async fn discover_devices_le(
         if !device_info.services.contains(&TAP_SERVICE_UUID) {
             continue;
         }
-        let address =
-            BDAddr::from_str(&device_info.mac_address.to_string()).map_err(|e| {
-                BleError::Btleplug(btleplug::Error::RuntimeError(e.to_string()))
-            })?;
+        let address = BDAddr::from_str(&device_info.mac_address.to_string())
+            .map_err(|e| BleError::Btleplug(btleplug::Error::RuntimeError(e.to_string())))?;
 
         // Primary: use RSSI captured from PropertiesChanged events during the scan.
         let event_rssi = rssi_map.get(&device_info.id).copied();
@@ -202,7 +200,11 @@ pub(crate) async fn discover_devices_le(
         let rssi_appeared_this_scan =
             event_rssi.is_some() || (pre_rssi_was_absent && device_info.rssi.is_some());
 
-        let rssi = event_rssi.or(if rssi_appeared_this_scan { device_info.rssi } else { None });
+        let rssi = event_rssi.or(if rssi_appeared_this_scan {
+            device_info.rssi
+        } else {
+            None
+        });
         // A device that is currently connected to the OS has its BLE slot occupied and
         // is not advertising, so it will never appear in rssi_map.  It is still
         // definitively present — mark it separately so the UI can show the right state.
@@ -499,7 +501,6 @@ mod tests {
         }
     }
 
-
     fn mock_adapter(peripherals: Vec<MockPeripheral>) -> MockAdapter {
         MockAdapter {
             peripherals,
@@ -565,9 +566,10 @@ mod tests {
     #[tokio::test]
     async fn collect_peripherals_non_tap_device_with_different_service_uuid_is_excluded() {
         let other_uuid = Uuid::from_u128(0xDEADBEEF_0000_0000_0000_000000000000);
-        let adapter = mock_adapter(vec![
-            mock_peripheral_with_services(Some(-60), vec![other_uuid]),
-        ]);
+        let adapter = mock_adapter(vec![mock_peripheral_with_services(
+            Some(-60),
+            vec![other_uuid],
+        )]);
 
         let devices = scan_with_adapter(&adapter, 0).await.expect("scan failed");
 
@@ -579,9 +581,10 @@ mod tests {
 
     #[tokio::test]
     async fn collect_peripherals_tap_device_with_correct_service_uuid_is_included() {
-        let adapter = mock_adapter(vec![
-            mock_peripheral_with_services(Some(-60), vec![TAP_SERVICE_UUID]),
-        ]);
+        let adapter = mock_adapter(vec![mock_peripheral_with_services(
+            Some(-60),
+            vec![TAP_SERVICE_UUID],
+        )]);
 
         let devices = scan_with_adapter(&adapter, 0).await.expect("scan failed");
 
@@ -591,9 +594,7 @@ mod tests {
     #[tokio::test]
     async fn collect_peripherals_device_with_empty_services_is_included() {
         // Some platforms don't populate services from advertisement data; trust the scan filter.
-        let adapter = mock_adapter(vec![
-            mock_peripheral_with_services(Some(-60), vec![]),
-        ]);
+        let adapter = mock_adapter(vec![mock_peripheral_with_services(Some(-60), vec![])]);
 
         let devices = scan_with_adapter(&adapter, 0).await.expect("scan failed");
 
@@ -604,10 +605,7 @@ mod tests {
     async fn scan_with_adapter_all_returned_devices_are_seen_in_scan() {
         // On non-Linux, btleplug only returns peripherals from the current scan session,
         // so all results should be marked seen_in_scan = true regardless of RSSI.
-        let adapter = mock_adapter(vec![
-            mock_peripheral(Some(-60)),
-            mock_peripheral(None),
-        ]);
+        let adapter = mock_adapter(vec![mock_peripheral(Some(-60)), mock_peripheral(None)]);
 
         let devices = scan_with_adapter(&adapter, 0).await.expect("scan failed");
 

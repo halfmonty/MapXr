@@ -1,3 +1,9 @@
+---
+covers: Epic 4 (Tauri command layer)
+status: Approved and fully implemented
+last-updated: 2026-03-19
+---
+
 # tauri-commands — Tauri command layer specification (Epic 4)
 
 ## Table of contents

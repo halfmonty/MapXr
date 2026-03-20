@@ -1,6 +1,61 @@
 use serde::{Deserialize, Serialize};
 
-use crate::types::{HoldModifierMode, KeyDef, Modifier, PushLayerMode, VariableValue};
+use crate::types::{
+    HoldModifierMode, KeyDef, Modifier, MouseButton, PushLayerMode, ScrollDirection, VariableValue,
+};
+
+// ── VibrationPattern ──────────────────────────────────────────────────────────
+
+/// A haptic vibration pattern: alternating on/off durations in milliseconds.
+///
+/// Elements alternate **on, off, on, off, …** starting with on at index 0.
+/// Each duration may be in the range 10–2550 ms with 10 ms resolution; values
+/// outside this range are clamped silently during BLE encoding, not rejected.
+///
+/// A maximum of 18 elements (9 on/off pairs) can be sent per BLE write;
+/// longer sequences are truncated at the send site.
+///
+/// An empty pattern is a no-op.
+///
+/// See `docs/spec/haptics-spec.md` §VibrationPattern for full encoding rules.
+///
+/// # JSON example
+/// ```json
+/// [200, 100, 200, 100, 200]
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct VibrationPattern(pub Vec<u16>);
+
+impl VibrationPattern {
+    /// Encode the pattern into the BLE payload written to the haptic characteristic.
+    ///
+    /// Payload layout: always exactly 20 bytes — `[0x00, 0x02, d0, d1, …, d17]` where
+    /// each duration byte is `clamp(duration_ms / 10, 0, 255)` and unused slots are
+    /// zero-filled.  The fixed 20-byte size is required by the device firmware; sending
+    /// a shorter payload leaves the trailing slots as uninitialised device RAM, which
+    /// the firmware reads as additional phantom durations.  The maximum 18-element limit
+    /// is enforced by truncation before encoding.
+    ///
+    /// Returns an empty `Vec` if the pattern has no elements (no write is issued).
+    ///
+    /// Source: `docs/reference/vibration.txt` (Tap Python SDK) and C# SDK implementation.
+    pub fn encode(&self) -> Vec<u8> {
+        if self.0.is_empty() {
+            return Vec::new();
+        }
+        // The device firmware expects exactly 20 bytes: 2-byte header + 18 duration slots.
+        // Unused slots must be explicitly zeroed; the device does not zero-pad internally
+        // and will read uninitialised buffer contents as additional on/off durations if the
+        // payload is shorter than 20 bytes.  This matches the C# SDK implementation.
+        let mut payload = vec![0u8; 20];
+        payload[0] = 0x00; // reserved prefix
+        payload[1] = 0x02; // vibration sub-command
+        for (i, &d) in self.0.iter().take(18).enumerate() {
+            payload[2 + i] = (d / 10).min(255) as u8;
+        }
+        payload
+    }
+}
 
 /// An action fired when a trigger matches.
 ///
@@ -20,6 +75,10 @@ use crate::types::{HoldModifierMode, KeyDef, Modifier, PushLayerMode, VariableVa
 /// { "type": "block"                                                      }
 /// { "type": "alias",           "name": "save"                           }
 /// { "type": "hold_modifier",   "modifiers": ["shift"], "mode": "toggle" }
+/// { "type": "mouse_click",        "button": "left"                      }
+/// { "type": "mouse_double_click", "button": "right"                     }
+/// { "type": "mouse_scroll",       "direction": "down"                   }
+/// { "type": "vibrate",            "pattern": [200, 100, 200]            }
 /// ```
 ///
 /// # Nesting rules
@@ -123,6 +182,24 @@ pub enum Action {
         name: String,
     },
 
+    /// Click a mouse button once.
+    MouseClick {
+        /// The button to click.
+        button: MouseButton,
+    },
+
+    /// Double-click a mouse button.
+    MouseDoubleClick {
+        /// The button to click.
+        button: MouseButton,
+    },
+
+    /// Scroll in a cardinal direction by one platform scroll unit.
+    MouseScroll {
+        /// The direction to scroll.
+        direction: ScrollDirection,
+    },
+
     /// Activate a sticky modifier key that is applied to subsequent key actions.
     ///
     /// The modifier stays active according to `mode` (toggle, count, or timeout).
@@ -134,6 +211,15 @@ pub enum Action {
         /// How long the modifier stays active.
         #[serde(flatten)]
         mode: HoldModifierMode,
+    },
+
+    /// Send a vibration pattern to all connected Tap devices.
+    ///
+    /// Dispatched via [`tap_ble::TapDevice::vibrate`] to every currently
+    /// connected device. Silently dropped if no device is connected.
+    Vibrate {
+        /// Alternating on/off durations in milliseconds.
+        pattern: VibrationPattern,
     },
 }
 
@@ -155,7 +241,83 @@ pub struct MacroStep {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::VariableValue;
+    use crate::types::{MouseButton, ScrollDirection, VariableValue};
+
+    // ── VibrationPattern::encode ──────────────────────────────────────────────
+
+    #[test]
+    fn vibration_pattern_encode_empty_returns_empty_vec() {
+        assert_eq!(VibrationPattern(vec![]).encode(), Vec::<u8>::new());
+    }
+
+    fn padded(header: &[u8]) -> Vec<u8> {
+        // Build the expected 20-byte payload: provided header bytes followed by zeros.
+        let mut v = header.to_vec();
+        v.resize(20, 0);
+        v
+    }
+
+    #[test]
+    fn vibration_pattern_encode_sdk_example_matches_expected_bytes() {
+        // Python SDK example: [1000, 300, 200] → header [0x00, 0x02, 100, 30, 20]
+        // padded to 20 bytes.  Source: docs/reference/vibration.txt
+        assert_eq!(
+            VibrationPattern(vec![1000, 300, 200]).encode(),
+            padded(&[0x00, 0x02, 100, 30, 20])
+        );
+    }
+
+    #[test]
+    fn vibration_pattern_encode_single_on_pulse() {
+        assert_eq!(
+            VibrationPattern(vec![80]).encode(),
+            padded(&[0x00, 0x02, 8])
+        );
+    }
+
+    #[test]
+    fn vibration_pattern_encode_clamps_above_max_duration() {
+        // 2560 ms > 2550 ms max → encoded as 255
+        assert_eq!(
+            VibrationPattern(vec![2560]).encode(),
+            padded(&[0x00, 0x02, 255])
+        );
+    }
+
+    #[test]
+    fn vibration_pattern_encode_resolution_floors_to_nearest_10ms() {
+        // 15 ms → 15 / 10 = 1; 19 ms → 19 / 10 = 1
+        assert_eq!(
+            VibrationPattern(vec![15, 19]).encode(),
+            padded(&[0x00, 0x02, 1, 1])
+        );
+    }
+
+    #[test]
+    fn vibration_pattern_encode_zero_encodes_to_zero_byte() {
+        assert_eq!(
+            VibrationPattern(vec![0]).encode(),
+            padded(&[0x00, 0x02, 0])
+        );
+    }
+
+    #[test]
+    fn vibration_pattern_encode_truncates_at_18_elements() {
+        let durations: Vec<u16> = (1u16..=22).map(|i| i * 10).collect(); // 22 elements
+        let encoded = VibrationPattern(durations).encode();
+        assert_eq!(encoded.len(), 20, "header(2) + 18 durations");
+        assert_eq!(&encoded[..2], &[0x00, 0x02]);
+        for i in 0..18usize {
+            assert_eq!(encoded[2 + i], (i + 1) as u8, "element {i} mismatch");
+        }
+    }
+
+    #[test]
+    fn vibration_pattern_encode_exactly_18_elements_not_truncated() {
+        let encoded = VibrationPattern(vec![100; 18]).encode();
+        assert_eq!(encoded.len(), 20);
+        assert!(encoded[2..].iter().all(|&b| b == 10));
+    }
 
     fn round_trip(action: &Action) -> Action {
         let json = serde_json::to_string(action).expect("serialize");
@@ -584,6 +746,159 @@ mod tests {
         assert_eq!(round_trip(&a), a);
     }
 
+    // ── Action::MouseClick ────────────────────────────────────────────────────
+
+    #[test]
+    fn action_mouse_click_serialises_with_correct_type_tag() {
+        let a = Action::MouseClick {
+            button: MouseButton::Left,
+        };
+        let json = serde_json::to_string(&a).unwrap();
+        assert!(json.contains(r#""type":"mouse_click""#), "got: {json}");
+    }
+
+    #[test]
+    fn action_mouse_click_left_round_trips() {
+        let a = Action::MouseClick {
+            button: MouseButton::Left,
+        };
+        assert_eq!(round_trip(&a), a);
+    }
+
+    #[test]
+    fn action_mouse_click_right_round_trips() {
+        let a = Action::MouseClick {
+            button: MouseButton::Right,
+        };
+        assert_eq!(round_trip(&a), a);
+    }
+
+    #[test]
+    fn action_mouse_click_middle_round_trips() {
+        let a = Action::MouseClick {
+            button: MouseButton::Middle,
+        };
+        assert_eq!(round_trip(&a), a);
+    }
+
+    #[test]
+    fn action_mouse_click_deserialises_from_spec_json() {
+        let json = r#"{"type":"mouse_click","button":"left"}"#;
+        let a: Action = serde_json::from_str(json).unwrap();
+        assert_eq!(
+            a,
+            Action::MouseClick {
+                button: MouseButton::Left
+            }
+        );
+    }
+
+    #[test]
+    fn action_mouse_click_unknown_button_returns_error() {
+        let json = r#"{"type":"mouse_click","button":"thumb"}"#;
+        let result: Result<Action, _> = serde_json::from_str(json);
+        assert!(result.is_err(), "expected error for unknown button name");
+    }
+
+    // ── Action::MouseDoubleClick ──────────────────────────────────────────────
+
+    #[test]
+    fn action_mouse_double_click_serialises_with_correct_type_tag() {
+        let a = Action::MouseDoubleClick {
+            button: MouseButton::Left,
+        };
+        let json = serde_json::to_string(&a).unwrap();
+        assert!(
+            json.contains(r#""type":"mouse_double_click""#),
+            "got: {json}"
+        );
+    }
+
+    #[test]
+    fn action_mouse_double_click_right_round_trips() {
+        let a = Action::MouseDoubleClick {
+            button: MouseButton::Right,
+        };
+        assert_eq!(round_trip(&a), a);
+    }
+
+    #[test]
+    fn action_mouse_double_click_deserialises_from_spec_json() {
+        let json = r#"{"type":"mouse_double_click","button":"right"}"#;
+        let a: Action = serde_json::from_str(json).unwrap();
+        assert_eq!(
+            a,
+            Action::MouseDoubleClick {
+                button: MouseButton::Right
+            }
+        );
+    }
+
+    // ── Action::MouseScroll ───────────────────────────────────────────────────
+
+    #[test]
+    fn action_mouse_scroll_serialises_with_correct_type_tag() {
+        let a = Action::MouseScroll {
+            direction: ScrollDirection::Down,
+        };
+        let json = serde_json::to_string(&a).unwrap();
+        assert!(json.contains(r#""type":"mouse_scroll""#), "got: {json}");
+    }
+
+    #[test]
+    fn action_mouse_scroll_up_round_trips() {
+        let a = Action::MouseScroll {
+            direction: ScrollDirection::Up,
+        };
+        assert_eq!(round_trip(&a), a);
+    }
+
+    #[test]
+    fn action_mouse_scroll_down_round_trips() {
+        let a = Action::MouseScroll {
+            direction: ScrollDirection::Down,
+        };
+        assert_eq!(round_trip(&a), a);
+    }
+
+    #[test]
+    fn action_mouse_scroll_left_round_trips() {
+        let a = Action::MouseScroll {
+            direction: ScrollDirection::Left,
+        };
+        assert_eq!(round_trip(&a), a);
+    }
+
+    #[test]
+    fn action_mouse_scroll_right_round_trips() {
+        let a = Action::MouseScroll {
+            direction: ScrollDirection::Right,
+        };
+        assert_eq!(round_trip(&a), a);
+    }
+
+    #[test]
+    fn action_mouse_scroll_deserialises_from_spec_json() {
+        let json = r#"{"type":"mouse_scroll","direction":"up"}"#;
+        let a: Action = serde_json::from_str(json).unwrap();
+        assert_eq!(
+            a,
+            Action::MouseScroll {
+                direction: ScrollDirection::Up
+            }
+        );
+    }
+
+    #[test]
+    fn action_mouse_scroll_unknown_direction_returns_error() {
+        let json = r#"{"type":"mouse_scroll","direction":"diagonal"}"#;
+        let result: Result<Action, _> = serde_json::from_str(json);
+        assert!(
+            result.is_err(),
+            "expected error for unknown scroll direction"
+        );
+    }
+
     // ── Deserialise from spec examples ────────────────────────────────────────
 
     #[test]
@@ -621,6 +936,86 @@ mod tests {
             Action::PushLayer {
                 layer: "nav".into(),
                 mode: PushLayerMode::Timeout { timeout_ms: 2000 }
+            }
+        );
+    }
+
+    // ── VibrationPattern serde ────────────────────────────────────────────────
+
+    #[test]
+    fn vibration_pattern_serialises_as_json_array() {
+        let p = VibrationPattern(vec![200, 100, 200]);
+        let json = serde_json::to_string(&p).expect("serialize");
+        assert_eq!(json, "[200,100,200]");
+    }
+
+    #[test]
+    fn vibration_pattern_deserialises_from_json_array() {
+        let p: VibrationPattern = serde_json::from_str("[200,100,200]").expect("deserialize");
+        assert_eq!(p, VibrationPattern(vec![200, 100, 200]));
+    }
+
+    #[test]
+    fn vibration_pattern_empty_round_trips_as_empty_array() {
+        let p = VibrationPattern(vec![]);
+        let json = serde_json::to_string(&p).expect("serialize");
+        assert_eq!(json, "[]");
+        let back: VibrationPattern = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(back, p);
+    }
+
+    #[test]
+    fn vibration_pattern_boundary_values_round_trip() {
+        // 0 (min), 2550 (10ms-resolution max), and 65535 (u16::MAX, clamped on encode)
+        let p = VibrationPattern(vec![0, 2550, 65535]);
+        let json = serde_json::to_string(&p).expect("serialize");
+        let back: VibrationPattern = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(back, p);
+    }
+
+    #[test]
+    fn vibration_pattern_single_element_round_trips() {
+        let p = VibrationPattern(vec![80]);
+        let json = serde_json::to_string(&p).expect("serialize");
+        let back: VibrationPattern = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(back, p);
+    }
+
+    // ── Action::Vibrate ───────────────────────────────────────────────────────
+
+    #[test]
+    fn action_vibrate_serialises_with_correct_type_tag() {
+        let a = Action::Vibrate {
+            pattern: VibrationPattern(vec![200, 100, 200]),
+        };
+        let json = serde_json::to_string(&a).unwrap();
+        assert!(json.contains(r#""type":"vibrate""#), "got: {json}");
+    }
+
+    #[test]
+    fn action_vibrate_round_trips() {
+        let a = Action::Vibrate {
+            pattern: VibrationPattern(vec![200, 100, 200, 100, 200]),
+        };
+        assert_eq!(round_trip(&a), a);
+    }
+
+    #[test]
+    fn action_vibrate_empty_pattern_round_trips() {
+        let a = Action::Vibrate {
+            pattern: VibrationPattern(vec![]),
+        };
+        assert_eq!(round_trip(&a), a);
+    }
+
+    #[test]
+    fn action_vibrate_deserialises_from_spec_json() {
+        let json = r#"{"type":"vibrate","pattern":[200,100,200]}"#;
+        let a: Action = serde_json::from_str(json).unwrap();
+        assert_eq!(
+            a,
+            Action::Vibrate {
+                pattern: VibrationPattern(vec![200, 100, 200])
             }
         );
     }

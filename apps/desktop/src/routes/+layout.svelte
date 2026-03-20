@@ -6,28 +6,38 @@
   import { deviceStore } from "$lib/stores/device.svelte";
   import { profileStore } from "$lib/stores/profile.svelte";
   import { debugStore } from "$lib/stores/debug.svelte";
+  import { contextRulesStore } from "$lib/stores/contextRules.svelte";
   import { setupEventListeners } from "$lib/events";
   import { setDebugMode } from "$lib/commands";
   import FingerPattern from "$lib/components/FingerPattern.svelte";
+  import TitleBar from "$lib/components/TitleBar.svelte";
+  import UpdateBanner from "$lib/components/UpdateBanner.svelte";
+  import UpdateDialog from "$lib/components/UpdateDialog.svelte";
   import { tapCodeToPattern } from "$lib/utils/tapCode";
+
+  let updateDialogOpen = $state(false);
 
   let { children } = $props();
 
-  onMount(async () => {
-    await Promise.all([engineStore.init(), profileStore.init()]);
-    const cleanupListeners = await setupEventListeners();
+  onMount(() => {
+    let cleanupListeners: (() => void) | null = null;
 
-    // Restore persisted debug mode (task 7.6).
-    const stored = localStorage.getItem("mapxr.debugMode");
-    if (stored !== null) {
-      const enabled = stored === "true";
-      if (enabled !== engineStore.debugMode) {
-        await setDebugMode(enabled);
-        engineStore.debugMode = enabled;
+    (async () => {
+      await Promise.all([engineStore.init(), profileStore.init(), contextRulesStore.init()]);
+      cleanupListeners = await setupEventListeners();
+
+      // Restore persisted debug mode (task 7.6).
+      const stored = localStorage.getItem("mapxr.debugMode");
+      if (stored !== null) {
+        const enabled = stored === "true";
+        if (enabled !== engineStore.debugMode) {
+          await setDebugMode(enabled);
+          engineStore.debugMode = enabled;
+        }
       }
-    }
+    })();
 
-    return cleanupListeners;
+    return () => cleanupListeners?.();
   });
 
   // Tick every second to keep "Xs ago" timestamps fresh (task 7.2).
@@ -53,15 +63,27 @@
   const navItems = [
     { href: "/devices", label: "Devices" },
     { href: "/profiles", label: "Profiles" },
+    { href: "/context-rules", label: "Auto-switch" },
     { href: "/debug", label: "Debug" },
+    { href: "/settings", label: "Settings" },
   ];
 
   let currentPath = $derived($page.url.pathname);
 
   let hasVariables = $derived(Object.keys(engineStore.variables).length > 0);
+
+  let activeProfileName = $derived(
+    profileStore.profiles.find((p) => p.layer_id === engineStore.activeLayerId)?.name,
+  );
+  let windowTitle = $derived(
+    activeProfileName ? `MapXr - ${activeProfileName}` : "MapXr",
+  );
 </script>
 
-<div class="flex h-screen w-screen overflow-hidden bg-base-200">
+<div class="flex h-screen w-screen flex-col overflow-hidden bg-base-200">
+  <TitleBar title={windowTitle} />
+
+  <div class="flex flex-1 overflow-hidden">
   <!-- Sidebar -->
   <aside class="flex w-52 flex-shrink-0 flex-col bg-base-100 shadow-md overflow-y-auto">
     <div class="border-b border-base-300 px-4 py-3">
@@ -168,6 +190,8 @@
 
   <!-- Main area -->
   <div class="flex flex-1 flex-col overflow-hidden">
+    <UpdateBanner onViewUpdate={() => (updateDialogOpen = true)} />
+
     <!-- Page content -->
     <main class="flex-1 overflow-y-auto p-6">
       {@render children()}
@@ -187,4 +211,7 @@
       </div>
     </footer>
   </div>
+  </div>
 </div>
+
+<UpdateDialog open={updateDialogOpen} onClose={() => (updateDialogOpen = false)} />

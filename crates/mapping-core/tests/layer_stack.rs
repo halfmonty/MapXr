@@ -114,12 +114,9 @@ fn pop_layer_at_base_is_noop() {
     let base = make_profile("base", vec![tap_mapping("A", 1, "a")]);
     let mut engine = ComboEngine::new(base);
 
-    // Popping the base layer must produce no output and not panic.
+    // Popping the base layer must return None and not panic.
     let out = engine.pop_layer();
-    assert!(
-        out.is_empty(),
-        "pop at base should produce no output, got {out:?}"
-    );
+    assert!(out.is_none(), "pop at base should return None, got {out:?}");
 
     // Engine still works. Opt A: fires immediately.
     let out1 = engine.push_event(
@@ -309,7 +306,7 @@ fn pop_layer_returns_on_exit_action() {
     let now = Instant::now();
     engine.push_layer(overlay, PushLayerMode::Permanent, now);
 
-    let exit_out = engine.pop_layer();
+    let exit_out = engine.pop_layer().expect("should pop successfully");
     assert!(
         key_in_output(&exit_out, "f14"),
         "expected on_exit 'f14', got {exit_out:?}"

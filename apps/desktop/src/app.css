@@ -1,5 +1,8 @@
 @import "tailwindcss";
-@plugin "daisyui";
+@plugin "daisyui" {
+  themes: corporate, business --prefersdark;
+}
+@import "../../../packages/design-tokens/base.css";
 
 @keyframes tap-flash {
   0%   { transform: scale(1.25); }

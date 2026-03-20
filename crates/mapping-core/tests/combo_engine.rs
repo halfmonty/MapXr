@@ -4,9 +4,8 @@ use std::time::{Duration, Instant};
 use mapping_core::engine::DebugEvent;
 use mapping_core::engine::{ComboEngine, RawTapEvent};
 use mapping_core::types::{
-    Action, Hand, HoldModifierMode, KeyDef, MacroStep, Mapping, Modifier, OverloadStrategy,
-    Profile, ProfileKind, ProfileSettings, PushLayerMode, TapCode, TapStep, Trigger,
-    TriggerPattern,
+    Action, Hand, HoldModifierMode, KeyDef, MacroStep, Mapping, Modifier, Profile, ProfileKind,
+    ProfileSettings, PushLayerMode, TapCode, TapStep, Trigger, TriggerPattern,
 };
 
 // ── Profile builders ──────────────────────────────────────────────────────────
@@ -172,7 +171,6 @@ fn hardware_bounce_duplicate_within_debounce_window_is_discarded() {
         settings: ProfileSettings {
             double_tap_window_ms: Some(250),
             triple_tap_window_ms: Some(400),
-            overload_strategy: Some(OverloadStrategy::Patient),
             ..Default::default()
         },
         ..profile
@@ -208,10 +206,8 @@ fn hardware_bounce_duplicate_within_debounce_window_is_discarded() {
 fn hardware_bounce_different_code_is_not_debounced() {
     // Debounce only suppresses the same tap_code. A different code within
     // the window must still be processed.
-    let profile = single_profile_with_mappings(vec![
-        tap_mapping("A", 1, "a"),
-        tap_mapping("B", 2, "b"),
-    ]);
+    let profile =
+        single_profile_with_mappings(vec![tap_mapping("A", 1, "a"), tap_mapping("B", 2, "b")]);
     let mut engine = ComboEngine::new(profile);
     let base = Instant::now();
 
@@ -238,7 +234,6 @@ fn hardware_bounce_outside_debounce_window_is_treated_as_second_tap() {
         settings: ProfileSettings {
             double_tap_window_ms: Some(250),
             triple_tap_window_ms: Some(400),
-            overload_strategy: Some(OverloadStrategy::Patient),
             ..Default::default()
         },
         ..profile
@@ -252,7 +247,10 @@ fn hardware_bounce_outside_debounce_window_is_treated_as_second_tap() {
 
     // Second tap at T=100ms — outside debounce window, within double-tap window.
     let out2 = engine.push_event(RawTapEvent::new_at("solo", 1, t(base, 100)), t(base, 100));
-    assert!(out2.is_empty(), "second tap within double-tap window should buffer");
+    assert!(
+        out2.is_empty(),
+        "second tap within double-tap window should buffer"
+    );
 
     // Triple-tap window expires → should fire as double-tap.
     let out3 = engine.check_timeout(t(base, 450));
@@ -276,7 +274,6 @@ fn check_timeout_flushes_single_tap_after_double_tap_window_expires() {
     let profile = Profile {
         settings: ProfileSettings {
             double_tap_window_ms: Some(250),
-            overload_strategy: Some(OverloadStrategy::Patient),
             ..Default::default()
         },
         ..profile
@@ -315,7 +312,6 @@ fn check_timeout_flushes_double_tap_after_triple_tap_window_expires() {
         settings: ProfileSettings {
             double_tap_window_ms: Some(250),
             triple_tap_window_ms: Some(400),
-            overload_strategy: Some(OverloadStrategy::Patient),
             ..Default::default()
         },
         ..profile
@@ -349,7 +345,6 @@ fn double_tap_within_window_fires_double_tap_action() {
     let profile = Profile {
         settings: ProfileSettings {
             double_tap_window_ms: Some(250),
-            overload_strategy: Some(OverloadStrategy::Patient),
             ..Default::default()
         },
         ..profile
@@ -385,7 +380,6 @@ fn double_tap_outside_window_resolves_as_two_single_taps() {
     let profile = Profile {
         settings: ProfileSettings {
             double_tap_window_ms: Some(250),
-            overload_strategy: Some(OverloadStrategy::Patient),
             ..Default::default()
         },
         ..profile
@@ -416,7 +410,6 @@ fn triple_tap_within_window_fires_triple_tap_action() {
         settings: ProfileSettings {
             double_tap_window_ms: Some(250),
             triple_tap_window_ms: Some(400),
-            overload_strategy: Some(OverloadStrategy::Patient),
             ..Default::default()
         },
         ..profile
@@ -476,8 +469,7 @@ fn cross_device_combo_outside_window_resolves_as_two_singles() {
                     modifiers: vec![],
                 },
                 enabled: true,
-            condition: None,
-
+                condition: None,
             },
             Mapping {
                 label: "right thumb".into(),
@@ -492,8 +484,7 @@ fn cross_device_combo_outside_window_resolves_as_two_singles() {
                     modifiers: vec![],
                 },
                 enabled: true,
-            condition: None,
-
+                condition: None,
             },
         ],
         150,
@@ -535,9 +526,8 @@ fn sequence_mapping(label: &str, codes: &[u8], key: &str, window_ms: Option<u64>
             modifiers: vec![],
         },
         enabled: true,
-            condition: None,
-
-            }
+        condition: None,
+    }
 }
 
 #[test]
@@ -748,7 +738,6 @@ fn debug_resolved_waited_ms_reflects_buffering_duration() {
     let profile = Profile {
         settings: ProfileSettings {
             double_tap_window_ms: Some(250),
-            overload_strategy: Some(OverloadStrategy::Patient),
             ..Default::default()
         },
         ..profile
@@ -956,13 +945,6 @@ fn single_tap_with_double_tap_binding_still_waits() {
         tap_mapping("A single", 1, "a"),
         double_tap_mapping("A double", 1, "b"),
     ]);
-    let profile = Profile {
-        settings: ProfileSettings {
-            overload_strategy: Some(OverloadStrategy::Patient),
-            ..Default::default()
-        },
-        ..profile
-    };
     let mut engine = ComboEngine::new(profile);
     let base = Instant::now();
 
@@ -1087,8 +1069,7 @@ fn rapid_alternating_dual_same_device_stacks_then_all_resolve() {
                     modifiers: vec![],
                 },
                 enabled: true,
-            condition: None,
-
+                condition: None,
             },
             Mapping {
                 label: "left solo".into(),
@@ -1103,8 +1084,7 @@ fn rapid_alternating_dual_same_device_stacks_then_all_resolve() {
                     modifiers: vec![],
                 },
                 enabled: true,
-            condition: None,
-
+                condition: None,
             },
         ],
         80,
@@ -1158,7 +1138,6 @@ fn next_deadline_set_after_tap_buffered() {
     let profile = Profile {
         settings: ProfileSettings {
             double_tap_window_ms: Some(250),
-            overload_strategy: Some(OverloadStrategy::Patient),
             ..Default::default()
         },
         ..profile
@@ -1724,6 +1703,109 @@ fn hold_modifier_macro_counts_as_single_decrement() {
         }
         other => panic!("expected Key, got {other:?}"),
     }
+}
+
+// ── pop_layer bug fixes (task 8.1) ────────────────────────────────────────────
+
+/// `pop_layer()` must return `None` when the stack is already at the base layer.
+#[test]
+fn pop_layer_at_base_returns_none() {
+    let profile = single_profile_with_mappings(vec![]);
+    let mut engine = ComboEngine::new(profile);
+    assert!(
+        engine.pop_layer().is_none(),
+        "pop_layer at base should return None"
+    );
+}
+
+/// `pop_layer()` must return `Some([])` when the popped layer has no on_exit
+/// action — previously this returned an empty vec which was misread as the
+/// at-base sentinel.
+#[test]
+fn pop_layer_no_on_exit_returns_some_empty_outputs() {
+    let base = single_profile_with_mappings(vec![]);
+    let overlay = Profile {
+        layer_id: "overlay".into(),
+        name: "overlay".into(),
+        on_exit: None, // no on_exit action
+        ..base.clone()
+    };
+    let mut engine = ComboEngine::new(base);
+    engine.push_layer(overlay, PushLayerMode::Permanent, Instant::now());
+
+    let result = engine.pop_layer();
+    assert!(
+        result.is_some(),
+        "pop_layer should succeed when not at base"
+    );
+    assert!(
+        result.unwrap().is_empty(),
+        "outputs should be empty when no on_exit action"
+    );
+}
+
+/// `pop_layer()` must return `Some(outputs)` containing the on_exit action
+/// when the popped layer has one.
+#[test]
+fn pop_layer_with_on_exit_returns_some_with_outputs() {
+    let base = single_profile_with_mappings(vec![]);
+    let overlay = Profile {
+        layer_id: "overlay".into(),
+        name: "overlay".into(),
+        on_exit: Some(Action::Key {
+            key: KeyDef::new_unchecked("f14"),
+            modifiers: vec![],
+        }),
+        ..base.clone()
+    };
+    let mut engine = ComboEngine::new(base);
+    engine.push_layer(overlay, PushLayerMode::Permanent, Instant::now());
+
+    let result = engine.pop_layer();
+    assert!(result.is_some(), "pop_layer should succeed");
+    assert!(
+        key_in_output(&result.unwrap(), "f14"),
+        "on_exit action should be in outputs"
+    );
+}
+
+/// When `Action::PopLayer` fires from a mapping, the engine output must carry
+/// `layer_changed = true` so the pump knows to emit a layer-changed event —
+/// regardless of whether the popped layer had an on_exit action.
+#[test]
+fn pop_layer_action_in_mapping_sets_layer_changed_flag() {
+    use mapping_core::types::Trigger;
+
+    let base_profile = single_profile_with_mappings(vec![]);
+    let pop_mapping = Mapping {
+        label: "pop".into(),
+        trigger: Trigger::Tap {
+            code: TriggerPattern::Single(TapCode::from_u8(1).unwrap()),
+        },
+        action: Action::PopLayer,
+        enabled: true,
+        condition: None,
+    };
+    // Push an overlay with no on_exit that has a PopLayer mapping.
+    let overlay = Profile {
+        layer_id: "overlay".into(),
+        name: "overlay".into(),
+        on_exit: None,
+        mappings: vec![pop_mapping],
+        ..base_profile.clone()
+    };
+    let mut engine = ComboEngine::new(base_profile);
+    engine.push_layer(overlay, PushLayerMode::Permanent, Instant::now());
+
+    let base = Instant::now();
+    let outputs = engine.push_event(RawTapEvent::new_at("solo", 1, t(base, 0)), t(base, 0));
+
+    assert!(
+        outputs.iter().any(|o| o.layer_changed),
+        "at least one output should have layer_changed = true after PopLayer fires"
+    );
+    // Stack should be back at base.
+    assert_eq!(engine.layer_ids(), vec!["test"]);
 }
 
 #[test]

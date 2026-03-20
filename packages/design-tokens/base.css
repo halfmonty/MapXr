@@ -1,0 +1,10 @@
+/*
+ * Shared design token overrides for apps/desktop and apps/site.
+ *
+ * Both apps import this file AFTER their own `@import "tailwindcss"` and
+ * `@plugin "daisyui"` declarations. The daisyui plugin must be declared in
+ * each app's own app.css so that Tailwind resolves "daisyui" from that app's
+ * node_modules directory.
+ *
+ * Place shared `@theme` variable overrides here once they are needed.
+ */

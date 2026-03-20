@@ -10,6 +10,15 @@ export type DevlogEntry = {
 
 export const DEVLOG: DevlogEntry[] = [
   {
+    slug: '2026-03-19-extended-keys-and-notifications',
+    date: '2026-03-19',
+    title: 'Extended key support, OS notifications, and six silent bugs fixed',
+    body: 'Shipped OS desktop notifications for device and layer events (Epic 16). Audited the key dispatch path and found six categories of silent failure — arrow keys, all F-keys, punctuation, media, and system keys were all declared valid but never fired. Rewrote name_to_key, added media_stop/pause/brightness/eject/mic_mute, and upgraded the key picker to a grouped select.',
+    epicsDone: 16,
+    totalEpics: 18,
+    tags: ['bug-fix', 'feature', 'ui', 'ux'],
+  },
+  {
     slug: '2026-03-18-profile-persistence',
     date: '2026-03-18',
     title: 'Profile persistence and startup profile selection',

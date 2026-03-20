@@ -10,6 +10,7 @@ import { deviceStore } from "./stores/device.svelte";
 import { engineStore } from "./stores/engine.svelte";
 import { profileStore } from "./stores/profile.svelte";
 import { debugStore } from "./stores/debug.svelte";
+import { updateStore } from "./stores/updates.svelte";
 import { logger } from "./logger";
 import type {
   TapEventPayload,
@@ -18,6 +19,8 @@ import type {
   DeviceStatusPayload,
   ProfileErrorPayload,
   DebugEvent,
+  UpdateInfo,
+  UpdateProgressPayload,
 } from "./types";
 
 /**
@@ -50,6 +53,12 @@ export async function setupEventListeners(): Promise<() => void> {
     listen<ProfileErrorPayload>("profile-error", ({ payload }) => {
       logger.warn(`Profile load error: ${payload.file_name} — ${payload.message}`);
       profileStore.appendError(payload);
+    }),
+    listen<UpdateInfo>("update-available", ({ payload }) => {
+      updateStore.setAvailable(payload);
+    }),
+    listen<UpdateProgressPayload>("update-download-progress", ({ payload }) => {
+      updateStore.applyProgress(payload);
     }),
   ]);
 

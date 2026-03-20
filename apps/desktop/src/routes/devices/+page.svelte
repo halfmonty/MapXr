@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { scanDevices, connectDevice, disconnectDevice, reassignDeviceRole } from "$lib/commands";
+  import { scanDevices, connectDevice, disconnectDevice, reassignDeviceRole, renameDevice } from "$lib/commands";
   import { deviceStore } from "$lib/stores/device.svelte";
   import { engineStore } from "$lib/stores/engine.svelte";
   import { profileStore } from "$lib/stores/profile.svelte";
@@ -91,6 +91,42 @@
       logger.error("reassign_device_role failed", e);
     } finally {
       reassigningAddress = null;
+    }
+  }
+
+  // ── Rename state ────────────────────────────────────────────────────────────
+
+  let renamingAddress = $state<string | null>(null);
+  let renameInput = $state("");
+  let renameError = $state<string | null>(null);
+  let renameNotice = $state<string | null>(null);
+  let renamingInProgress = $state(false);
+
+  function startRename(address: string, currentName: string | null) {
+    renamingAddress = address;
+    renameInput = currentName ?? "";
+    renameError = null;
+    renameNotice = null;
+  }
+
+  function cancelRename() {
+    renamingAddress = null;
+    renameError = null;
+  }
+
+  async function handleRename(address: string) {
+    renamingInProgress = true;
+    renameError = null;
+    try {
+      await renameDevice(address, renameInput);
+      deviceStore.setName(address, renameInput.trim());
+      renamingAddress = null;
+      renameNotice = "Name saved — reconnect the device to see the new name in scan results.";
+    } catch (e) {
+      renameError = e instanceof Error ? e.message : String(e);
+      logger.error("rename_device failed", e);
+    } finally {
+      renamingInProgress = false;
     }
   }
 
@@ -287,6 +323,13 @@
     <div class="card-body gap-4">
       <h2 class="card-title text-base">Connected devices</h2>
 
+      {#if renameNotice}
+        <div class="alert alert-info text-sm">
+          <span>{renameNotice}</span>
+          <button class="btn btn-xs btn-ghost" onclick={() => (renameNotice = null)}>✕</button>
+        </div>
+      {/if}
+
       {#if deviceStore.connected.length === 0}
         <p class="text-sm text-base-content/50">No devices connected.</p>
       {:else}
@@ -303,7 +346,46 @@
             <tbody>
               {#each deviceStore.connected as device}
                 <tr>
-                  <td class="font-medium">{device.name ?? "—"}</td>
+                  <td class="font-medium">
+                    {#if renamingAddress === device.address}
+                      <div class="flex flex-col gap-1">
+                        <div class="flex items-center gap-1">
+                          <input
+                            class="input input-xs input-bordered w-36"
+                            type="text"
+                            bind:value={renameInput}
+                            maxlength={20}
+                            onkeydown={(e) => {
+                              if (e.key === "Enter") handleRename(device.address);
+                              if (e.key === "Escape") cancelRename();
+                            }}
+                          />
+                          <button
+                            class="btn btn-xs btn-success"
+                            onclick={() => handleRename(device.address)}
+                            disabled={renamingInProgress}
+                            title="Confirm"
+                          >✓</button>
+                          <button
+                            class="btn btn-xs btn-ghost"
+                            onclick={cancelRename}
+                            disabled={renamingInProgress}
+                            title="Cancel"
+                          >✕</button>
+                        </div>
+                        {#if renameError}
+                          <span class="text-xs text-error">{renameError}</span>
+                        {/if}
+                      </div>
+                    {:else}
+                      <span>{device.name ?? "—"}</span>
+                      <button
+                        class="btn btn-xs btn-ghost ml-1"
+                        onclick={() => startRename(device.address, device.name)}
+                        title="Rename device"
+                      >✎</button>
+                    {/if}
+                  </td>
                   <td class="font-mono text-xs">{device.address}</td>
                   <td>
                     <div class="join">

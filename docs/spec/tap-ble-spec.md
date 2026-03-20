@@ -1,3 +1,9 @@
+---
+covers: Epic 3 (BLE layer — tap-ble crate)
+status: Approved and fully implemented
+last-updated: 2026-03-19
+---
+
 # tap-ble — BLE layer specification (Epic 3)
 
 ## Table of contents

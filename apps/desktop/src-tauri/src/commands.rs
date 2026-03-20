@@ -12,7 +12,10 @@ use tauri::State;
 
 use tauri::Emitter as _;
 
-use crate::{events::{ConnectedDeviceDto, EngineStateSnapshot}, state::AppState};
+use crate::{
+    events::{ConnectedDeviceDto, EngineStateSnapshot},
+    state::AppState,
+};
 
 // ── DTOs ──────────────────────────────────────────────────────────────────────
 
@@ -170,7 +173,8 @@ pub async fn disconnect_device(
     {
         let mut reg = state.device_registry.lock().map_err(|e| e.to_string())?;
         reg.remove(&device_id);
-        reg.save(&state.devices_json_path).map_err(|e| e.to_string())?;
+        reg.save(&state.devices_json_path)
+            .map_err(|e| e.to_string())?;
     }
 
     Ok(())
@@ -200,8 +204,7 @@ pub async fn reassign_device_role(
         ));
     }
 
-    let addr =
-        BDAddr::from_str(&address).map_err(|_| format!("invalid BLE address: {address}"))?;
+    let addr = BDAddr::from_str(&address).map_err(|_| format!("invalid BLE address: {address}"))?;
     let new_id = DeviceId::new(&new_role);
 
     // Find which role currently owns this address.
@@ -295,9 +298,21 @@ pub async fn load_profile(
 
 // ── 4.6 save_profile ─────────────────────────────────────────────────────────
 
-/// Write `profile` to disk and reload the registry.
+/// Write `profile` to disk, reload the registry, and hot-reload the engine if
+/// the saved profile is currently active.
+///
+/// If the profile's `layer_id` appears anywhere in the current engine layer
+/// stack, `set_profile` is called with the freshly saved version so changes
+/// take effect immediately without the user having to deactivate and reactivate.
+/// Any layers pushed on top of the updated base are cleared (the stack is reset
+/// to just the new version of the saved profile), which is the expected
+/// behaviour when the base definition has changed.
 #[tauri::command]
-pub async fn save_profile(state: State<'_, Arc<AppState>>, profile: Profile) -> Result<(), String> {
+pub async fn save_profile(
+    state: State<'_, Arc<AppState>>,
+    app: tauri::AppHandle,
+    profile: Profile,
+) -> Result<(), String> {
     // Validate before touching the filesystem so we never write an invalid profile.
     profile.validate().map_err(|e| e.to_string())?;
 
@@ -308,6 +323,23 @@ pub async fn save_profile(state: State<'_, Arc<AppState>>, profile: Profile) -> 
 
     // LOCKING: acquires layer_registry
     let _ = state.layer_registry.lock().await.reload();
+
+    // Hot-reload: if the saved profile is anywhere in the current engine stack,
+    // replace it as the base layer so edits take effect immediately.
+    // LOCKING: acquires engine (single lock acquisition for read + conditional write)
+    let needs_reload = {
+        let mut engine = state.engine.lock().await;
+        if engine.layer_ids().iter().any(|id| id == &profile.layer_id) {
+            engine.set_profile(profile);
+            true
+        } else {
+            false
+        }
+    };
+    if needs_reload {
+        crate::pump::emit_layer_changed(&app, &state).await;
+    }
+
     Ok(())
 }
 
@@ -352,15 +384,18 @@ pub async fn activate_profile(
     state.engine.lock().await.set_profile(profile);
 
     // Persist so this profile is restored on the next launch.
-    let prefs = crate::state::Preferences {
-        profile_active: true,
-        last_active_profile_id: Some(layer_id),
-    };
-    if let Err(e) = prefs.save(&state.preferences_path) {
-        log::warn!("failed to save preferences: {e}");
+    {
+        let mut prefs = state.preferences.lock().await;
+        prefs.profile_active = true;
+        prefs.last_active_profile_id = Some(layer_id);
+        if let Err(e) = prefs.save(&state.preferences_path) {
+            log::warn!("failed to save preferences: {e}");
+        }
     }
 
     crate::pump::emit_layer_changed(&app, &state).await;
+    crate::pump::maybe_notify_profile_switch(&app, &state).await;
+    crate::pump::maybe_haptic_on_profile_switch(&state).await;
     Ok(())
 }
 
@@ -384,12 +419,13 @@ pub async fn deactivate_profile(
         .set_profile(crate::state::builtin_default_profile());
 
     // Clear the persisted profile so the next launch also starts with no active profile.
-    let prefs = crate::state::Preferences {
-        profile_active: false,
-        last_active_profile_id: None,
-    };
-    if let Err(e) = prefs.save(&state.preferences_path) {
-        log::warn!("failed to save preferences: {e}");
+    {
+        let mut prefs = state.preferences.lock().await;
+        prefs.profile_active = false;
+        prefs.last_active_profile_id = None;
+        if let Err(e) = prefs.save(&state.preferences_path) {
+            log::warn!("failed to save preferences: {e}");
+        }
     }
 
     crate::pump::emit_layer_changed(&app, &state).await;
@@ -425,6 +461,8 @@ pub async fn push_layer(
     crate::pump::process_outputs(&app, &state, outputs).await;
 
     crate::pump::emit_layer_changed(&app, &state).await;
+    crate::pump::maybe_notify_layer_switch(&app, &state).await;
+    crate::pump::maybe_haptic_on_layer_switch(&state).await;
     Ok(())
 }
 
@@ -439,12 +477,13 @@ pub async fn pop_layer(
     app: tauri::AppHandle,
 ) -> Result<(), String> {
     // LOCKING: acquires engine
-    let outputs = state.engine.lock().await.pop_layer();
-    if outputs.is_empty() {
+    let Some(outputs) = state.engine.lock().await.pop_layer() else {
         return Err("Layer stack is at base layer; nothing to pop".into());
-    }
+    };
     crate::pump::process_outputs(&app, &state, outputs).await;
     crate::pump::emit_layer_changed(&app, &state).await;
+    crate::pump::maybe_notify_layer_switch(&app, &state).await;
+    crate::pump::maybe_haptic_on_layer_switch(&state).await;
     Ok(())
 }
 
@@ -510,6 +549,256 @@ pub async fn get_engine_state(
     })
 }
 
+// ── 10.3 rename_device ───────────────────────────────────────────────────────
+
+/// Validate a candidate device name against the rules in `docs/spec/device-rename-spec.md`.
+///
+/// Returns `Ok(trimmed_name)` on success or `Err(message)` describing the first violation.
+fn validate_device_name(name: &str) -> Result<String, String> {
+    let trimmed = name.trim().to_owned();
+    if trimmed.is_empty() {
+        return Err("device name must not be empty".into());
+    }
+    if trimmed.len() > 20 {
+        return Err(format!(
+            "device name is too long ({} characters); maximum is 20",
+            trimmed.len()
+        ));
+    }
+    if !trimmed
+        .chars()
+        .all(|c| c.is_ascii() && !c.is_ascii_control())
+    {
+        return Err("device name must contain only printable ASCII characters".into());
+    }
+    Ok(trimmed)
+}
+
+/// Rename a connected Tap device.
+///
+/// `address` — the BDAddr string identifying the device (e.g. `"AA:BB:CC:DD:EE:FF"`).
+/// `name` — the desired new name (1–20 printable ASCII chars; leading/trailing whitespace
+/// is trimmed automatically).
+///
+/// Returns `Ok(())` on success. Returns `Err(message)` if the device is not connected,
+/// the name fails validation, or the BLE write fails.
+#[tauri::command]
+pub async fn rename_device(
+    state: State<'_, Arc<AppState>>,
+    address: String,
+    name: String,
+) -> Result<(), String> {
+    state.require_ble()?;
+
+    let addr = BDAddr::from_str(&address).map_err(|_| format!("invalid BLE address: {address}"))?;
+    let validated_name = validate_device_name(&name)?;
+
+    // LOCKING: acquires ble_manager
+    state
+        .ble_manager
+        .as_ref()
+        .unwrap()
+        .lock()
+        .await
+        .set_device_name(addr, &validated_name)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+// ── 11.5 list_context_rules / save_context_rules ─────────────────────────────
+
+/// Return the current context rules.
+#[tauri::command]
+pub async fn list_context_rules(
+    state: State<'_, Arc<AppState>>,
+) -> Result<crate::context_rules::ContextRules, String> {
+    // LOCKING: acquires context_rules
+    Ok(state.context_rules.lock().await.clone())
+}
+
+/// Validate, persist, and replace the context rules.
+///
+/// The new rules are validated before writing. On success the in-memory state
+/// is updated atomically so the monitor immediately uses the new rules.
+#[tauri::command]
+pub async fn save_context_rules(
+    state: State<'_, Arc<AppState>>,
+    rules: crate::context_rules::ContextRules,
+) -> Result<(), String> {
+    rules.validate()?;
+    rules.save(&state.context_rules_path)?;
+    // LOCKING: acquires context_rules
+    *state.context_rules.lock().await = rules;
+    Ok(())
+}
+
+// ── 12.5 get_preferences / save_preferences ──────────────────────────────────
+
+/// All user preferences exposed to the frontend settings page.
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
+pub struct TrayPreferences {
+    /// Hide window on close instead of quitting.
+    pub close_to_tray: bool,
+    /// Launch directly to tray without showing the main window.
+    pub start_minimised: bool,
+    /// Register the app to start automatically at OS login.
+    pub start_at_login: bool,
+    /// Notify when a Tap device connects.
+    pub notify_device_connected: bool,
+    /// Notify when a Tap device disconnects.
+    pub notify_device_disconnected: bool,
+    /// Notify when the active layer switches within a profile.
+    pub notify_layer_switch: bool,
+    /// Notify when the active profile switches.
+    pub notify_profile_switch: bool,
+    /// Master haptic toggle — gates all vibration.
+    pub haptics_enabled: bool,
+    /// Vibrate on every resolved tap event.
+    pub haptic_on_tap: bool,
+    /// Vibrate on layer push/pop/switch.
+    pub haptic_on_layer_switch: bool,
+    /// Vibrate on profile activate.
+    pub haptic_on_profile_switch: bool,
+}
+
+/// Return the current preferences.
+#[tauri::command]
+pub async fn get_preferences(state: State<'_, Arc<AppState>>) -> Result<TrayPreferences, String> {
+    let prefs = state.preferences.lock().await;
+    Ok(TrayPreferences {
+        close_to_tray: prefs.close_to_tray,
+        start_minimised: prefs.start_minimised,
+        start_at_login: prefs.start_at_login,
+        notify_device_connected: prefs.notify_device_connected,
+        notify_device_disconnected: prefs.notify_device_disconnected,
+        notify_layer_switch: prefs.notify_layer_switch,
+        notify_profile_switch: prefs.notify_profile_switch,
+        haptics_enabled: prefs.haptics_enabled,
+        haptic_on_tap: prefs.haptic_on_tap,
+        haptic_on_layer_switch: prefs.haptic_on_layer_switch,
+        haptic_on_profile_switch: prefs.haptic_on_profile_switch,
+    })
+}
+
+/// Persist updated preferences and apply live effects.
+///
+/// `start_at_login` changes take effect immediately (registers/deregisters the
+/// OS login item). Notification flags take effect immediately (checked at event
+/// time). Other settings are read at the point they become relevant.
+#[tauri::command]
+pub async fn save_preferences(
+    state: State<'_, Arc<AppState>>,
+    prefs_update: TrayPreferences,
+) -> Result<(), String> {
+    let start_at_login_changed;
+
+    {
+        let mut prefs = state.preferences.lock().await;
+        start_at_login_changed = prefs.start_at_login != prefs_update.start_at_login;
+        prefs.close_to_tray = prefs_update.close_to_tray;
+        prefs.start_minimised = prefs_update.start_minimised;
+        prefs.start_at_login = prefs_update.start_at_login;
+        prefs.notify_device_connected = prefs_update.notify_device_connected;
+        prefs.notify_device_disconnected = prefs_update.notify_device_disconnected;
+        prefs.notify_layer_switch = prefs_update.notify_layer_switch;
+        prefs.notify_profile_switch = prefs_update.notify_profile_switch;
+        prefs.haptics_enabled = prefs_update.haptics_enabled;
+        prefs.haptic_on_tap = prefs_update.haptic_on_tap;
+        prefs.haptic_on_layer_switch = prefs_update.haptic_on_layer_switch;
+        prefs.haptic_on_profile_switch = prefs_update.haptic_on_profile_switch;
+        prefs
+            .save(&state.preferences_path)
+            .map_err(|e| e.to_string())?;
+    }
+
+    // Keep the atomic mirror in sync so the close handler can read it without block_on.
+    state.close_to_tray.store(
+        prefs_update.close_to_tray,
+        std::sync::atomic::Ordering::Relaxed,
+    );
+
+    if start_at_login_changed {
+        crate::login_item::set_start_at_login(prefs_update.start_at_login)?;
+    }
+
+    Ok(())
+}
+
+// ── check_for_update ─────────────────────────────────────────────────────────
+
+/// Info about an available update, returned by [`check_for_update`].
+#[derive(Serialize)]
+pub struct UpdateInfoDto {
+    /// The new version string, e.g. `"1.2.0"`.
+    pub version: String,
+    /// Markdown release notes from the update manifest, if present.
+    pub release_notes: Option<String>,
+}
+
+/// Query the update endpoint and return info about the available update, or
+/// `null` if the app is already on the latest version.
+///
+/// Does not download anything — call [`download_and_install_update`] for that.
+#[tauri::command]
+pub async fn check_for_update(app: tauri::AppHandle) -> Result<Option<UpdateInfoDto>, String> {
+    use tauri_plugin_updater::UpdaterExt as _;
+    let update = app
+        .updater()
+        .map_err(|e| e.to_string())?
+        .check()
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(update.map(|u| UpdateInfoDto {
+        version: u.version.clone(),
+        release_notes: u.body.clone(),
+    }))
+}
+
+// ── download_and_install_update ───────────────────────────────────────────────
+
+/// Download and install the latest available update, then restart the app.
+///
+/// Emits [`crate::events::UPDATE_DOWNLOAD_PROGRESS`] events periodically during
+/// the download so the frontend can render a progress bar. Returns an error if
+/// there is no update available or the download fails. Never returns on success
+/// because `app.restart()` terminates the process.
+#[tauri::command]
+pub async fn download_and_install_update(app: tauri::AppHandle) -> Result<(), String> {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    use std::sync::Arc;
+    use tauri::Emitter as _;
+    use tauri_plugin_updater::UpdaterExt as _;
+
+    let update = app
+        .updater()
+        .map_err(|e| e.to_string())?
+        .check()
+        .await
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| "No update available".to_string())?;
+
+    let downloaded = Arc::new(AtomicU64::new(0));
+    let downloaded_clone = Arc::clone(&downloaded);
+    let app_clone = app.clone();
+
+    update
+        .download_and_install(
+            move |chunk_len, total| {
+                let so_far =
+                    downloaded_clone.fetch_add(chunk_len as u64, Ordering::Relaxed) + chunk_len as u64;
+                let _ = app_clone.emit(
+                    crate::events::UPDATE_DOWNLOAD_PROGRESS,
+                    crate::events::UpdateProgressPayload { downloaded: so_far, total },
+                );
+            },
+            || {},
+        )
+        .await
+        .map_err(|e| e.to_string())?;
+
+    app.restart();
+}
+
 // ── read_file_text ────────────────────────────────────────────────────────────
 
 /// Read a file at an absolute path and return its contents as a UTF-8 string.
@@ -519,11 +808,10 @@ pub async fn get_engine_state(
 /// object, so the frontend resolves the path and delegates the read to this command.
 #[tauri::command]
 pub fn read_file_text(path: String) -> Result<String, String> {
-    std::fs::read_to_string(&path)
-        .map_err(|e| format!("could not read '{path}': {e}"))
+    std::fs::read_to_string(&path).map_err(|e| format!("could not read '{path}': {e}"))
 }
 
-// ── DTO unit tests ────────────────────────────────────────────────────────────
+// ── Unit tests ────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
 mod tests {
@@ -562,6 +850,54 @@ mod tests {
         let p = test_profile("dual_layer", "Dual", ProfileKind::Dual);
         let s = ProfileSummary::from(&p);
         assert_eq!(s.kind, "dual");
+    }
+
+    #[test]
+    fn rename_device_empty_name_returns_error() {
+        assert!(validate_device_name("").is_err());
+        assert!(validate_device_name("   ").is_err());
+    }
+
+    #[test]
+    fn rename_device_too_long_returns_error() {
+        let long = "a".repeat(21);
+        assert!(validate_device_name(&long).is_err());
+    }
+
+    #[test]
+    fn rename_device_max_length_is_accepted() {
+        let exactly_20 = "a".repeat(20);
+        assert!(validate_device_name(&exactly_20).is_ok());
+    }
+
+    #[test]
+    fn rename_device_non_ascii_returns_error() {
+        assert!(validate_device_name("Tàp").is_err());
+        assert!(validate_device_name("Tap🎹").is_err());
+    }
+
+    #[test]
+    fn rename_device_control_char_returns_error() {
+        assert!(validate_device_name("Tap\x00Dev").is_err());
+        assert!(validate_device_name("Tap\nDev").is_err());
+    }
+
+    #[test]
+    fn rename_device_whitespace_only_returns_error() {
+        assert!(validate_device_name("\t\n ").is_err());
+    }
+
+    #[test]
+    fn rename_device_valid_name_trims_whitespace() {
+        let result = validate_device_name("  MyTap  ").expect("should be ok");
+        assert_eq!(result, "MyTap");
+    }
+
+    #[test]
+    fn rename_device_valid_ascii_name_accepted() {
+        assert!(validate_device_name("TapXR_A036320").is_ok());
+        assert!(validate_device_name("MyTap").is_ok());
+        assert!(validate_device_name("Tap-1 (left)").is_ok());
     }
 
     #[test]

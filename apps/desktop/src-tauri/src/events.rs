@@ -11,6 +11,9 @@ pub const DEVICE_CONNECTED: &str = "device-connected";
 pub const DEVICE_DISCONNECTED: &str = "device-disconnected";
 pub const DEBUG_EVENT: &str = "debug-event";
 pub const PROFILE_ERROR: &str = "profile-error";
+pub const CONTEXT_RULE_MATCHED: &str = "context-rule-matched";
+pub const UPDATE_AVAILABLE: &str = "update-available";
+pub const UPDATE_DOWNLOAD_PROGRESS: &str = "update-download-progress";
 
 // ── Payload types ─────────────────────────────────────────────────────────────
 
@@ -80,6 +83,40 @@ pub struct DeviceStatusPayload {
 pub struct ProfileErrorPayload {
     pub file_name: String,
     pub message: String,
+}
+
+/// Payload for [`CONTEXT_RULE_MATCHED`].
+///
+/// Emitted when the focus monitor fires a context rule and activates a profile.
+#[derive(Serialize, Clone)]
+pub struct ContextRuleMatchedPayload {
+    /// Human-readable label of the matched rule.
+    pub rule_name: String,
+    /// `layer_id` of the profile that was activated.
+    pub layer_id: String,
+}
+
+/// Payload for [`UPDATE_AVAILABLE`].
+///
+/// Emitted by the background update checker and by the tray "Check for updates" action.
+#[derive(Serialize, Clone)]
+pub struct UpdateAvailablePayload {
+    /// The new version string (e.g. `"1.2.0"`).
+    pub version: String,
+    /// Markdown release notes from the update manifest, if present.
+    pub release_notes: Option<String>,
+}
+
+/// Payload for [`UPDATE_DOWNLOAD_PROGRESS`].
+///
+/// Emitted periodically during `download_and_install_update` to allow the
+/// frontend to render a progress bar.
+#[derive(Serialize, Clone)]
+pub struct UpdateProgressPayload {
+    /// Total bytes downloaded so far across all chunks.
+    pub downloaded: u64,
+    /// Total download size in bytes, if the server sent a `Content-Length` header.
+    pub total: Option<u64>,
 }
 
 /// A connected device as returned by `get_engine_state`.

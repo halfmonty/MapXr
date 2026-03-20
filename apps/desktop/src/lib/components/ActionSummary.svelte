@@ -21,8 +21,14 @@
       case "switch_layer": return `Switch layer: ${action.layer}`;
       case "toggle_variable": return `Toggle: ${action.variable}`;
       case "set_variable": return `Set ${action.variable} = ${JSON.stringify(action.value)}`;
-      case "block":        return "Block";
-      case "alias":        return `Alias: ${action.name}`;
+      case "block":              return "Block";
+      case "alias":              return `Alias: ${action.name}`;
+      case "mouse_click":        return `Click ${action.button}`;
+      case "mouse_double_click": return `Double-click ${action.button}`;
+      case "mouse_scroll":       return `Scroll ${action.direction}`;
+      case "vibrate":            return `Vibrate [${action.pattern.join(", ")}]`;
+      case "hold_modifier":      return `Hold ${action.modifiers.join("+")}`;
+      case "conditional":        return `If ${action.variable}`;
     }
   })());
 </script>

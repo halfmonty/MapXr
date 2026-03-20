@@ -1,12 +1,49 @@
 # MapXr
 
-**MapXr** is what I always wished the TAP Strap and TapXr to be. At it's core, it's a highly customizable mapping tool that most importantly, supports mapping **Two Tap devices simultaneously!**
+**MapXr** is what I always wished the Tap Strap and TapXr to be — a highly customisable, local-first mapping tool that, most importantly, supports **two Tap devices simultaneously**.
 
 ![image](/screenshot.png)
 
-Map Xr is a desktop application for creating and managing custom keyboard mappings for [Tap Strap and TapXr](https://www.tapwithus.com/) wearable devices. Tap is a finger-worn or wrist-worn Bluetooth keyboard that detect which fingers you tap and send those chord codes over BLE. MapXr receives those codes, resolves them against your profiles, and fires keystrokes, macros, or layer switches on your desktop.
+MapXr is a free desktop application for creating and managing custom keyboard mappings for [Tap Strap and TapXr](https://www.tapwithus.com/) wearable devices. Tap is a finger-worn or wrist-worn Bluetooth keyboard that detects which fingers you tap and sends those chord codes over BLE. MapXr receives those codes, resolves them against your profiles, and fires keystrokes, macros, or layer switches on your desktop — no internet connection required, no account, no subscription.
 
-MapXr is a fantastic replacement for the default mapping tool but the real magic happens when you connect 2 Tap devices at once. MapXr allows for defining 2 device map profiles, enabling single tap combos that use all 10 fingers. 1 Tap device can only support 31 different single tap combinations with 5 fingers. With all 10 fingers 2 Tap devices can support 1023 different singel tap combinations meaning you will won't need to reach for double-tap and triple-tap mappings.
+The real magic happens when you connect two Tap devices at once. MapXr lets you define dual profiles that combine both hands, enabling single-tap combos across all 10 fingers. One device supports 31 unique single-tap combinations. With two devices, that grows to 1023 — which means you will never need to reach for double-tap and triple-tap mappings.
+
+---
+
+## Installation
+
+Download the latest release for your platform from the [Releases page](https://github.com/halfmonty/mapxr/releases).
+
+| Platform | File to download |
+| -------- | ---------------- |
+| Windows  | `mapxr_x.y.z_x64-setup.exe` (NSIS installer) or `mapxr_x.y.z_x64_en-US.msi` |
+| Linux (Ubuntu / Debian) | `mapxr_x.y.z_amd64.deb` |
+| Linux (Fedora / RHEL) | `mapxr_x.y.z_x86_64.rpm` |
+| Linux (universal) | `mapxr_x.y.z_amd64.AppImage` |
+
+### Windows note
+
+Windows may show a SmartScreen warning on first launch because the app is not yet widely known. Click **More info → Run anyway** to proceed. This warning disappears as the app accumulates download reputation.
+
+### Linux note
+
+The AppImage is self-contained. Make it executable before running:
+```bash
+chmod +x mapxr_*.AppImage
+./mapxr_*.AppImage
+```
+
+---
+
+## First-time setup
+
+1. **Launch MapXr.** On first launch the window opens in the foreground. On subsequent launches the window may be hidden to the tray — click the tray icon to show it.
+2. **Go to the Devices page.** Click **Scan** to discover nearby Tap devices (scan lasts ~5 seconds). Assign a role (`solo`, `left`, or `right`) to each device and click **Connect**.
+3. **Create a profile.** Go to the **Profiles** page and click **New**. Give it a name and start adding mappings in the editor.
+4. **Activate the profile.** Click **Activate** on the Profiles page. Your mappings are now live — you can close the window and the app continues running in the system tray.
+5. *(Optional)* **Set up context rules.** Go to **Context Rules** to automatically switch profiles based on which application is in focus.
+
+---
 
 ## What is wrong with double and triple taps?
 The main issue with double and triple taps comes from overloading an already mapped single tap action. For example, if this tap pattern ●○○○○ is bound to the letter 'a', and a double tap of ●○○○○ is 'v', as is the case in the default single tap map, there are limited ways to determine which letter you actually want to send.
@@ -94,6 +131,10 @@ When a code appears in both a `tap` and a `double_tap` binding (an **overloaded*
 | `set_variable`     | Explicitly set a variable to a value.                                              |
 | `block`            | Consume a tap code and fire nothing. Useful in passthrough layers to suppress specific codes. |
 | `alias`            | Reference a named action defined in the profile's `aliases` map.                  |
+| `mouse_click`      | Click a mouse button (`left`, `right`, `middle`).                                  |
+| `mouse_double_click` | Double-click a mouse button.                                                     |
+| `mouse_scroll`     | Scroll in a direction (`up`, `down`, `left`, `right`) by a configurable amount.    |
+| `vibrate`          | Send a vibration pattern to the connected Tap device(s).                           |
 
 ### Variables
 
@@ -233,6 +274,47 @@ The **Debug** page provides a live view of the engine's event stream.
 
 The sidebar shows a per-device finger visualiser that updates in real time as taps arrive. Each tapped finger briefly scales up to indicate the tap. Below the visualiser the raw hex tap code and a relative timestamp ("just now", "3s ago", etc.) are shown.
 
+### Context Rules page
+
+The **Context Rules** page lets MapXr automatically switch profiles based on which application is currently in focus.
+
+Each rule has:
+- **Pattern** — a substring or glob matched against the focused window's title or application class.
+- **Profile** — the profile to activate when the pattern matches.
+- **Priority** — rules are evaluated top-to-bottom; the first match wins. Drag rows to reorder.
+
+When a focused window matches a rule, MapXr activates the corresponding profile silently in the background. When the window loses focus and no other rule matches, the previous profile remains active. If no rule matches at all, no automatic switch occurs.
+
+Context switching works on **Linux** (X11 and Wayland) and **Windows**. macOS is not currently supported.
+
+### Settings page
+
+The **Settings** page controls global application behaviour.
+
+| Setting | Description |
+| ------- | ----------- |
+| Close button behaviour | **Minimise to tray** (default) keeps MapXr running when you close the window. **Exit** quits the app and disconnects devices. |
+| Start minimised | Launch directly to the tray without showing the window. |
+| Start at login | Register MapXr to launch automatically when you log in. |
+| **Notifications** | |
+| Device connected | Show an OS notification when a Tap device connects. |
+| Device disconnected | Show an OS notification when a Tap device disconnects. |
+| Layer switch | Show an OS notification when the active layer changes. |
+| **Haptics** | |
+| Enable haptics | Master toggle for all vibration feedback. |
+| On tap | Short pulse on each resolved tap. |
+| On layer switch | Distinct pulse when the active layer changes. |
+| On profile switch | Distinct pulse when the active profile changes. |
+
+### System tray
+
+MapXr runs in the system tray so your mappings stay active while the window is hidden.
+
+- **Left-click** the tray icon to show or hide the window.
+- The tray **tooltip** shows the active profile name and how many devices are connected.
+- The tray **menu** has Show / Hide, the active profile name (greyed out), and Quit.
+- Choosing **Quit** from the tray menu disconnects all BLE devices cleanly before exiting.
+
 ---
 
 ## Profile file format
@@ -353,19 +435,32 @@ npm run tauri build
 
 Profile files are stored in the `profiles/` directory next to the application binary. On a development build they are read from `profiles/` at the project root.
 
-### Building for Windows from Linux
+### Releasing a new version
 
-Tauri's bundler must run on Windows to produce a proper `.msi` / NSIS installer. Use the included GitHub Actions workflow:
+Push a version tag to trigger the unified release workflow, which builds Linux and Windows installers in parallel and publishes them to a GitHub Release automatically:
 
-1. Push the repository to GitHub (the `.github/workflows/build-windows.yml` file must be on the branch).
-2. Go to **Actions → Build Windows → Run workflow** for a manual build, or push a tag matching `v*` (e.g. `v0.2.0`) to trigger automatically.
-3. Download the `mapxr-windows` artifact when the run completes. It contains the `.msi` installer and the NSIS `.exe`.
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
 
-> **Note on `GITHUB_TOKEN`:** this token is injected automatically by GitHub — no setup required.
-> Your repository must have **Settings → Actions → General → Workflow permissions** set to
-> **"Read and write permissions"** for the action to attach artifacts to a GitHub Release.
+Tags containing `-` (e.g. `v1.0.0-beta.1`) are published as GitHub pre-releases. All other `v*` tags publish as full releases.
+
+**One-time repository setup required:**
+
+1. Go to **Settings → Actions → General → Workflow permissions** and set to **"Read and write permissions"** so the workflow can create GitHub Releases.
+2. Add the updater signing key as a repository secret under **Settings → Secrets → Actions**:
+   - `TAURI_SIGNING_PRIVATE_KEY` — the private key generated by `cargo tauri signer generate`
+   - `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` — the key password (if set)
+
+### Dev builds (manual, no release)
+
+Use the individual workflows to produce test builds without creating a GitHub Release:
+
+- **Actions → Build Linux → Run workflow** — produces AppImage, deb, rpm
+- **Actions → Build Windows → Run workflow** — produces MSI and NSIS exe
 
 
 ---
 
-mapxr is a personal project. [Tap Strap](https://www.tapwithus.com/) is a product of Tap Systems Inc.
+MapXr is a personal project. [Tap Strap](https://www.tapwithus.com/) is a product of Tap Systems Inc.

@@ -17,6 +17,13 @@ pub struct EngineOutput {
     /// Structured timing metadata emitted when debug mode is enabled.
     /// `None` when debug mode is off.
     pub debug: Option<DebugEvent>,
+    /// `true` when this output represents (or accompanies) a layer-stack
+    /// change that the platform layer must announce to the frontend.
+    ///
+    /// Set by the engine when `Action::PopLayer` fires from a mapping.
+    /// `PushLayer` and `SwitchLayer` are handled entirely by the pump, which
+    /// always calls `emit_layer_changed` directly — they do not use this flag.
+    pub layer_changed: bool,
 }
 
 impl EngineOutput {
@@ -25,6 +32,7 @@ impl EngineOutput {
         Self {
             actions,
             debug: None,
+            layer_changed: false,
         }
     }
 
@@ -33,6 +41,7 @@ impl EngineOutput {
         Self {
             actions,
             debug: Some(debug),
+            layer_changed: false,
         }
     }
 }

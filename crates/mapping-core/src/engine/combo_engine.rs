@@ -4,8 +4,8 @@ use crate::engine::{
     DebugEvent, DeviceId, EngineOutput, LayerStack, RawTapEvent, ResolvedEvent, ResolvedTriggerKind,
 };
 use crate::types::{
-    Action, Hand, HoldModifierMode, MacroStep, Modifier, OverloadStrategy, Profile, PushLayerMode,
-    TapCode, TriggerPattern, VariableValue,
+    Action, Hand, HoldModifierMode, MacroStep, Modifier, Profile, PushLayerMode, TapCode,
+    TriggerPattern, VariableValue,
 };
 
 // ── Default timing constants ───────────────────────────────────────────────
@@ -30,47 +30,6 @@ struct PendingEntry {
     device_id: DeviceId,
     tap_code: TapCode,
     received_at: Instant,
-}
-
-// ── Overload table ─────────────────────────────────────────────────────────
-
-/// Tap codes that appear in both a `tap` and a `double_tap`/`triple_tap`
-/// binding in the active profile.
-#[derive(Debug, Default)]
-struct OverloadTable {
-    /// Canonical right-hand pattern strings of overloaded codes.
-    overloaded: std::collections::HashSet<String>,
-}
-
-impl OverloadTable {
-    fn build(profile: &Profile) -> Self {
-        use crate::types::Trigger;
-        let hand = profile.hand.unwrap_or(Hand::Right);
-        let mut tap_codes = std::collections::HashSet::new();
-        let mut overloaded = std::collections::HashSet::new();
-        for mapping in &profile.mappings {
-            if !mapping.enabled {
-                continue;
-            }
-            match &mapping.trigger {
-                Trigger::Tap { code } => {
-                    tap_codes.insert((*code).to_pattern_string(hand));
-                }
-                Trigger::DoubleTap { code } | Trigger::TripleTap { code } => {
-                    let key = (*code).to_pattern_string(hand);
-                    if tap_codes.contains(&key) {
-                        overloaded.insert(key);
-                    }
-                }
-                Trigger::Sequence { .. } => {}
-            }
-        }
-        Self { overloaded }
-    }
-
-    fn is_overloaded(&self, pattern: &str) -> bool {
-        self.overloaded.contains(pattern)
-    }
 }
 
 // ── Pending double/triple tap state ───────────────────────────────────────
@@ -165,9 +124,6 @@ enum ActiveHoldMode {
 pub struct ComboEngine {
     /// Active layer stack. The top layer drives all resolution decisions.
     layer_stack: LayerStack,
-    /// Overloaded codes pre-computed from the top layer at engine init / stack
-    /// change. Rebuilt whenever the top layer changes.
-    overloads: OverloadTable,
     /// Tap codes that appear in any `DoubleTap` or `TripleTap` trigger across
     /// all layers of the active stack. Rebuilt alongside `overloads` whenever
     /// the stack changes.
@@ -202,11 +158,9 @@ impl ComboEngine {
     /// constructing the engine and fire it if needed.
     pub fn new(profile: Profile) -> Self {
         let layer_stack = LayerStack::new(profile);
-        let overloads = OverloadTable::build(layer_stack.top());
         let needs_wait = build_needs_wait(&layer_stack);
         Self {
             layer_stack,
-            overloads,
             needs_wait,
             combo_pending: Vec::new(),
             tap_pending: None,
@@ -222,7 +176,7 @@ impl ComboEngine {
     /// — use [`switch_layer`] when `on_exit`/`on_enter` should be dispatched.
     pub fn set_profile(&mut self, profile: Profile) {
         let (_, _) = self.layer_stack.switch_to(profile);
-        self.rebuild_overloads();
+        self.rebuild_needs_wait();
         self.combo_pending.clear();
         self.tap_pending = None;
         self.seq_progress = None;
@@ -237,7 +191,7 @@ impl ComboEngine {
         now: std::time::Instant,
     ) -> Vec<EngineOutput> {
         let on_enter = self.layer_stack.push(profile, mode, now);
-        self.rebuild_overloads();
+        self.rebuild_needs_wait();
         self.clear_pending();
         on_enter
             .into_iter()
@@ -245,25 +199,32 @@ impl ComboEngine {
             .collect()
     }
 
-    /// Pop the top layer, returning any `on_exit` action.
+    /// Pop the top layer, returning any `on_exit` actions.
     ///
-    /// If the stack is already at the base layer this is a no-op (returns
-    /// empty) — stack underflow guard per spec rule 5.
-    pub fn pop_layer(&mut self) -> Vec<EngineOutput> {
+    /// Returns `None` if the stack is already at the base layer (stack
+    /// underflow guard per spec rule 5).  Returns `Some(outputs)` on a
+    /// successful pop; `outputs` may be empty when the popped layer had no
+    /// `on_exit` action.
+    pub fn pop_layer(&mut self) -> Option<Vec<EngineOutput>> {
+        if self.layer_stack.is_at_base() {
+            return None;
+        }
         let on_exit = self.layer_stack.pop();
-        self.rebuild_overloads();
+        self.rebuild_needs_wait();
         self.clear_pending();
-        on_exit
-            .into_iter()
-            .map(|a| EngineOutput::actions(vec![a]))
-            .collect()
+        Some(
+            on_exit
+                .into_iter()
+                .map(|a| EngineOutput::actions(vec![a]))
+                .collect(),
+        )
     }
 
     /// Replace the entire stack with a single layer, returning `on_exit` of the
     /// previous top layer followed by `on_enter` of the new layer (in that order).
     pub fn switch_layer(&mut self, profile: Profile) -> Vec<EngineOutput> {
         let (on_exit, on_enter) = self.layer_stack.switch_to(profile);
-        self.rebuild_overloads();
+        self.rebuild_needs_wait();
         self.clear_pending();
         on_exit
             .into_iter()
@@ -295,7 +256,7 @@ impl ComboEngine {
 
         // Check whether the top layer has timed out (Timeout push-layer mode).
         if let Some(on_exit) = self.layer_stack.check_timeout(now) {
-            self.rebuild_overloads();
+            self.rebuild_needs_wait();
             self.clear_pending();
             outputs.push(EngineOutput::actions(vec![on_exit]));
         }
@@ -374,21 +335,21 @@ impl ComboEngine {
         // same-device events (cross-device combo detection relies on them).
         let is_single = self.layer_stack.top().kind == crate::types::ProfileKind::Single;
         if is_single {
-            let debounce_gap = self
-                .debounce_last
-                .get(&event.device_id)
-                .and_then(|(last_code, last_at)| {
-                    if *last_code == tap_code {
-                        Some(
-                            event
-                                .received_at
-                                .saturating_duration_since(*last_at)
-                                .as_millis() as u64,
-                        )
-                    } else {
-                        None
-                    }
-                });
+            let debounce_gap =
+                self.debounce_last
+                    .get(&event.device_id)
+                    .and_then(|(last_code, last_at)| {
+                        if *last_code == tap_code {
+                            Some(
+                                event
+                                    .received_at
+                                    .saturating_duration_since(*last_at)
+                                    .as_millis() as u64,
+                            )
+                        } else {
+                            None
+                        }
+                    });
             if debounce_gap.is_some_and(|gap| gap < DEBOUNCE_WINDOW_MS) {
                 return vec![];
             }
@@ -488,79 +449,44 @@ impl ComboEngine {
         }
 
         // Buffer or immediately resolve the event.
-        let top = self.layer_stack.top();
-        let hand = top.hand.unwrap_or(Hand::Right);
-        let pattern_str = TriggerPattern::Single(tap_code).to_pattern_string(hand);
-        let is_overloaded = self.overloads.is_overloaded(&pattern_str);
-        let strategy = top.settings.overload_strategy;
-        let is_dual = top.kind == crate::types::ProfileKind::Dual;
-        // End the shared borrow on layer_stack before any mutable calls.
-        let _ = top;
+        let is_dual = self.layer_stack.top().kind == crate::types::ProfileKind::Dual;
 
-        match strategy {
-            Some(OverloadStrategy::Patient) if is_overloaded => {
-                // Patient strategy: buffer and wait.
-                outputs.extend(self.handle_patient(
-                    PendingEntry {
-                        device_id: event.device_id,
-                        tap_code,
-                        received_at: event.received_at,
-                    },
-                    now,
-                ));
-            }
-            _ => {
-                // Dual profiles: buffer for combo window; single profiles with
-                // non-overloaded codes or eager strategy: handle double/triple-tap
-                // detection (or resolve immediately if no overloads).
-                if is_dual {
-                    self.combo_pending.push(PendingEntry {
-                        device_id: event.device_id,
-                        tap_code,
-                        received_at: event.received_at,
-                    });
-                } else if is_overloaded {
-                    // Eager strategy: fire immediately, record for potential undo.
-                    outputs.extend(self.handle_eager(
-                        PendingEntry {
-                            device_id: event.device_id,
-                            tap_code,
-                            received_at: event.received_at,
-                        },
-                        now,
-                    ));
-                } else if self.needs_wait.contains(&tap_code) {
-                    // Code has a multi-tap binding — must wait for the window.
-                    outputs.extend(self.handle_tap(
-                        PendingEntry {
-                            device_id: event.device_id,
-                            tap_code,
-                            received_at: event.received_at,
-                        },
-                        now,
-                    ));
-                } else {
-                    // No multi-tap binding anywhere in the stack — dispatch
-                    // immediately without buffering.
-                    //
-                    // A new unrelated code confirms any pending tap (which
-                    // must be a different code, since codes in needs_wait take
-                    // the handle_tap path above). Flush it before dispatching
-                    // so the ordering is correct: pending tap fires first,
-                    // then the new code.
-                    outputs.extend(self.flush_tap_pending_now(now));
-                    let pattern = TriggerPattern::Single(tap_code);
-                    let resolved = ResolvedEvent {
-                        pattern,
-                        device_id: event.device_id,
-                        received_at: event.received_at,
-                        kind: ResolvedTriggerKind::Tap,
-                        waited_ms: 0,
-                        window_ms: 0,
-                    };
-                    outputs.extend(self.dispatch(resolved, now));
-                }
-            }
+        if is_dual {
+            self.combo_pending.push(PendingEntry {
+                device_id: event.device_id,
+                tap_code,
+                received_at: event.received_at,
+            });
+        } else if self.needs_wait.contains(&tap_code) {
+            // Code has a multi-tap binding — must wait for the window.
+            outputs.extend(self.handle_tap(
+                PendingEntry {
+                    device_id: event.device_id,
+                    tap_code,
+                    received_at: event.received_at,
+                },
+                now,
+            ));
+        } else {
+            // No multi-tap binding anywhere in the stack — dispatch
+            // immediately without buffering.
+            //
+            // A new unrelated code confirms any pending tap (which
+            // must be a different code, since codes in needs_wait take
+            // the handle_tap path above). Flush it before dispatching
+            // so the ordering is correct: pending tap fires first,
+            // then the new code.
+            outputs.extend(self.flush_tap_pending_now(now));
+            let pattern = TriggerPattern::Single(tap_code);
+            let resolved = ResolvedEvent {
+                pattern,
+                device_id: event.device_id,
+                received_at: event.received_at,
+                kind: ResolvedTriggerKind::Tap,
+                waited_ms: 0,
+                window_ms: 0,
+            };
+            outputs.extend(self.dispatch(resolved, now));
         }
 
         outputs
@@ -717,29 +643,6 @@ impl ComboEngine {
         }
     }
 
-    /// Handle a tap event under the `patient` overload strategy.
-    fn handle_patient(&mut self, entry: PendingEntry, now: Instant) -> Vec<EngineOutput> {
-        self.handle_tap(entry, now)
-    }
-
-    /// Handle a tap event under the `eager` overload strategy.
-    fn handle_eager(&mut self, entry: PendingEntry, now: Instant) -> Vec<EngineOutput> {
-        // Eager: fire the tap action immediately, then also start double-tap watch.
-        let pattern = TriggerPattern::Single(entry.tap_code);
-        let resolved = ResolvedEvent {
-            pattern,
-            device_id: entry.device_id.clone(),
-            received_at: entry.received_at,
-            kind: ResolvedTriggerKind::Tap,
-            waited_ms: 0,
-            window_ms: 0,
-        };
-        let outputs = self.dispatch(resolved, now);
-        // Also buffer for potential double-tap undo (tracked via tap_pending One).
-        self.tap_pending = Some(TapPending::One { entry });
-        outputs
-    }
-
     /// Handle double/triple-tap detection for an event.
     fn handle_tap(&mut self, entry: PendingEntry, now: Instant) -> Vec<EngineOutput> {
         let double_window = Duration::from_millis(self.double_tap_window_ms());
@@ -891,9 +794,13 @@ impl ComboEngine {
                         return None;
                     }
                     if let Some(cond) = &mapping.condition {
-                        let actual = top_vars_seq
-                            .get(cond.variable.as_str())
-                            .and_then(|v| if let crate::types::VariableValue::Bool(b) = v { Some(*b) } else { None });
+                        let actual = top_vars_seq.get(cond.variable.as_str()).and_then(|v| {
+                            if let crate::types::VariableValue::Bool(b) = v {
+                                Some(*b)
+                            } else {
+                                None
+                            }
+                        });
                         if actual != Some(cond.value) {
                             return None;
                         }
@@ -1003,7 +910,7 @@ impl ComboEngine {
 
         // Count decrement after sequence fires.
         if let Some(on_exit) = self.layer_stack.on_trigger_fired() {
-            self.rebuild_overloads();
+            self.rebuild_needs_wait();
             self.clear_pending();
             outputs.push(EngineOutput::actions(vec![on_exit]));
         }
@@ -1049,9 +956,13 @@ impl ComboEngine {
                         continue;
                     }
                     if let Some(cond) = &mapping.condition {
-                        let actual = top_vars
-                            .get(cond.variable.as_str())
-                            .and_then(|v| if let crate::types::VariableValue::Bool(b) = v { Some(*b) } else { None });
+                        let actual = top_vars.get(cond.variable.as_str()).and_then(|v| {
+                            if let crate::types::VariableValue::Bool(b) = v {
+                                Some(*b)
+                            } else {
+                                None
+                            }
+                        });
                         if actual != Some(cond.value) {
                             continue;
                         }
@@ -1131,7 +1042,7 @@ impl ComboEngine {
 
         // Count decrement after any successful trigger (including block).
         if let Some(on_exit) = self.layer_stack.on_trigger_fired() {
-            self.rebuild_overloads();
+            self.rebuild_needs_wait();
             self.clear_pending();
             outputs.push(EngineOutput::actions(vec![on_exit]));
         }
@@ -1157,13 +1068,28 @@ impl ComboEngine {
                 vec![]
             }
             Action::PopLayer => {
+                if self.layer_stack.is_at_base() {
+                    return vec![];
+                }
                 let on_exit = self.layer_stack.pop();
-                self.rebuild_overloads();
+                self.rebuild_needs_wait();
                 self.clear_pending();
-                on_exit
+                let mut outputs: Vec<EngineOutput> = on_exit
                     .into_iter()
                     .map(|a| EngineOutput::actions(vec![a]))
-                    .collect()
+                    .collect();
+                // Signal the platform layer to emit a layer-changed event.
+                // The pop already happened inside the engine so the pump's
+                // execute_action(PopLayer) path (macro steps) is not reached
+                // here — it is responsible for its own emit_layer_changed call.
+                if outputs.is_empty() {
+                    let mut sentinel = EngineOutput::actions(vec![]);
+                    sentinel.layer_changed = true;
+                    outputs.push(sentinel);
+                } else {
+                    outputs[0].layer_changed = true;
+                }
+                outputs
             }
             Action::ToggleVariable {
                 variable,
@@ -1335,9 +1261,8 @@ impl ComboEngine {
 
     // ── Housekeeping ───────────────────────────────────────────────────────
 
-    /// Rebuild the overload table and needs-wait set from the current stack.
-    fn rebuild_overloads(&mut self) {
-        self.overloads = OverloadTable::build(self.layer_stack.top());
+    /// Rebuild the needs-wait set from the current stack.
+    fn rebuild_needs_wait(&mut self) {
         self.needs_wait = build_needs_wait(&self.layer_stack);
     }
 

@@ -1,3 +1,9 @@
+---
+covers: Epics 5, 6, and 7 (Svelte core UI, finger pattern widget, live visualiser and debug panel)
+status: Approved and fully implemented
+last-updated: 2026-03-19
+---
+
 # svelte-frontend — Epic 5 specification
 
 ## Table of contents
@@ -213,7 +219,6 @@ export interface ProfileSummary {
 
 export type ProfileKind = 'single' | 'dual';
 export type Hand = 'left' | 'right';
-export type OverloadStrategy = 'patient' | 'eager';
 export type PushLayerMode =
   | { type: 'permanent' }
   | { type: 'count'; count: number }
@@ -228,7 +233,6 @@ export interface ProfileSettings {
   double_tap_window_ms: number;
   triple_tap_window_ms: number;
   sequence_step_timeout_ms: number;
-  overload_strategy: OverloadStrategy | null;
 }
 
 export type Modifier = 'ctrl' | 'shift' | 'alt' | 'meta';
@@ -926,7 +930,6 @@ A form showing all `ProfileSettings` fields with labels and range hints:
 | `double_tap_window_ms` | number | 300 | "Double-tap detection window (ms)" |
 | `triple_tap_window_ms` | number | 400 | "Triple-tap detection window (ms)" |
 | `sequence_step_timeout_ms` | number | 600 | "Max gap between sequence steps (ms)" |
-| `overload_strategy` | select (Patient / Eager / None) | null | "How to resolve codes used for both tap and double-tap" |
 
 All values are numbers in milliseconds. Validate that all ms values are positive integers.
 

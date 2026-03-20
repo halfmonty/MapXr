@@ -1,3 +1,9 @@
+---
+covers: Epics 1 and 2 (mapping-core data model and engine)
+status: Approved and fully implemented
+last-updated: 2026-03-19
+---
+
 # tap-mapper — mapping-core specification
 
 ## Table of contents
@@ -174,7 +180,8 @@ no cross-device combo or double-tap is pending (when those are configured).
 ### `double_tap`
 
 The same chord twice within `double_tap_window_ms`. If the same code appears in both a `tap` and
-a `double_tap` binding, the code is overloaded and the `overload_strategy` setting applies.
+a `double_tap` binding, the code is overloaded. The engine automatically waits up to
+`double_tap_window_ms` before resolving it — no additional configuration is required.
 
 ```jsonc
 {
@@ -230,13 +237,24 @@ Press and release a single key with optional modifiers held during the press.
 }
 ```
 
-Valid key name strings follow a readable convention: `"a"`–`"z"`, `"0"`–`"9"`, `"f1"`–`"f24"`,
-`"space"`, `"return"`, `"escape"`, `"tab"`, `"backspace"`, `"delete"`, `"left_arrow"`,
-`"right_arrow"`, `"up_arrow"`, `"down_arrow"`, `"home"`, `"end"`, `"page_up"`, `"page_down"`,
-`"grave"`, `"minus"`, `"equals"`, `"left_bracket"`, `"right_bracket"`, `"backslash"`,
-`"semicolon"`, `"quote"`, `"comma"`, `"period"`, `"slash"`, `"media_play"`, `"media_next"`,
-`"media_prev"`, `"volume_up"`, `"volume_down"`, `"volume_mute"`. Unknown key names are rejected
-at profile load time with a clear error message.
+Valid key name strings:
+
+| Group | Key names |
+|---|---|
+| **Letters** | `"a"`–`"z"` |
+| **Digits** | `"0"`–`"9"` |
+| **Function** | `"f1"`–`"f24"` |
+| **Navigation** | `"space"` `"return"` `"escape"` `"tab"` `"backspace"` `"delete"` `"left_arrow"` `"right_arrow"` `"up_arrow"` `"down_arrow"` `"home"` `"end"` `"page_up"` `"page_down"` `"caps_lock"` `"insert"` `"num_lock"` `"scroll_lock"` `"print_screen"` |
+| **Punctuation** | `"grave"` `"minus"` `"equals"` `"left_bracket"` `"right_bracket"` `"backslash"` `"semicolon"` `"quote"` `"comma"` `"period"` `"slash"` |
+| **Media** | `"media_play"` `"media_next"` `"media_prev"` `"media_stop"` |
+| **Volume** | `"volume_up"` `"volume_down"` `"volume_mute"` |
+| **System** | `"pause"` `"brightness_down"` `"brightness_up"` `"mic_mute"` `"eject"` |
+
+Unknown key names are rejected at profile load time with a clear error message.
+
+Some keys are platform-limited — they are accepted by the validator but silently no-op
+(with a `warn!` log) on platforms where the OS does not support them. See
+`docs/spec/extended-keys-spec.md` §Platform availability for the full matrix.
 
 ### `key_chord`
 
@@ -277,6 +295,55 @@ be a `macro`).
   ],
 }
 ```
+
+### `mouse_click`
+
+Press and release a mouse button.
+
+```jsonc
+{ "type": "mouse_click", "button": "left" }
+```
+
+`button` must be one of: `"left"`, `"right"`, `"middle"`.
+
+### `mouse_double_click`
+
+Press and release a mouse button twice in quick succession (platform double-click speed).
+
+```jsonc
+{ "type": "mouse_double_click", "button": "left" }
+```
+
+`button` must be one of: `"left"`, `"right"`, `"middle"`.
+
+### `mouse_scroll`
+
+Scroll in a cardinal direction by one scroll unit.
+
+```jsonc
+{ "type": "mouse_scroll", "direction": "up" }
+{ "type": "mouse_scroll", "direction": "down" }
+{ "type": "mouse_scroll", "direction": "left" }
+{ "type": "mouse_scroll", "direction": "right" }
+```
+
+`direction` must be one of: `"up"`, `"down"`, `"left"`, `"right"`. The scroll amount per action
+is one platform scroll unit (equivalent to one notch of a scroll wheel). Unknown direction values
+are rejected at profile load time with a clear error message.
+
+#### `MouseButton` enum
+
+Both `mouse_click` and `mouse_double_click` share the same `MouseButton` value set:
+
+| JSON value | Description        |
+| ---------- | ------------------ |
+| `"left"`   | Primary button     |
+| `"right"`  | Secondary button   |
+| `"middle"` | Scroll-wheel button |
+
+Unknown button names are rejected at profile load time with a clear error message.
+
+---
 
 ### `push_layer`
 
@@ -457,33 +524,10 @@ trigger only.
 
     "triple_tap_window_ms": 400,
     // Maximum time from first to third tap of a triple_tap.
-
-    // ── Overload resolution ───────────────────────────────────────
-    "overload_strategy": "patient",
-    // How to handle a code that appears in both a "tap" and a
-    // "double_tap" (or "triple_tap") binding.
     //
-    // "patient" — wait double_tap_window_ms before firing anything.
-    //   Adds latency to every single-tap on overloaded codes.
-    //   No visible artifact. Ideal when the double_tap action is
-    //   destructive (e.g. delete, cut).
-    //
-    // "eager"   — fire the single-tap action immediately. If a double
-    //   tap is then detected, send the configured undo sequence and
-    //   fire the double-tap action instead.
-    //   Zero latency. Produces a brief visible artifact.
-    //   Ideal for high-frequency single-tap codes.
-    //
-    // Applies globally to all overloaded codes in the profile.
-    // Codes that are NOT overloaded are never delayed regardless of
-    // this setting.
-
-    "eager_undo_sequence": [{ "type": "key", "key": "backspace" }],
-    // The action(s) used to undo an eagerly-fired single-tap before
-    // firing the double-tap action. Only relevant when
-    // overload_strategy is "eager". Defaults to a single backspace.
-    // Override if your single-tap action is not a single character
-    // (e.g. a snippet that emits multiple characters).
+    // Overloaded codes (appearing in both tap and double_tap/triple_tap)
+    // are automatically handled with patient (wait-for-window) behaviour.
+    // No additional configuration is required.
   },
 }
 ```
@@ -540,7 +584,6 @@ failed to fire, why a double-tap is not being detected, or why a sequence keeps 
     "received_at_ms": 1712345678901,
   },
   "resolution": {
-    "strategy": "patient",
     "waited_ms": 247,
     "outcome": "double_tap_fired",
   },
@@ -602,7 +645,6 @@ pattern rendering, and layer stack state. The stream can be filtered by event ty
 
   "settings": {
     "double_tap_window_ms": 220,
-    "overload_strategy": "patient",
   },
 
   "aliases": {
@@ -696,8 +738,6 @@ pattern rendering, and layer stack state. The stream can be filtered by event ty
     "combo_window_ms": 150,
     "sequence_window_ms": 500,
     "double_tap_window_ms": 250,
-    "overload_strategy": "eager",
-    "eager_undo_sequence": [{ "type": "key", "key": "backspace" }],
   },
 
   "aliases": {
@@ -851,13 +891,13 @@ pattern rendering, and layer stack state. The stream can be filtered by event ty
 These rules define how the engine resolves ambiguous situations. They are not configurable.
 
 1. **Profile load validation.** The engine validates every profile at load time. Unknown action
-   types, invalid key names, malformed finger patterns, circular alias references, and overloaded
-   codes without a declared `overload_strategy` all produce a load error with a specific message.
-   Profiles with errors are not loaded.
+   types, invalid key names, malformed finger patterns, and circular alias references all produce
+   a load error with a specific message. Profiles with errors are not loaded.
 
 2. **Overload detection.** A code is overloaded if it appears in two or more of `tap`,
-   `double_tap`, `triple_tap` within the same layer. The `overload_strategy` setting applies to
-   the entire profile. Codes that are not overloaded are never delayed.
+   `double_tap`, `triple_tap` within the same layer. Overloaded codes are automatically handled
+   with patient (wait-for-window) behaviour: the engine waits up to `double_tap_window_ms` before
+   resolving. Codes that are not overloaded are never delayed.
 
 3. **Combo window scope.** In a dual profile, the combo window applies whenever there is a pending
    event from one device. If the second device fires within `combo_window_ms`, the engine attempts

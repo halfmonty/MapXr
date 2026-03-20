@@ -1,7 +1,7 @@
 <script lang="ts">
   import ActionEditor from "./ActionEditor.svelte";
-  import { KNOWN_KEY_NAMES } from "$lib/types";
-  import type { Action, MacroStep, Modifier, Profile } from "$lib/types";
+  import { KEY_GROUPS } from "$lib/types";
+  import type { Action, MacroStep, Modifier, MouseButton, Profile, ScrollDirection, VibrationPattern } from "$lib/types";
   import { profileStore } from "$lib/stores/profile.svelte";
 
   interface Props {
@@ -18,6 +18,8 @@
     "key", "key_chord", "type_string", "macro",
     "push_layer", "pop_layer", "switch_layer",
     "toggle_variable", "set_variable", "conditional", "block", "alias", "hold_modifier",
+    "mouse_click", "mouse_double_click", "mouse_scroll",
+    "vibrate",
   ];
 
   const TYPE_LABELS: Record<Action["type"], string> = {
@@ -26,6 +28,9 @@
     switch_layer: "Switch layer", toggle_variable: "Toggle variable",
     set_variable: "Set variable", conditional: "Conditional", block: "Block",
     alias: "Alias", hold_modifier: "Hold modifier",
+    mouse_click: "Mouse click", mouse_double_click: "Mouse double-click",
+    mouse_scroll: "Mouse scroll",
+    vibrate: "Vibrate",
   };
 
   let availableTypes = $derived(ALL_TYPES.filter((t) => !disallow.includes(t)));
@@ -42,9 +47,13 @@
       case "toggle_variable": return { type: "toggle_variable", variable: "", on_true: { type: "block" }, on_false: { type: "block" } };
       case "set_variable":    return { type: "set_variable", variable: "", value: false };
       case "conditional":     return { type: "conditional", variable: "", on_true: { type: "block" }, on_false: { type: "block" } };
-      case "block":           return { type: "block" };
-      case "alias":           return { type: "alias", name: "" };
-      case "hold_modifier":   return { type: "hold_modifier", modifiers: ["shift"], mode: "toggle" };
+      case "block":              return { type: "block" };
+      case "alias":              return { type: "alias", name: "" };
+      case "hold_modifier":      return { type: "hold_modifier", modifiers: ["shift"], mode: "toggle" };
+      case "mouse_click":        return { type: "mouse_click", button: "left" };
+      case "mouse_double_click": return { type: "mouse_double_click", button: "left" };
+      case "mouse_scroll":       return { type: "mouse_scroll", direction: "down" };
+      case "vibrate":            return { type: "vibrate", pattern: [200, 100, 200] };
     }
   }
 
@@ -163,6 +172,37 @@
     if (action.type !== "set_variable") return;
     onchange({ ...action, value: raw === "true" });
   }
+
+  // ── Vibrate helpers ─────────────────────────────────────────────────────────
+
+  /** Built-in patterns from docs/spec/haptics-spec.md §Built-in patterns */
+  const VIBRATE_PRESETS: { label: string; pattern: VibrationPattern }[] = [
+    { label: "Short pulse",   pattern: [80] },
+    { label: "Double pulse",  pattern: [80, 80, 80] },
+    { label: "Triple pulse",  pattern: [80, 80, 80, 80, 80] },
+  ];
+
+  function vibrateSetPattern(pattern: VibrationPattern) {
+    if (action.type !== "vibrate") return;
+    onchange({ ...action, pattern });
+  }
+
+  function vibrateAddSegment() {
+    if (action.type !== "vibrate") return;
+    onchange({ ...action, pattern: [...action.pattern, 100] });
+  }
+
+  function vibrateRemoveSegment(i: number) {
+    if (action.type !== "vibrate") return;
+    onchange({ ...action, pattern: action.pattern.filter((_, idx) => idx !== i) });
+  }
+
+  function vibrateUpdateSegment(i: number, ms: number) {
+    if (action.type !== "vibrate") return;
+    const clamped = Math.max(10, Math.min(2550, Math.round(ms / 10) * 10));
+    const pattern = action.pattern.map((v, idx) => (idx === i ? clamped : v));
+    onchange({ ...action, pattern });
+  }
 </script>
 
 <div class="space-y-3">
@@ -184,17 +224,21 @@
   {#if action.type === "key"}
     <label class="form-control w-full">
       <div class="label py-0"><span class="label-text text-xs">Key</span></div>
-      <input
-        type="text"
-        list="known-keys"
-        class="input input-bordered input-sm w-full font-mono"
+      <select
+        class="select select-bordered select-sm w-full font-mono"
         value={action.key}
-        oninput={(e) => onchange({ ...action, key: (e.target as HTMLInputElement).value })}
-        placeholder="a"
-      />
-      <datalist id="known-keys">
-        {#each KNOWN_KEY_NAMES as k}<option value={k}></option>{/each}
-      </datalist>
+        onchange={(e) => onchange({ ...action, key: (e.target as HTMLSelectElement).value })}
+      >
+        {#each KEY_GROUPS as group}
+          <optgroup label={group.label}>
+            {#each group.keys as k}
+              <option value={k.name} title={k.platformNote ? `${k.platformNote} only` : undefined}>
+                {k.name}{k.platformNote ? ` (${k.platformNote})` : ""}
+              </option>
+            {/each}
+          </optgroup>
+        {/each}
+      </select>
     </label>
     <div>
       <p class="label-text mb-1 text-xs">Modifiers</p>
@@ -232,7 +276,7 @@
       <div class="flex gap-2">
         <input
           type="text"
-          list="known-keys"
+          list="known-keys-chord"
           class="input input-bordered input-sm flex-1 font-mono"
           placeholder="Add key…"
           bind:value={chordInput}
@@ -240,8 +284,12 @@
         />
         <button class="btn btn-sm btn-ghost" onclick={addChordKey}>Add</button>
       </div>
-      <datalist id="known-keys">
-        {#each KNOWN_KEY_NAMES as k}<option value={k}></option>{/each}
+      <datalist id="known-keys-chord">
+        {#each KEY_GROUPS as group}
+          {#each group.keys as k}
+            <option value={k.name}>{k.name}{k.platformNote ? ` (${k.platformNote})` : ""}</option>
+          {/each}
+        {/each}
       </datalist>
     </div>
 
@@ -442,6 +490,90 @@
         disallow={["macro"]}
         onchange={(a: Action) => setVariableField("on_false", a)}
       />
+    </div>
+
+  <!-- ── Mouse click ───────────────────────────────────────────────────────── -->
+  {:else if action.type === "mouse_click" || action.type === "mouse_double_click"}
+    <div>
+      <p class="label-text mb-1 text-xs">Button</p>
+      <div class="join">
+        {#each (["left", "right", "middle"] as MouseButton[]) as b}
+          <button
+            class="btn join-item btn-xs {action.button === b ? 'btn-primary' : 'btn-ghost'}"
+            onclick={() => onchange({ ...action, button: b })}
+          >{b}</button>
+        {/each}
+      </div>
+    </div>
+
+  <!-- ── Mouse scroll ───────────────────────────────────────────────────────── -->
+  {:else if action.type === "mouse_scroll"}
+    <div>
+      <p class="label-text mb-1 text-xs">Direction</p>
+      <div class="join">
+        {#each (["up", "down", "left", "right"] as ScrollDirection[]) as d}
+          <button
+            class="btn join-item btn-xs {action.direction === d ? 'btn-primary' : 'btn-ghost'}"
+            onclick={() => onchange({ ...action, direction: d })}
+          >{d}</button>
+        {/each}
+      </div>
+    </div>
+
+  <!-- ── Vibrate ───────────────────────────────────────────────────────────── -->
+  {:else if action.type === "vibrate"}
+    <div class="space-y-2">
+      <div>
+        <p class="label-text mb-1 text-xs">Presets</p>
+        <div class="flex flex-wrap gap-1">
+          {#each VIBRATE_PRESETS as preset}
+            <button
+              class="btn btn-xs btn-ghost btn-outline"
+              onclick={() => vibrateSetPattern(preset.pattern)}
+            >{preset.label}</button>
+          {/each}
+        </div>
+      </div>
+      <div>
+        <p class="label-text mb-1 text-xs">
+          Pattern (alternating on/off durations in ms, max 18 segments)
+        </p>
+        <div class="space-y-1">
+          {#each action.pattern as duration, i}
+            <div class="flex items-center gap-2">
+              <span class="w-14 shrink-0 text-xs text-base-content/60 font-mono">
+                {i % 2 === 0 ? "On" : "Off"} {Math.floor(i / 2) + 1}
+              </span>
+              <input
+                type="number"
+                class="input input-bordered input-xs w-28 font-mono"
+                min={10}
+                max={2550}
+                step={10}
+                value={duration}
+                oninput={(e) => vibrateUpdateSegment(i, Number((e.target as HTMLInputElement).value))}
+              />
+              <span class="text-xs text-base-content/40">ms</span>
+              <button
+                class="btn btn-xs btn-ghost text-error ml-auto"
+                onclick={() => vibrateRemoveSegment(i)}
+                aria-label="Remove segment {i + 1}"
+              >✕</button>
+            </div>
+          {/each}
+        </div>
+        {#if action.pattern.length < 18}
+          <button
+            class="btn btn-xs btn-ghost btn-outline w-full mt-2"
+            onclick={vibrateAddSegment}
+          >+ Add segment</button>
+        {:else}
+          <p class="text-xs text-base-content/40 mt-1 text-center">Maximum 18 segments reached</p>
+        {/if}
+        {#if action.pattern.length === 0}
+          <p class="text-xs text-warning mt-1">Empty pattern — no vibration will occur.</p>
+        {/if}
+      </div>
     </div>
 
   <!-- ── Block ─────────────────────────────────────────────────────────────── -->

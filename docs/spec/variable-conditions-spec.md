@@ -1,3 +1,9 @@
+---
+covers: Variable condition expressions (out-of-plan feature; extends Epic 2 engine)
+status: Draft — awaiting user approval before implementation begins
+last-updated: 2026-03-19
+---
+
 # Variable Conditions Spec
 
 **Status:** Draft — awaiting user approval before implementation begins.

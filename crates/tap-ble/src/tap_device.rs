@@ -7,6 +7,8 @@ use mapping_core::engine::{DeviceId, RawTapEvent};
 use tokio::sync::{broadcast, watch};
 use uuid::Uuid;
 
+use mapping_core::types::VibrationPattern;
+
 use crate::{BleError, manager::BleStatusEvent, packet_parser::parse_tap_packet};
 
 // ── Protocol constants ────────────────────────────────────────────────────────
@@ -15,9 +17,20 @@ use crate::{BleError, manager::BleStatusEvent, packet_parser::parse_tap_packet};
 /// Source: `docs/reference/windows-sdk-guid-reference.txt`
 const NUS_RX_UUID: Uuid = Uuid::from_u128(0x6E400002_B5A3_F393_E0A9_E50E24DCCA9E);
 
+/// Tap proprietary device name characteristic (service C3FF0001).
+/// Mirrors the GAP name; writing here is expected to update both.
+/// Source: `docs/reference/gatt-characteristics.txt`
+const CHAR_TAP_DEVICE_NAME: Uuid = Uuid::from_u128(0xC3FF0003_1D8B_40FD_A56F_C7BD5D0F3370);
+
 /// Tap data characteristic — sends tap event notifications.
 /// Source: `docs/reference/windows-sdk-guid-reference.txt`
 const TAP_DATA_UUID: Uuid = Uuid::from_u128(0xC3FF0005_1D8B_40FD_A56F_C7BD5D0F3370);
+
+/// Haptic characteristic — triggers vibration patterns on the device.
+///
+/// Properties: `WwR W`. WriteWithoutResponse is preferred for latency.
+/// Source: `docs/reference/gatt-characteristics.txt` (`C3FF0009  Haptic  | WwR W`)
+const HAPTIC_UUID: Uuid = Uuid::from_u128(0xC3FF0009_1D8B_40FD_A56F_C7BD5D0F3370);
 
 /// Written to NUS RX to enter controller mode.
 /// Source: `docs/reference/api-doc.txt`
@@ -34,7 +47,7 @@ const KEEPALIVE_INTERVAL: Duration = Duration::from_secs(10);
 const RECONNECT_BASE_DELAY: Duration = Duration::from_secs(1);
 
 /// Maximum delay between reconnect attempts.
-const RECONNECT_MAX_DELAY: Duration = Duration::from_secs(60);
+const RECONNECT_MAX_DELAY: Duration = Duration::from_secs(10);
 
 // ── TapDevice ─────────────────────────────────────────────────────────────────
 
@@ -178,7 +191,11 @@ impl TapDevice {
         // fails the device is mid-reconnect and the new tasks will re-enter controller mode.
         let _ = self
             .peripheral
-            .write(&self.nus_rx, ENTER_CONTROLLER_MODE, WriteType::WithoutResponse)
+            .write(
+                &self.nus_rx,
+                ENTER_CONTROLLER_MODE,
+                WriteType::WithoutResponse,
+            )
             .await;
 
         let (cancel_tx, cancel_rx) = watch::channel(false);
@@ -219,6 +236,84 @@ impl TapDevice {
     /// The BLE hardware address of this device.
     pub fn address(&self) -> BDAddr {
         self.address
+    }
+
+    /// The BLE peripheral's display name (from cached peripheral properties).
+    ///
+    /// Returns `None` if the adapter has no cached properties for this peripheral.
+    pub async fn name(&self) -> Option<String> {
+        use btleplug::api::Peripheral as _;
+        self.peripheral
+            .properties()
+            .await
+            .ok()
+            .flatten()
+            .and_then(|p| p.local_name)
+    }
+
+    /// Write a new friendly name to the device.
+    ///
+    /// The name is written to the Tap proprietary name characteristic (`C3FF0003`).
+    /// The standard GAP Device Name characteristic (`00002A00`) is not written:
+    /// despite advertising the WRITE property, the device rejects writes to it
+    /// with "Operation Not Authorized". `C3FF0003` alone is sufficient — the
+    /// device re-advertises the updated name on the next reconnect.
+    ///
+    /// The change takes effect after the device reconnects and re-advertises.
+    ///
+    /// The caller is responsible for validating the name before calling this
+    /// method (length, allowed characters).
+    pub async fn set_name(&self, name: &str) -> Result<(), BleError> {
+        let tap_name_char = self
+            .peripheral
+            .characteristics()
+            .iter()
+            .find(|c| c.uuid == CHAR_TAP_DEVICE_NAME)
+            .cloned()
+            .ok_or_else(|| BleError::MissingCharacteristic {
+                uuid: CHAR_TAP_DEVICE_NAME.to_string(),
+                address: self.address.to_string(),
+            })?;
+
+        self.peripheral
+            .write(&tap_name_char, name.as_bytes(), WriteType::WithResponse)
+            .await?;
+
+        Ok(())
+    }
+
+    /// Send a vibration pattern to the device.
+    ///
+    /// The pattern is encoded and written to the haptic characteristic (`C3FF0009`)
+    /// using WriteWithoutResponse for minimum latency.
+    ///
+    /// An empty pattern is a no-op — the method returns `Ok(())` without writing.
+    /// Sequences longer than 18 elements are truncated to 18 before sending.
+    /// Duration values outside [10, 2550] ms are clamped silently.
+    ///
+    /// See `docs/spec/haptics-spec.md` for full encoding rules and built-in patterns.
+    pub async fn vibrate(&self, pattern: &VibrationPattern) -> Result<(), BleError> {
+        let payload = pattern.encode();
+        if payload.is_empty() {
+            return Ok(());
+        }
+
+        let haptic_char = self
+            .peripheral
+            .characteristics()
+            .iter()
+            .find(|c| c.uuid == HAPTIC_UUID)
+            .cloned()
+            .ok_or_else(|| BleError::MissingCharacteristic {
+                uuid: HAPTIC_UUID.to_string(),
+                address: self.address.to_string(),
+            })?;
+
+        self.peripheral
+            .write(&haptic_char, &payload, WriteType::WithoutResponse)
+            .await?;
+
+        Ok(())
     }
 }
 
@@ -396,9 +491,17 @@ async fn connection_monitor_task(
                         if *cancel.borrow() { break; }
 
                         // Notify subscribers of the unexpected disconnect.
+                        use btleplug::api::Peripheral as _;
+                        let name = peripheral
+                            .properties()
+                            .await
+                            .ok()
+                            .flatten()
+                            .and_then(|p| p.local_name);
                         let _ = status_tx.send(BleStatusEvent::Disconnected {
                             device_id: device_id.clone(),
                             address,
+                            name,
                         });
 
                         reconnect_loop(
@@ -458,9 +561,17 @@ async fn reconnect_loop(
                     .await;
 
                 // Notify subscribers of the successful reconnect.
+                use btleplug::api::Peripheral as _;
+                let name = peripheral
+                    .properties()
+                    .await
+                    .ok()
+                    .flatten()
+                    .and_then(|p| p.local_name);
                 let _ = status_tx.send(BleStatusEvent::Connected {
                     device_id: device_id.clone(),
                     address,
+                    name,
                 });
 
                 // Restart keepalive and notification tasks.
@@ -483,4 +594,79 @@ async fn reconnect_loop(
             }
         }
     }
+}
+
+// ── Tests ─────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // btleplug does not provide a mockable Peripheral trait, so `set_name` cannot
+    // be called without a live BLE device and display server.  These tests cover
+    // the pure byte-encoding contract that `set_name` relies on.
+    //
+    // Manual hardware verification steps (run once against a real device):
+    //   1. Connect a TapXR or Tap Strap 2 in the app.
+    //   2. Call `rename_device` via the UI with a name such as "MyTap".
+    //   3. Confirm no error is shown.
+    //   4. Disconnect and reconnect the device.
+    //   5. Verify the new name appears in the device list on reconnect.
+
+    #[test]
+    fn set_name_ascii_encodes_to_utf8_bytes_without_framing() {
+        let name = "MyTap";
+        let bytes = name.as_bytes();
+        assert_eq!(bytes, b"MyTap");
+        assert_eq!(bytes.len(), 5);
+        // No null terminator, no length prefix.
+        assert!(!bytes.contains(&0x00));
+    }
+
+    #[test]
+    fn set_name_tap_xr_default_name_round_trips() {
+        let name = "TapXR_A036320";
+        let bytes = name.as_bytes();
+        assert_eq!(
+            bytes,
+            &[
+                0x54, 0x61, 0x70, 0x58, 0x52, 0x5F, 0x41, 0x30, 0x33, 0x36, 0x33, 0x32, 0x30
+            ]
+        );
+    }
+
+    #[test]
+    fn set_name_tap_strap2_default_name_round_trips() {
+        let name = "Tap_D4252611";
+        let bytes = name.as_bytes();
+        assert_eq!(
+            bytes,
+            &[
+                0x54, 0x61, 0x70, 0x5F, 0x44, 0x34, 0x32, 0x35, 0x32, 0x36, 0x31, 0x31
+            ]
+        );
+    }
+
+    #[test]
+    fn char_tap_device_name_uuid_is_correct() {
+        assert_eq!(
+            CHAR_TAP_DEVICE_NAME.to_string(),
+            "c3ff0003-1d8b-40fd-a56f-c7bd5d0f3370"
+        );
+    }
+
+    #[test]
+    fn haptic_uuid_is_correct() {
+        assert_eq!(
+            HAPTIC_UUID.to_string(),
+            "c3ff0009-1d8b-40fd-a56f-c7bd5d0f3370"
+        );
+    }
+
+    // Manual hardware verification steps for TapDevice::vibrate (run once against a real device):
+    //   1. Connect a TapXR or Tap Strap 2 in the app.
+    //   2. Bind a tap combination to a `vibrate` action with pattern [200, 100, 200].
+    //   3. Tap the combination — the device should buzz twice with a 100 ms gap.
+    //   4. Verify the pattern [80] produces a single short buzz (~80 ms).
+    //   5. Verify an empty pattern produces no vibration.
 }

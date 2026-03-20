@@ -13,6 +13,9 @@ import type {
   Profile,
   PushLayerMode,
   EngineStateSnapshot,
+  ContextRules,
+  TrayPreferences,
+  UpdateInfo,
 } from "./types";
 
 // ── Device commands ───────────────────────────────────────────────────────────
@@ -67,6 +70,22 @@ export async function reassignDeviceRole(
  */
 export async function disconnectDevice(role: string): Promise<void> {
   return invoke("disconnect_device", { role });
+}
+
+/**
+ * Rename a connected Tap device.
+ *
+ * The name is written directly to the device over BLE and persists across
+ * power cycles. The change takes effect after the device reconnects and
+ * re-advertises — inform the user of this after a successful call.
+ *
+ * @param address - BLE address in "AA:BB:CC:DD:EE:FF" format.
+ * @param name    - New friendly name (1–20 printable ASCII chars; leading/trailing
+ *                  whitespace is trimmed automatically by the backend).
+ * @throws If the device is not connected, the name fails validation, or the BLE write fails.
+ */
+export async function renameDevice(address: string, name: string): Promise<void> {
+  return invoke("rename_device", { address, name });
 }
 
 // ── Profile commands ──────────────────────────────────────────────────────────
@@ -171,6 +190,81 @@ export async function setDebugMode(enabled: boolean): Promise<void> {
  */
 export async function getEngineState(): Promise<EngineStateSnapshot> {
   return invoke("get_engine_state");
+}
+
+// ── Context rules commands ────────────────────────────────────────────────────
+
+/**
+ * Return the current context-switching rules.
+ *
+ * Rules are evaluated in list order; the first match activates the associated
+ * profile. Matching is case-insensitive substring search on app name and/or
+ * window title.
+ */
+export async function listContextRules(): Promise<ContextRules> {
+  return invoke("list_context_rules");
+}
+
+/**
+ * Validate, persist, and replace the context-switching rules.
+ *
+ * The backend validates all rules before writing. On success the focus monitor
+ * immediately starts using the new rules.
+ *
+ * @param rules - The full replacement rule list (version + rules array).
+ * @throws If any rule fails validation or the file cannot be written.
+ */
+export async function saveContextRules(rules: ContextRules): Promise<void> {
+  return invoke("save_context_rules", { rules });
+}
+
+// ── Preferences commands ──────────────────────────────────────────────────────
+
+/**
+ * Return the current tray-related preferences.
+ */
+export async function getPreferences(): Promise<TrayPreferences> {
+  return invoke("get_preferences");
+}
+
+/**
+ * Persist updated tray preferences and apply live effects.
+ *
+ * `start_at_login` takes effect immediately (registers/deregisters the OS login
+ * item). Other settings are applied the next time they become relevant.
+ *
+ * @param prefs - The full replacement preferences object.
+ * @throws If the OS login item cannot be registered/deregistered.
+ */
+export async function savePreferences(prefs: TrayPreferences): Promise<void> {
+  return invoke("save_preferences", { prefsUpdate: prefs });
+}
+
+// ── Update commands ───────────────────────────────────────────────────────────
+
+/**
+ * Query the update endpoint and return info about the available update, or
+ * `null` if the app is already on the latest version.
+ *
+ * Does not download anything. Call `downloadAndInstallUpdate` to apply the update.
+ *
+ * @throws If the update endpoint is unreachable or the check fails.
+ */
+export async function checkForUpdate(): Promise<UpdateInfo | null> {
+  return invoke("check_for_update");
+}
+
+/**
+ * Download and install the latest available update, then restart the app.
+ *
+ * Emits `update-download-progress` events during the download. This call never
+ * resolves on success because the app restarts; it rejects with an error string
+ * if the download or installation fails.
+ *
+ * @throws If no update is available or the download fails.
+ */
+export async function downloadAndInstallUpdate(): Promise<void> {
+  return invoke("download_and_install_update");
 }
 
 // ── Filesystem helpers ────────────────────────────────────────────────────────

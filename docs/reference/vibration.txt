@@ -1,0 +1,32 @@
+From Python example SDK provided by TapWithUs
+send_vibration_sequence(self, sequence:list, identifier): This function send a series of haptic activations. sequence is a list of integers indicating for the activation and delay periods one after another. The periods are in millisecond units, in the range of [10,2550] and in resolution of 10ms. Each haptic command support up to 18 period definitions (i.e. 9 haptics + delay pairs).
+For example,
+
+    tap_device.send_vibration_sequence(sequence=[1000,300,200])
+will trigger a 1s haptic, followed by 300ms delay, followed by 200ms haptic.
+
+
+
+Implementation:
+async def send_vibration_sequence(self, sequence, identifier=None):
+        if len(sequence) > 18:
+            sequence = sequence[:18]
+        for i, d in enumerate(sequence):
+            sequence[i] = max(0, min(255, d // 10))
+
+        write_value = bytearray([0x0, 0x2] + sequence)
+        await self.client.write_gatt_char(TapUUID.ui_cmd_characteristic, write_value)
+
+    async def set_input_mode(self, input_mode: TapInputMode, identifier=None):
+        if (input_mode.mode == "raw" and self.input_mode.mode == "raw" and
+           self.input_mode.get_command() != input_mode.get_command()):
+            logger.warning("Can't change \"raw\" sensitivities while in \"raw\"")
+            return
+
+        self.input_mode = input_mode
+        write_value = input_mode.get_command()
+
+        if not self.input_mode_refresh.is_running:
+            await self.input_mode_refresh.start()
+
+        await self._write_input_mode(write_value)

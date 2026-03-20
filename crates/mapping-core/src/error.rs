@@ -45,17 +45,6 @@ pub enum ProfileError {
         cycle: String,
     },
 
-    /// A tap code appears in both a `tap` binding and a `double_tap` /
-    /// `triple_tap` binding, but no `overload_strategy` is configured.
-    #[error(
-        "tap code {code:?} is overloaded (appears in tap and double_tap/triple_tap) \
-         but no overload_strategy is set in profile settings"
-    )]
-    OverloadedCodeWithoutStrategy {
-        /// The finger-pattern string of the overloaded code.
-        code: String,
-    },
-
     /// A `Macro` step contains another `Macro` action (nesting is forbidden).
     #[error("macro nesting is not allowed in mapping {label:?}")]
     NestedMacro {

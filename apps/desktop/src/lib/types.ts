@@ -5,7 +5,7 @@
  *   - Action, Trigger: internally tagged with `"type"` key, snake_case variants
  *   - PushLayerMode: internally tagged with `"mode"` key, flattened into PushLayer
  *   - VariableValue: untagged (serialises as plain `boolean`; integer variant exists in engine but is not exposed in UI)
- *   - ProfileKind, Hand, Modifier, OverloadStrategy: plain lowercase strings
+ *   - ProfileKind, Hand, Modifier: plain lowercase strings
  *   - TapStep: serialises as a plain finger-pattern string, not an object
  *   - KeyDef: transparent newtype over string
  *   - ProfileSettings fields: all optional (omitted from JSON when null/default)
@@ -71,7 +71,8 @@ export interface ProfileSummary {
 export type ProfileKind = "single" | "dual";
 export type Hand = "left" | "right";
 export type Modifier = "ctrl" | "shift" | "alt" | "meta";
-export type OverloadStrategy = "patient" | "eager";
+export type MouseButton = "left" | "right" | "middle";
+export type ScrollDirection = "up" | "down" | "left" | "right";
 
 // ── Variable values ──────────────────────────────────────────────────────────
 
@@ -125,6 +126,18 @@ export type HoldModifierMode =
  *
  * Key note: `modifiers` is omitted from JSON when empty; use `modifiers?: Modifier[]`.
  */
+/**
+ * Alternating on/off durations in milliseconds for haptic vibration.
+ *
+ * Mirrors `VibrationPattern(pub Vec<u16>)` in mapping-core, which serialises
+ * as a plain JSON array: `[200, 100, 200]` = 200 ms on, 100 ms off, 200 ms on.
+ *
+ * Constraints (enforced at BLE send time, not in the UI):
+ *   - Each value: 10–2550 ms, 10 ms resolution
+ *   - Maximum 18 elements (longer sequences are truncated before sending)
+ */
+export type VibrationPattern = number[];
+
 export type Action =
   | { type: "key"; key: KeyName; modifiers?: Modifier[] }
   | { type: "key_chord"; keys: string[] }
@@ -150,7 +163,11 @@ export type Action =
     }
   | { type: "block" }
   | { type: "alias"; name: string }
-  | ({ type: "hold_modifier"; modifiers: Modifier[] } & HoldModifierMode);
+  | ({ type: "hold_modifier"; modifiers: Modifier[] } & HoldModifierMode)
+  | { type: "mouse_click"; button: MouseButton }
+  | { type: "mouse_double_click"; button: MouseButton }
+  | { type: "mouse_scroll"; direction: ScrollDirection }
+  | { type: "vibrate"; pattern: VibrationPattern };
 
 /** A single step inside a `macro` action. */
 export interface MacroStep {
@@ -219,13 +236,6 @@ export interface ProfileSettings {
   double_tap_window_ms?: number;
   /** Max time from first to third tap of a triple_tap (ms). */
   triple_tap_window_ms?: number;
-  /** Required when any code is bound to both tap and double_tap/triple_tap. */
-  overload_strategy?: OverloadStrategy;
-  /**
-   * Actions used to undo an eagerly-fired single-tap before firing the
-   * double-tap action. Only relevant when `overload_strategy` is `"eager"`.
-   */
-  eager_undo_sequence?: Action[];
 }
 
 // ── Profile ──────────────────────────────────────────────────────────────────
@@ -347,25 +357,164 @@ export type DebugEvent =
       actual_gap_ms: number;
     };
 
+// ── Context rules ─────────────────────────────────────────────────────────────
+
+/** A single rule that maps a window focus pattern to a profile layer_id. */
+export interface ContextRule {
+  /** Human-readable label shown in the UI. */
+  name: string;
+  /** layer_id of the profile to activate when this rule matches. */
+  layer_id: string;
+  /** Pattern matched against the application name. null = match any app. */
+  match_app: string | null;
+  /** Pattern matched against the window title. null = match any title. */
+  match_title: string | null;
+}
+
+/** Ordered list of context rules, as returned by `list_context_rules`. */
+export interface ContextRules {
+  version: number;
+  rules: ContextRule[];
+}
+
+/** Payload for the `context-rule-matched` Tauri event. */
+export interface ContextRuleMatchedPayload {
+  /** Human-readable label of the matched rule. */
+  rule_name: string;
+  /** layer_id of the profile that was activated. */
+  layer_id: string;
+}
+
+// ── Preferences ──────────────────────────────────────────────────────────────
+
+/** User preferences surfaced in the Settings page. */
+export interface TrayPreferences {
+  /** Hide window on close instead of quitting. */
+  close_to_tray: boolean;
+  /** Launch directly to tray without showing the main window. */
+  start_minimised: boolean;
+  /** Register the app to start automatically at OS login. */
+  start_at_login: boolean;
+  /** Notify when a Tap device connects. */
+  notify_device_connected: boolean;
+  /** Notify when a Tap device disconnects. */
+  notify_device_disconnected: boolean;
+  /** Notify when the active layer switches within a profile. */
+  notify_layer_switch: boolean;
+  /** Notify when the active profile switches. */
+  notify_profile_switch: boolean;
+  /** Master haptic toggle — gates all vibration. */
+  haptics_enabled: boolean;
+  /** Vibrate on every resolved tap event. */
+  haptic_on_tap: boolean;
+  /** Vibrate on layer push/pop/switch. */
+  haptic_on_layer_switch: boolean;
+  /** Vibrate on profile activate. */
+  haptic_on_profile_switch: boolean;
+}
+
+// ── Updates ───────────────────────────────────────────────────────────────────
+
+/** Info about an available update, returned by `check_for_update`. */
+export interface UpdateInfo {
+  /** Semver version string, e.g. `"1.2.0"`. */
+  version: string;
+  /** Markdown release notes from the update manifest, if present. */
+  release_notes: string | null;
+}
+
+/** Payload for the `update-download-progress` Tauri event. */
+export interface UpdateProgressPayload {
+  /** Total bytes downloaded so far. */
+  downloaded: number;
+  /** Total download size in bytes, if the server sent a Content-Length header. */
+  total: number | null;
+}
+
 // ── Key name list ─────────────────────────────────────────────────────────────
 
 /**
- * All key names recognised by the Rust `name_to_key` function in `pump.rs`.
- * Used to populate autocomplete in the action editor.
+ * A group of related keys shown together in the key-picker UI.
+ * `platformNote` is shown as a tooltip when provided (e.g. "macOS only").
  */
-export const KNOWN_KEY_NAMES: readonly KeyName[] = [
-  // Modifiers
-  "ctrl", "shift", "alt", "meta",
-  // Alphabet
-  "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m",
-  "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z",
-  // Digits
-  "0", "1", "2", "3", "4", "5", "6", "7", "8", "9",
-  // Special keys
-  "space", "return", "enter", "backspace", "tab", "escape", "delete",
-  "home", "end", "page_up", "page_down",
-  "left", "right", "up", "down",
-  // Function keys
-  "F1", "F2", "F3", "F4", "F5", "F6",
-  "F7", "F8", "F9", "F10", "F11", "F12",
+export interface KeyGroup {
+  label: string;
+  keys: readonly { name: string; platformNote?: string }[];
+}
+
+/**
+ * All key names recognised by `pump.rs` `name_to_key`, organised into display
+ * groups for the action editor key picker. Matches `VALID_KEYS` in `key_def.rs`.
+ *
+ * Keys with a `platformNote` are valid profile values on all platforms but
+ * only dispatch successfully on the noted platform.
+ */
+export const KEY_GROUPS: readonly KeyGroup[] = [
+  {
+    label: "Standard",
+    keys: [
+      { name: "a" }, { name: "b" }, { name: "c" }, { name: "d" }, { name: "e" },
+      { name: "f" }, { name: "g" }, { name: "h" }, { name: "i" }, { name: "j" },
+      { name: "k" }, { name: "l" }, { name: "m" }, { name: "n" }, { name: "o" },
+      { name: "p" }, { name: "q" }, { name: "r" }, { name: "s" }, { name: "t" },
+      { name: "u" }, { name: "v" }, { name: "w" }, { name: "x" }, { name: "y" },
+      { name: "z" },
+      { name: "0" }, { name: "1" }, { name: "2" }, { name: "3" }, { name: "4" },
+      { name: "5" }, { name: "6" }, { name: "7" }, { name: "8" }, { name: "9" },
+      { name: "grave" }, { name: "minus" }, { name: "equals" },
+      { name: "left_bracket" }, { name: "right_bracket" }, { name: "backslash" },
+      { name: "semicolon" }, { name: "quote" }, { name: "comma" },
+      { name: "period" }, { name: "slash" },
+    ],
+  },
+  {
+    label: "Navigation",
+    keys: [
+      { name: "space" }, { name: "return" }, { name: "tab" },
+      { name: "backspace" }, { name: "delete" }, { name: "escape" },
+      { name: "left_arrow" }, { name: "right_arrow" },
+      { name: "up_arrow" }, { name: "down_arrow" },
+      { name: "home" }, { name: "end" },
+      { name: "page_up" }, { name: "page_down" },
+      { name: "caps_lock" },
+      { name: "insert", platformNote: "Windows / Linux" },
+      { name: "num_lock", platformNote: "Windows / Linux" },
+      { name: "scroll_lock", platformNote: "Linux" },
+      { name: "print_screen", platformNote: "Windows / Linux" },
+    ],
+  },
+  {
+    label: "Function",
+    keys: [
+      { name: "f1" }, { name: "f2" }, { name: "f3" }, { name: "f4" },
+      { name: "f5" }, { name: "f6" }, { name: "f7" }, { name: "f8" },
+      { name: "f9" }, { name: "f10" }, { name: "f11" }, { name: "f12" },
+      { name: "f13" }, { name: "f14" }, { name: "f15" }, { name: "f16" },
+      { name: "f17" }, { name: "f18" }, { name: "f19" }, { name: "f20" },
+      { name: "f21", platformNote: "Windows / Linux" },
+      { name: "f22", platformNote: "Windows / Linux" },
+      { name: "f23", platformNote: "Windows / Linux" },
+      { name: "f24", platformNote: "Windows / Linux" },
+    ],
+  },
+  {
+    label: "Media / System",
+    keys: [
+      { name: "media_play" }, { name: "media_next" }, { name: "media_prev" },
+      { name: "media_stop", platformNote: "Windows / Linux" },
+      { name: "volume_up" }, { name: "volume_down" }, { name: "volume_mute" },
+      { name: "pause", platformNote: "Windows / Linux" },
+      { name: "brightness_down", platformNote: "macOS" },
+      { name: "brightness_up", platformNote: "macOS" },
+      { name: "eject", platformNote: "macOS" },
+      { name: "mic_mute", platformNote: "Linux" },
+    ],
+  },
 ] as const;
+
+/**
+ * Flat list of all valid key names, derived from `KEY_GROUPS`.
+ * Used where a flat array is more convenient than the grouped structure.
+ */
+export const KNOWN_KEY_NAMES: readonly string[] =
+  KEY_GROUPS.flatMap((g) => g.keys.map((k) => k.name));

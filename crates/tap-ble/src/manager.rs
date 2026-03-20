@@ -5,10 +5,10 @@ use mapping_core::engine::{DeviceId, RawTapEvent};
 use mapping_core::types::{Profile, ProfileKind};
 use tokio::sync::broadcast;
 
+use mapping_core::types::VibrationPattern;
+
 use crate::{
-    BleError, TapDeviceInfo,
-    device_registry::DeviceRegistry,
-    scanner::get_adapter,
+    BleError, TapDeviceInfo, device_registry::DeviceRegistry, scanner::get_adapter,
     tap_device::TapDevice,
 };
 
@@ -31,11 +31,15 @@ pub enum BleStatusEvent {
     Connected {
         device_id: DeviceId,
         address: BDAddr,
+        /// BLE peripheral display name, if available from adapter cache.
+        name: Option<String>,
     },
     /// A device disconnected (either explicitly or unexpectedly).
     Disconnected {
         device_id: DeviceId,
         address: BDAddr,
+        /// BLE peripheral display name, if available from adapter cache.
+        name: Option<String>,
     },
 }
 
@@ -129,13 +133,15 @@ impl BleManager {
         )
         .await?;
 
+        let name = device.name().await;
+        self.connected.insert(device_id.clone(), device);
+
         // Notify subscribers — ignore SendError (no active receivers).
         let _ = self.status_tx.send(BleStatusEvent::Connected {
-            device_id: device_id.clone(),
+            device_id,
             address,
+            name,
         });
-
-        self.connected.insert(device_id, device);
         Ok(())
     }
 
@@ -145,10 +151,12 @@ impl BleManager {
     pub async fn disconnect(&mut self, device_id: &DeviceId) -> Result<(), BleError> {
         if let Some(device) = self.connected.remove(device_id) {
             let address = device.address();
+            let name = device.name().await;
             device.disconnect().await?;
             let _ = self.status_tx.send(BleStatusEvent::Disconnected {
                 device_id: device_id.clone(),
                 address,
+                name,
             });
         }
         Ok(())
@@ -183,12 +191,12 @@ impl BleManager {
             return Ok(());
         }
 
-        let mut device =
-            self.connected
-                .remove(old_id)
-                .ok_or_else(|| BleError::DeviceNotFound {
-                    address: old_id.to_string(),
-                })?;
+        let mut device = self
+            .connected
+            .remove(old_id)
+            .ok_or_else(|| BleError::DeviceNotFound {
+                address: old_id.to_string(),
+            })?;
 
         let address = device.address();
 
@@ -201,18 +209,48 @@ impl BleManager {
             )
             .await;
 
+        let name = device.name().await;
         self.connected.insert(new_id.clone(), device);
 
         let _ = self.status_tx.send(BleStatusEvent::Disconnected {
             device_id: old_id.clone(),
             address,
+            name: name.clone(),
         });
         let _ = self.status_tx.send(BleStatusEvent::Connected {
             device_id: new_id,
             address,
+            name,
         });
 
         Ok(())
+    }
+
+    /// Write a new friendly name to the device at `address`.
+    ///
+    /// Returns [`BleError::DeviceNotFound`] if no connected device has that address.
+    /// The caller is responsible for validating `name` before calling this method.
+    pub async fn set_device_name(&self, address: BDAddr, name: &str) -> Result<(), BleError> {
+        let device = self
+            .connected
+            .values()
+            .find(|d| d.address() == address)
+            .ok_or_else(|| BleError::DeviceNotFound {
+                address: address.to_string(),
+            })?;
+        device.set_name(name).await
+    }
+
+    /// Send a vibration pattern to all currently connected devices.
+    ///
+    /// Errors from individual devices are logged at `warn` level and do not abort
+    /// the loop — other connected devices still receive the pattern.
+    pub async fn vibrate_all(&self, pattern: &VibrationPattern) {
+        for device in self.connected.values() {
+            if let Err(e) = device.vibrate(pattern).await {
+                log::warn!("vibrate_all: failed for {}: {e}", device.address());
+            }
+        }
     }
 
     /// Warn if `profile` requires two devices but `registry` has fewer than two entries.

@@ -1,3 +1,9 @@
+---
+covers: hold_modifier action (out-of-plan feature; extends Epic 2 engine and Epic 1 types)
+status: Approved and fully implemented
+last-updated: 2026-03-15
+---
+
 # Spec: `hold_modifier` Action — Sticky Modifiers for mapxr
 
 > **Status: APPROVED**
