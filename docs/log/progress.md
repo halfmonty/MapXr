@@ -1,3 +1,36 @@
+## 2026-03-20 — Epic 15 started: Android platform gating and project infrastructure
+
+**Tasks completed:** 15.1 (code side complete; user must run `cargo tauri android init` — see notes)
+**Tasks in progress:** none
+
+**Files changed:**
+
+- `apps/desktop/src-tauri/Cargo.toml` — moved `tap-ble`, `enigo`, `btleplug`, `tauri-plugin-updater` to `[target.'cfg(not(target_os = "android"))'.dependencies]`
+- `apps/desktop/src-tauri/src/lib.rs` — split `run()` into `run_mobile()` / `run_desktop()`; gated desktop-only modules (`pump`, `context_rules`, `focus_monitor`, `login_item`) and all tray/context/BLE/updater setup behind `#[cfg(not(mobile))]`
+- `apps/desktop/src-tauri/src/state.rs` — gated `ble_manager`, `device_registry`, `close_to_tray`, `devices_json_path`, `context_rules`, `context_rules_path` fields and related imports behind `#[cfg(not(mobile))]`; added mobile-specific `build_app_state` returning plain `AppState`; gated `auto_reconnect` behind `#[cfg(not(mobile))]`
+- `apps/desktop/src-tauri/src/commands.rs` — gated all BLE commands (`scan_devices`, `connect_device`, `disconnect_device`, `reassign_device_role`, `rename_device`), context commands, preferences commands, and updater commands behind `#[cfg(not(mobile))]`; added `get_platform()` command (all platforms); inline-gated `get_engine_state` BLE section
+- `.github/workflows/release.yml` — added `build-android` job: JDK 17, Android SDK/NDK 27, four Rust Android targets, `cargo tauri android build --apk`, APK signing via keystore secrets, upload to GitHub Release
+
+**Notes:**
+- The code changes in this task prepare for `cargo tauri android init` but that command must be run interactively by the user — it generates the Android Kotlin project skeleton under `apps/desktop/src-tauri/gen/android/` and requires the Android SDK to be installed first. See prerequisite instructions below.
+- `run_mobile()` in lib.rs currently references `state::build_app_state` which on mobile returns `AppState` directly (not a tuple). This compiles correctly with the `#[cfg(mobile)]` gate.
+- `get_preferences` / `save_preferences` are desktop-only for now; Android-specific preference commands will be added in task 15.2.
+- Desktop build: `cargo clippy -- -D warnings` clean, `cargo test --workspace` all pass.
+- The `build-android` release job APK path (`app-universal-release-unsigned.apk`) is the default Tauri Android output; adjust if the Tauri CLI version generates a different path after `cargo tauri android init` is run.
+
+**Prerequisite steps the user must complete before `cargo tauri android init`:**
+1. Install Android Studio (or command-line tools): https://developer.android.com/studio
+2. In Android Studio SDK Manager (or `sdkmanager`): install "Android SDK Build-Tools 34", "NDK 27.x"
+3. Install JDK 17: `sudo dnf install java-17-openjdk-devel` (Fedora/Nobara)
+4. Set env vars: `export ANDROID_HOME=$HOME/Android/Sdk` and add to `~/.bashrc`
+5. Add Rust Android targets: `rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android i686-linux-android`
+6. From `apps/desktop/`: run `cargo tauri android init`
+7. Commit the generated `apps/desktop/src-tauri/gen/android/` directory
+
+**Next:** 15.2 — add Android path to `platform.rs`, add Android-specific preference fields
+
+---
+
 ## 2026-03-20 — Epic 14 complete: in-app update UI, README, icons
 
 **Tasks completed:** 14.8, 14.9, 14.10, 14.11, 14.12, 14.13

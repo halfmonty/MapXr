@@ -1,15 +1,8 @@
-use std::str::FromStr as _;
-
-use btleplug::api::BDAddr;
-use mapping_core::{
-    engine::DeviceId,
-    types::{Profile, PushLayerMode},
-};
+use mapping_core::types::{Profile, PushLayerMode};
 use serde::Serialize;
 use std::sync::Arc;
 
 use tauri::State;
-
 use tauri::Emitter as _;
 
 use crate::{
@@ -17,9 +10,17 @@ use crate::{
     state::AppState,
 };
 
+#[cfg(not(mobile))]
+use std::str::FromStr as _;
+#[cfg(not(mobile))]
+use btleplug::api::BDAddr;
+#[cfg(not(mobile))]
+use mapping_core::engine::DeviceId;
+
 // ── DTOs ──────────────────────────────────────────────────────────────────────
 
-/// Lightweight serialisable summary of a discovered BLE device.
+/// Lightweight serialisable summary of a discovered BLE device (desktop only).
+#[cfg(not(mobile))]
 #[derive(Serialize)]
 pub struct TapDeviceInfoDto {
     pub name: Option<String>,
@@ -34,6 +35,7 @@ pub struct TapDeviceInfoDto {
     pub is_connected_to_os: bool,
 }
 
+#[cfg(not(mobile))]
 impl From<&tap_ble::TapDeviceInfo> for TapDeviceInfoDto {
     fn from(d: &tap_ble::TapDeviceInfo) -> Self {
         Self {
@@ -77,6 +79,7 @@ impl From<&Profile> for ProfileSummary {
 /// Scan for nearby Tap devices for 5 seconds.
 ///
 /// Returns discovered devices sorted by signal strength (strongest first).
+#[cfg(not(mobile))]
 #[tauri::command]
 pub async fn scan_devices(
     state: State<'_, Arc<AppState>>,
@@ -95,6 +98,7 @@ pub async fn scan_devices(
 
 // ── 4.2 connect_device ───────────────────────────────────────────────────────
 
+#[cfg(not(mobile))]
 /// Connect to the Tap device at `address` and assign it `role`.
 ///
 /// `address` must be a colon-separated hex string (`"AA:BB:CC:DD:EE:FF"`).
@@ -149,6 +153,7 @@ pub async fn connect_device(
 /// Returns `Ok(())` if no device is connected under that role.
 /// Also removes the device from the persistent registry so it is not
 /// auto-reconnected on the next app launch.
+#[cfg(not(mobile))]
 #[tauri::command]
 pub async fn disconnect_device(
     state: State<'_, Arc<AppState>>,
@@ -190,6 +195,7 @@ pub async fn disconnect_device(
 /// Background tasks are restarted under the new role so subsequent tap events and
 /// status notifications carry the correct identity. The device registry is updated
 /// and persisted so auto-reconnect uses the new role on the next launch.
+#[cfg(not(mobile))]
 #[tauri::command]
 pub async fn reassign_device_role(
     state: State<'_, Arc<AppState>>,
@@ -526,8 +532,9 @@ pub async fn get_engine_state(
         })
         .collect();
 
-    // LOCKING: acquires ble_manager
-    let connected_devices = match &state.ble_manager {
+    // LOCKING: acquires ble_manager (desktop only; Android BLE state lives in Kotlin)
+    #[cfg(not(mobile))]
+    let connected_devices: Vec<ConnectedDeviceDto> = match &state.ble_manager {
         Some(ble) => ble
             .lock()
             .await
@@ -539,6 +546,8 @@ pub async fn get_engine_state(
             .collect(),
         None => vec![],
     };
+    #[cfg(mobile)]
+    let connected_devices: Vec<ConnectedDeviceDto> = vec![];
 
     Ok(EngineStateSnapshot {
         layer_stack,
@@ -554,6 +563,7 @@ pub async fn get_engine_state(
 /// Validate a candidate device name against the rules in `docs/spec/device-rename-spec.md`.
 ///
 /// Returns `Ok(trimmed_name)` on success or `Err(message)` describing the first violation.
+#[cfg(not(mobile))]
 fn validate_device_name(name: &str) -> Result<String, String> {
     let trimmed = name.trim().to_owned();
     if trimmed.is_empty() {
@@ -582,6 +592,7 @@ fn validate_device_name(name: &str) -> Result<String, String> {
 ///
 /// Returns `Ok(())` on success. Returns `Err(message)` if the device is not connected,
 /// the name fails validation, or the BLE write fails.
+#[cfg(not(mobile))]
 #[tauri::command]
 pub async fn rename_device(
     state: State<'_, Arc<AppState>>,
@@ -608,6 +619,7 @@ pub async fn rename_device(
 // ── 11.5 list_context_rules / save_context_rules ─────────────────────────────
 
 /// Return the current context rules.
+#[cfg(not(mobile))]
 #[tauri::command]
 pub async fn list_context_rules(
     state: State<'_, Arc<AppState>>,
@@ -620,6 +632,7 @@ pub async fn list_context_rules(
 ///
 /// The new rules are validated before writing. On success the in-memory state
 /// is updated atomically so the monitor immediately uses the new rules.
+#[cfg(not(mobile))]
 #[tauri::command]
 pub async fn save_context_rules(
     state: State<'_, Arc<AppState>>,
@@ -632,9 +645,11 @@ pub async fn save_context_rules(
     Ok(())
 }
 
-// ── 12.5 get_preferences / save_preferences ──────────────────────────────────
+// ── 12.5 get_preferences / save_preferences (desktop only) ───────────────────
+// Android preferences are handled by a separate command added in task 15.2.
 
 /// All user preferences exposed to the frontend settings page.
+#[cfg(not(mobile))]
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub struct TrayPreferences {
     /// Hide window on close instead of quitting.
@@ -662,6 +677,7 @@ pub struct TrayPreferences {
 }
 
 /// Return the current preferences.
+#[cfg(not(mobile))]
 #[tauri::command]
 pub async fn get_preferences(state: State<'_, Arc<AppState>>) -> Result<TrayPreferences, String> {
     let prefs = state.preferences.lock().await;
@@ -685,6 +701,7 @@ pub async fn get_preferences(state: State<'_, Arc<AppState>>) -> Result<TrayPref
 /// `start_at_login` changes take effect immediately (registers/deregisters the
 /// OS login item). Notification flags take effect immediately (checked at event
 /// time). Other settings are read at the point they become relevant.
+#[cfg(not(mobile))]
 #[tauri::command]
 pub async fn save_preferences(
     state: State<'_, Arc<AppState>>,
@@ -724,9 +741,10 @@ pub async fn save_preferences(
     Ok(())
 }
 
-// ── check_for_update ─────────────────────────────────────────────────────────
+// ── check_for_update (desktop only) ──────────────────────────────────────────
 
 /// Info about an available update, returned by [`check_for_update`].
+#[cfg(not(mobile))]
 #[derive(Serialize)]
 pub struct UpdateInfoDto {
     /// The new version string, e.g. `"1.2.0"`.
@@ -739,6 +757,7 @@ pub struct UpdateInfoDto {
 /// `null` if the app is already on the latest version.
 ///
 /// Does not download anything — call [`download_and_install_update`] for that.
+#[cfg(not(mobile))]
 #[tauri::command]
 pub async fn check_for_update(app: tauri::AppHandle) -> Result<Option<UpdateInfoDto>, String> {
     use tauri_plugin_updater::UpdaterExt as _;
@@ -762,6 +781,7 @@ pub async fn check_for_update(app: tauri::AppHandle) -> Result<Option<UpdateInfo
 /// the download so the frontend can render a progress bar. Returns an error if
 /// there is no update available or the download fails. Never returns on success
 /// because `app.restart()` terminates the process.
+#[cfg(not(mobile))]
 #[tauri::command]
 pub async fn download_and_install_update(app: tauri::AppHandle) -> Result<(), String> {
     use std::sync::atomic::{AtomicU64, Ordering};
@@ -797,6 +817,28 @@ pub async fn download_and_install_update(app: tauri::AppHandle) -> Result<(), St
         .map_err(|e| e.to_string())?;
 
     app.restart();
+}
+
+// ── get_platform ─────────────────────────────────────────────────────────────
+
+/// Return the current platform identifier.
+///
+/// Used by the Svelte frontend to conditionally show platform-specific UI
+/// (e.g. hide tray settings on Android, show accessibility setup on Android).
+#[tauri::command]
+pub fn get_platform() -> String {
+    #[cfg(target_os = "android")]
+    return "android".into();
+    #[cfg(target_os = "ios")]
+    return "ios".into();
+    #[cfg(target_os = "linux")]
+    return "linux".into();
+    #[cfg(target_os = "windows")]
+    return "windows".into();
+    #[cfg(target_os = "macos")]
+    return "macos".into();
+    #[allow(unreachable_code)]
+    "unknown".into()
 }
 
 // ── read_file_text ────────────────────────────────────────────────────────────

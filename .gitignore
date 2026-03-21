@@ -23,7 +23,11 @@ vite.config.ts.timestamp-*
 # ── Tauri ─────────────────────────────────────────────────────────────────────
 apps/desktop/src-tauri/target/
 apps/desktop/src-tauri/WixTools/
-apps/desktop/src-tauri/gen/
+# gen/ source files are committed (Kotlin plugins, AndroidManifest, build.gradle live here).
+# Only the compiled output directories are excluded.
+apps/desktop/src-tauri/gen/android/app/build/
+apps/desktop/src-tauri/gen/android/.gradle/
+apps/desktop/src-tauri/gen/android/build/
 
 # ── Environment ───────────────────────────────────────────────────────────────
 .env

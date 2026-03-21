@@ -1,14 +1,22 @@
 use std::path::{Path, PathBuf};
-use std::sync::{atomic::AtomicBool, Arc};
-use std::time::Duration;
+use std::sync::Arc;
 
 use mapping_core::{engine::ComboEngine, LayerRegistry};
 use serde::{Deserialize, Serialize};
-use tap_ble::{BleManager, BleStatusEvent, DeviceRegistry};
-use tokio::sync::{broadcast, Mutex};
+use tokio::sync::Mutex;
 
-use crate::context_rules::ContextRules;
 use crate::platform;
+
+#[cfg(not(mobile))]
+use std::sync::atomic::AtomicBool;
+#[cfg(not(mobile))]
+use std::time::Duration;
+#[cfg(not(mobile))]
+use tap_ble::{BleManager, BleStatusEvent, DeviceRegistry};
+#[cfg(not(mobile))]
+use tokio::sync::broadcast;
+#[cfg(not(mobile))]
+use crate::context_rules::ContextRules;
 
 // ── AppState ─────────────────────────────────────────────────────────────────
 
@@ -37,30 +45,35 @@ pub struct AppState {
     // LOCKING: tokio::sync::Mutex — reload() does blocking I/O in async context.
     pub layer_registry: Mutex<LayerRegistry>,
 
-    /// BLE adapter + connected device lifecycle.
+    /// BLE adapter + connected device lifecycle (desktop only; Android uses Kotlin BLE plugin).
     ///
     /// `None` when no Bluetooth adapter was found at startup; all BLE commands
     /// return a descriptive error in that case.
     // LOCKING: tokio::sync::Mutex — scan/connect are async and long-running.
+    #[cfg(not(mobile))]
     pub ble_manager: Option<Mutex<BleManager>>,
 
-    /// Role → BLE address persistence (sync I/O, brief lock).
+    /// Role → BLE address persistence (desktop only).
+    #[cfg(not(mobile))]
     pub device_registry: std::sync::Mutex<DeviceRegistry>,
 
     /// Absolute path to the `profiles/` directory.
     pub profiles_dir: PathBuf,
 
-    /// Absolute path to `devices.json` (parent of `profiles_dir`).
+    /// Absolute path to `devices.json` (desktop only — Android BLE registry lives in Kotlin).
+    #[cfg(not(mobile))]
     pub devices_json_path: PathBuf,
 
     /// Absolute path to `preferences.json` (sibling of `devices.json`).
     pub preferences_path: PathBuf,
 
-    /// Rules for automatic profile activation on window focus change.
+    /// Rules for automatic profile activation on window focus change (desktop only).
     // LOCKING: acquire after engine, layer_registry, and ble_manager.
+    #[cfg(not(mobile))]
     pub context_rules: Mutex<ContextRules>,
 
-    /// Absolute path to `context-rules.json` (sibling of `devices.json`).
+    /// Absolute path to `context-rules.json` (desktop only).
+    #[cfg(not(mobile))]
     pub context_rules_path: PathBuf,
 
     /// In-memory preferences, mirrored to `preferences_path` on change.
@@ -68,12 +81,14 @@ pub struct AppState {
     pub(crate) preferences: Mutex<Preferences>,
 
     /// Mirror of `preferences.close_to_tray` as an atomic so the window close
-    /// handler can read it without an async `block_on` call.
+    /// handler can read it without an async `block_on` call (desktop only).
+    #[cfg(not(mobile))]
     pub(crate) close_to_tray: Arc<AtomicBool>,
 }
 
 impl AppState {
     /// Returns an error string suitable for a Tauri command if BLE is unavailable.
+    #[cfg(not(mobile))]
     pub fn require_ble(&self) -> Result<(), String> {
         if self.ble_manager.is_none() {
             Err("No Bluetooth adapter found on this system".into())
@@ -85,12 +100,13 @@ impl AppState {
 
 // ── build_app_state ───────────────────────────────────────────────────────────
 
-/// Initialise [`AppState`] from the Tauri app handle.
+/// Initialise [`AppState`] from the Tauri app handle (desktop).
 ///
 /// Returns `(AppState, event_rx, status_rx)` so the event pump and BLE status
 /// listener tasks can be set up before the state is moved into Tauri's managed
 /// state.  Either receiver may immediately yield `RecvError::Closed` if no BLE
 /// adapter is available; both pump tasks handle this gracefully by exiting.
+#[cfg(not(mobile))]
 pub async fn build_app_state(
     app: &tauri::AppHandle,
 ) -> Result<
@@ -185,8 +201,51 @@ pub async fn build_app_state(
     Ok((state, event_rx, status_rx))
 }
 
-// ── Auto-reconnect ────────────────────────────────────────────────────────────
+/// Initialise [`AppState`] from the Tauri app handle (Android).
+///
+/// The Android build has no BLE manager, device registry, or context rules —
+/// those are handled by Kotlin plugins. Returns just the `AppState`.
+#[cfg(mobile)]
+pub async fn build_app_state(app: &tauri::AppHandle) -> Result<AppState, anyhow::Error> {
+    let profiles_dir = platform::profile_dir(app).map_err(anyhow::Error::msg)?;
+    let preferences_path = profiles_dir
+        .parent()
+        .ok_or_else(|| anyhow::anyhow!("profiles_dir has no parent"))?
+        .join("preferences.json");
 
+    let preferences = Preferences::load(&preferences_path);
+
+    seed_profiles_dir(&profiles_dir);
+
+    let mut layer_registry = LayerRegistry::new(&profiles_dir);
+    let _ = layer_registry.reload();
+
+    let default_profile = if preferences.profile_active {
+        preferences
+            .last_active_profile_id
+            .as_deref()
+            .and_then(|id| layer_registry.get(id))
+            .cloned()
+            .or_else(|| layer_registry.profiles().min_by_key(|p| &p.name).cloned())
+            .unwrap_or_else(builtin_default_profile)
+    } else {
+        builtin_default_profile()
+    };
+
+    let engine = ComboEngine::new(default_profile);
+
+    Ok(AppState {
+        engine: Mutex::new(engine),
+        layer_registry: Mutex::new(layer_registry),
+        profiles_dir,
+        preferences_path,
+        preferences: Mutex::new(preferences),
+    })
+}
+
+// ── Auto-reconnect (desktop only) ────────────────────────────────────────────
+
+#[cfg(not(mobile))]
 /// Attempt to reconnect all devices saved in the device registry.
 ///
 /// Runs as a background task immediately after app state is registered.
@@ -199,6 +258,7 @@ pub async fn build_app_state(
 /// survive when two devices were registered.
 ///
 /// Failures are logged and skipped — they never block startup.
+#[cfg(not(mobile))]
 pub(crate) async fn auto_reconnect(app: tauri::AppHandle, state: Arc<AppState>) {
     const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
     const SCAN_DURATION_MS: u64 = 5000;

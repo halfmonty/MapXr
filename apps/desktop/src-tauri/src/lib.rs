@@ -1,31 +1,100 @@
 pub mod commands;
-pub mod context_rules;
 pub mod events;
-pub mod focus_monitor;
-pub mod login_item;
 pub mod platform;
-pub mod pump;
 pub mod state;
+
+#[cfg(not(mobile))]
+pub mod context_rules;
+#[cfg(not(mobile))]
+pub mod focus_monitor;
+#[cfg(not(mobile))]
+pub mod login_item;
+#[cfg(not(mobile))]
+pub mod pump;
 
 use std::sync::Arc;
 
-use tauri::image::Image;
-use tauri::menu::{MenuBuilder, MenuItemBuilder};
-use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::{Manager as _, WebviewWindow};
+use tauri::{Manager as _};
 
+#[cfg(not(mobile))]
+use tauri::image::Image;
+#[cfg(not(mobile))]
+use tauri::menu::{MenuBuilder, MenuItemBuilder};
+#[cfg(not(mobile))]
+use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+#[cfg(not(mobile))]
+use tauri::WebviewWindow;
+
+#[cfg(not(mobile))]
 const TRAY_ID: &str = "main-tray";
+#[cfg(not(mobile))]
 const TRAY_ITEM_SHOW: &str = "show";
+#[cfg(not(mobile))]
 const TRAY_ITEM_HIDE: &str = "hide";
+#[cfg(not(mobile))]
 const TRAY_ITEM_PROFILE: &str = "profile-label";
+#[cfg(not(mobile))]
 const TRAY_ITEM_CHECK_UPDATES: &str = "check-updates";
+#[cfg(not(mobile))]
 const TRAY_ITEM_QUIT: &str = "quit";
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    // Initialise the `log` facade so tap-ble and other crates can emit log output.
     env_logger::init();
 
+    #[cfg(mobile)]
+    run_mobile();
+
+    #[cfg(not(mobile))]
+    run_desktop();
+}
+
+// ── Mobile entry point ────────────────────────────────────────────────────────
+
+#[cfg(mobile)]
+fn run_mobile() {
+    tauri::Builder::default()
+        .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_notification::init())
+        .setup(|app| {
+            let app_handle = app.handle().clone();
+
+            let (tx, rx) = std::sync::mpsc::sync_channel(1);
+            let setup_handle = app_handle.clone();
+            tauri::async_runtime::spawn(async move {
+                tx.send(state::build_app_state(&setup_handle).await)
+                    .expect("setup channel send failed");
+            });
+            let app_state = rx
+                .recv()
+                .expect("setup channel recv failed")
+                .expect("failed to initialise app state");
+
+            app.manage(Arc::new(app_state));
+            Ok(())
+        })
+        .invoke_handler(tauri::generate_handler![
+            commands::list_profiles,
+            commands::load_profile,
+            commands::save_profile,
+            commands::delete_profile,
+            commands::activate_profile,
+            commands::deactivate_profile,
+            commands::push_layer,
+            commands::pop_layer,
+            commands::set_debug_mode,
+            commands::get_engine_state,
+            commands::read_file_text,
+            commands::get_platform,
+        ])
+        .run(tauri::generate_context!())
+        .expect("error while running tauri application");
+}
+
+// ── Desktop entry point ───────────────────────────────────────────────────────
+
+#[cfg(not(mobile))]
+fn run_desktop() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
@@ -191,6 +260,7 @@ pub fn run() {
             commands::save_preferences,
             commands::check_for_update,
             commands::download_and_install_update,
+            commands::get_platform,
         ])
         // Task 3.16 / 4.21 + Epic 12: handle window close.
         // If close_to_tray is enabled (default), hide instead of quitting.
