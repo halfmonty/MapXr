@@ -1,0 +1,15 @@
+{
+  "$schema": "../gen/schemas/mobile-schema.json",
+  "identifier": "mobile",
+  "description": "Capability for the main window — Android",
+  "windows": ["main"],
+  "platforms": ["android"],
+  "permissions": [
+    "core:default",
+    "opener:default",
+    "core:window:default",
+    "ble:default",
+    "accessibility:default",
+    "battery:default"
+  ]
+}

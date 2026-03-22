@@ -16,6 +16,17 @@ Pre-release builds use the suffix convention `v1.2.3-beta.1`, `v1.2.3-rc.1`, etc
 
 ## [Unreleased]
 
+### Added
+- **Android port (Phase 1)** — run MapXr on Android 8.0+ (API 26+); connect a Tap Strap via Bluetooth and forward gestures as keystrokes into any app
+  - BLE scan, connect, and reconnect via `BlePlugin` Kotlin plugin with runtime permission handling
+  - Foreground service (`MapxrForegroundService`) with persistent notification; "Stop" action; `foregroundServiceType=connectedDevice`
+  - AccessibilityService key injection into the foreground app (`MapxrAccessibilityService` + `AccessibilityPlugin`) — full key mapping table per spec §7.4; requires API 28+ for key dispatch
+  - Mouse gesture simulation via `GestureDescription` (tap, double-tap, directional swipe)
+  - OEM battery restriction wizard (`BatterySetupWizard`) with manufacturer-specific deep-link instructions for Xiaomi, Samsung, Huawei/Honor, OPPO, OnePlus, Realme, Vivo
+  - First-launch onboarding: sequences accessibility setup → battery setup automatically (`AndroidOnboarding`)
+  - Android-specific Settings sections: accessibility status, background operation / battery exemption status, auto-start service toggle
+  - Signed APK published to GitHub Releases on each version tag via `release.yml` `build-android` job
+
 ---
 
 ## [1.0.0] — 2026-03-20

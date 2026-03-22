@@ -1,8 +1,19 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { getPreferences, savePreferences, checkForUpdate } from "$lib/commands";
-  import type { TrayPreferences } from "$lib/types";
+  import {
+    getPreferences,
+    savePreferences,
+    checkForUpdate,
+    getPlatform,
+    checkAccessibilityEnabled,
+    checkBatteryExemptionGranted,
+    getAndroidPreferences,
+    saveAndroidPreferences,
+  } from "$lib/commands";
+  import type { TrayPreferences, AndroidPreferences } from "$lib/types";
   import { updateStore } from "$lib/stores/updates.svelte";
+  import AccessibilitySetupPrompt from "$lib/components/AccessibilitySetupPrompt.svelte";
+  import BatterySetupWizard from "$lib/components/BatterySetupWizard.svelte";
 
   let prefs = $state<TrayPreferences>({
     close_to_tray: true,
@@ -26,15 +37,59 @@
   let checkingForUpdate = $state(false);
   let updateCheckResult = $state<"up-to-date" | "found" | null>(null);
 
+  // Android-specific state.
+  let isAndroid = $state(false);
+  let accessibilityEnabled = $state(false);
+  let batteryExemptionGranted = $state(false);
+  let androidPrefs = $state<AndroidPreferences | null>(null);
+  let accessibilityPromptOpen = $state(false);
+  let batteryWizardOpen = $state(false);
+
   onMount(async () => {
-    try {
-      prefs = await getPreferences();
-    } catch (e) {
-      error = String(e);
-    } finally {
+    const platform = await getPlatform();
+    if (platform === "android") {
+      isAndroid = true;
       loading = false;
+      await refreshAndroidStatus();
+    } else {
+      try {
+        prefs = await getPreferences();
+      } catch (e) {
+        error = String(e);
+      } finally {
+        loading = false;
+      }
     }
   });
+
+  async function refreshAndroidStatus() {
+    try {
+      const [accessResult, batteryResult, ap] = await Promise.all([
+        checkAccessibilityEnabled(),
+        checkBatteryExemptionGranted(),
+        getAndroidPreferences(),
+      ]);
+      accessibilityEnabled = accessResult.enabled;
+      batteryExemptionGranted = batteryResult.granted;
+      androidPrefs = ap;
+    } catch (_) {
+      // Non-fatal.
+    }
+  }
+
+  async function toggleAndroid(field: keyof AndroidPreferences) {
+    if (!androidPrefs) return;
+    error = null;
+    const prev = androidPrefs[field] as boolean;
+    androidPrefs = { ...androidPrefs, [field]: !prev };
+    try {
+      await saveAndroidPreferences(androidPrefs);
+      flashSaved();
+    } catch (e) {
+      androidPrefs = { ...androidPrefs, [field]: prev };
+      error = String(e);
+    }
+  }
 
   async function toggle(field: keyof TrayPreferences) {
     error = null;
@@ -91,6 +146,8 @@
   {#if loading}
     <div class="loading loading-spinner"></div>
   {:else}
+    <!-- ── Desktop-only sections ─────────────────────────────────────────────── -->
+    {#if !isAndroid}
     <!-- Window behaviour -->
     <section class="space-y-4">
       <h2 class="text-sm font-semibold uppercase tracking-wider text-base-content/50">
@@ -322,7 +379,109 @@
         </div>
       </div>
     </section>
-    <!-- Updates -->
+    {/if}
+    <!-- ── End desktop-only sections ────────────────────────────────────────── -->
+
+    <!-- ── Android-only sections ──────────────────────────────────────────── -->
+    {#if isAndroid && androidPrefs}
+
+      <!-- Accessibility -->
+      <section class="space-y-4">
+        <h2 class="text-sm font-semibold uppercase tracking-wider text-base-content/50">
+          Accessibility
+        </h2>
+        <div class="card bg-base-100 shadow-sm">
+          <div class="card-body gap-4 p-4">
+            <div class="flex items-start justify-between gap-4">
+              <div>
+                <p class="font-medium">Accessibility service</p>
+                <p class="text-sm text-base-content/60">
+                  Required to forward Tap Strap gestures as keystrokes in other apps.
+                </p>
+                <p class="mt-1 text-sm">
+                  {#if accessibilityEnabled}
+                    <span class="text-success font-medium">✓ Enabled</span>
+                  {:else}
+                    <span class="text-warning font-medium">Not enabled</span>
+                  {/if}
+                </p>
+              </div>
+              <button
+                class="btn btn-outline btn-sm flex-shrink-0"
+                onclick={() => (accessibilityPromptOpen = true)}
+              >
+                {accessibilityEnabled ? "Re-run setup" : "Set up"}
+              </button>
+            </div>
+
+            <div class="divider my-0"></div>
+
+            <div class="rounded bg-base-200 p-3 text-xs text-base-content/60 space-y-1">
+              <p><strong>Banking and secure apps:</strong> Key injection is blocked by apps that
+              set <code>FLAG_SECURE</code>. This is intentional security behaviour.</p>
+              <p><strong>API 26–27:</strong> Key injection requires Android 9 (API 28).
+              On older versions, keys will not be dispatched.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Background operation -->
+      <section class="space-y-4">
+        <h2 class="text-sm font-semibold uppercase tracking-wider text-base-content/50">
+          Background operation
+        </h2>
+        <div class="card bg-base-100 shadow-sm">
+          <div class="card-body gap-4 p-4">
+            <div class="flex items-start justify-between gap-4">
+              <div>
+                <p class="font-medium">Battery optimisation</p>
+                <p class="text-sm text-base-content/60">
+                  Disabling battery optimisation prevents Android from killing MapXr when it
+                  runs in the background.
+                </p>
+                <p class="mt-1 text-sm">
+                  {#if batteryExemptionGranted}
+                    <span class="text-success font-medium">✓ Optimisation disabled</span>
+                  {:else}
+                    <span class="text-warning font-medium">Optimisation still active</span>
+                  {/if}
+                </p>
+              </div>
+              <button
+                class="btn btn-outline btn-sm flex-shrink-0"
+                onclick={() => (batteryWizardOpen = true)}
+              >
+                {androidPrefs.battery_setup_done ? "Re-run wizard" : "Set up"}
+              </button>
+            </div>
+
+            <div class="divider my-0"></div>
+
+            <!-- Auto-start service toggle -->
+            <label class="flex cursor-pointer items-start justify-between gap-4">
+              <div>
+                <p class="font-medium">Auto-start background service</p>
+                <p class="text-sm text-base-content/60">
+                  Start the foreground service automatically when MapXr opens.
+                </p>
+              </div>
+              <input
+                type="checkbox"
+                class="toggle toggle-primary mt-0.5 flex-shrink-0"
+                checked={androidPrefs.auto_start_service}
+                onchange={() => toggleAndroid("auto_start_service")}
+              />
+            </label>
+          </div>
+        </div>
+      </section>
+
+    {/if}
+    <!-- ── End Android sections ──────────────────────────────────────────────── -->
+
+    <!-- Updates (desktop only — check_for_update command not available on Android) -->
+    {#if !isAndroid}
     <section class="space-y-4">
       <h2 class="text-sm font-semibold uppercase tracking-wider text-base-content/50">
         Updates
@@ -361,5 +520,18 @@
         </div>
       </div>
     </section>
+    {/if}
   {/if}
 </div>
+
+<!-- Android-only modals -->
+<AccessibilitySetupPrompt
+  open={accessibilityPromptOpen}
+  onClose={() => (accessibilityPromptOpen = false)}
+  onDone={async () => { accessibilityPromptOpen = false; await refreshAndroidStatus(); }}
+/>
+<BatterySetupWizard
+  open={batteryWizardOpen}
+  onClose={() => (batteryWizardOpen = false)}
+  onDone={async () => { batteryWizardOpen = false; await refreshAndroidStatus(); }}
+/>

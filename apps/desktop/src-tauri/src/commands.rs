@@ -343,7 +343,10 @@ pub async fn save_profile(
         }
     };
     if needs_reload {
+        #[cfg(not(mobile))]
         crate::pump::emit_layer_changed(&app, &state).await;
+        #[cfg(mobile)]
+        crate::android_pump::emit_layer_changed(&app, &state).await;
     }
 
     Ok(())
@@ -399,9 +402,14 @@ pub async fn activate_profile(
         }
     }
 
-    crate::pump::emit_layer_changed(&app, &state).await;
-    crate::pump::maybe_notify_profile_switch(&app, &state).await;
-    crate::pump::maybe_haptic_on_profile_switch(&state).await;
+    #[cfg(not(mobile))]
+    {
+        crate::pump::emit_layer_changed(&app, &state).await;
+        crate::pump::maybe_notify_profile_switch(&app, &state).await;
+        crate::pump::maybe_haptic_on_profile_switch(&state).await;
+    }
+    #[cfg(mobile)]
+    crate::android_pump::emit_layer_changed(&app, &state).await;
     Ok(())
 }
 
@@ -434,7 +442,10 @@ pub async fn deactivate_profile(
         }
     }
 
+    #[cfg(not(mobile))]
     crate::pump::emit_layer_changed(&app, &state).await;
+    #[cfg(mobile)]
+    crate::android_pump::emit_layer_changed(&app, &state).await;
     Ok(())
 }
 
@@ -464,11 +475,18 @@ pub async fn push_layer(
         .await
         .push_layer(profile, mode, std::time::Instant::now());
 
-    crate::pump::process_outputs(&app, &state, outputs).await;
-
-    crate::pump::emit_layer_changed(&app, &state).await;
-    crate::pump::maybe_notify_layer_switch(&app, &state).await;
-    crate::pump::maybe_haptic_on_layer_switch(&state).await;
+    #[cfg(not(mobile))]
+    {
+        crate::pump::process_outputs(&app, &state, outputs).await;
+        crate::pump::emit_layer_changed(&app, &state).await;
+        crate::pump::maybe_notify_layer_switch(&app, &state).await;
+        crate::pump::maybe_haptic_on_layer_switch(&state).await;
+    }
+    #[cfg(mobile)]
+    {
+        crate::android_pump::process_android_outputs(&app, &state, outputs).await;
+        crate::android_pump::emit_layer_changed(&app, &state).await;
+    }
     Ok(())
 }
 
@@ -486,10 +504,18 @@ pub async fn pop_layer(
     let Some(outputs) = state.engine.lock().await.pop_layer() else {
         return Err("Layer stack is at base layer; nothing to pop".into());
     };
-    crate::pump::process_outputs(&app, &state, outputs).await;
-    crate::pump::emit_layer_changed(&app, &state).await;
-    crate::pump::maybe_notify_layer_switch(&app, &state).await;
-    crate::pump::maybe_haptic_on_layer_switch(&state).await;
+    #[cfg(not(mobile))]
+    {
+        crate::pump::process_outputs(&app, &state, outputs).await;
+        crate::pump::emit_layer_changed(&app, &state).await;
+        crate::pump::maybe_notify_layer_switch(&app, &state).await;
+        crate::pump::maybe_haptic_on_layer_switch(&state).await;
+    }
+    #[cfg(mobile)]
+    {
+        crate::android_pump::process_android_outputs(&app, &state, outputs).await;
+        crate::android_pump::emit_layer_changed(&app, &state).await;
+    }
     Ok(())
 }
 
@@ -817,6 +843,231 @@ pub async fn download_and_install_update(app: tauri::AppHandle) -> Result<(), St
         .map_err(|e| e.to_string())?;
 
     app.restart();
+}
+
+// ── Android preferences (mobile only) ────────────────────────────────────────
+
+/// Android-specific user preferences exposed to the frontend.
+#[cfg(mobile)]
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
+pub struct AndroidPreferences {
+    /// Notify when a Tap device connects.
+    pub notify_device_connected: bool,
+    /// Notify when a Tap device disconnects.
+    pub notify_device_disconnected: bool,
+    /// Notify when the active layer switches.
+    pub notify_layer_switch: bool,
+    /// Notify when the active profile switches.
+    pub notify_profile_switch: bool,
+    /// Master haptic toggle.
+    pub haptics_enabled: bool,
+    /// Vibrate on every resolved tap event.
+    pub haptic_on_tap: bool,
+    /// Vibrate on layer push/pop/switch.
+    pub haptic_on_layer_switch: bool,
+    /// Vibrate on profile activate.
+    pub haptic_on_profile_switch: bool,
+    /// Whether the user has completed the AccessibilityService setup step.
+    pub accessibility_setup_done: bool,
+    /// Whether the user has completed the OEM battery setup wizard.
+    pub battery_setup_done: bool,
+    /// Start the foreground service automatically when the app opens.
+    pub auto_start_service: bool,
+}
+
+/// Return the current Android preferences.
+#[cfg(mobile)]
+#[tauri::command]
+pub async fn get_android_preferences(
+    state: State<'_, Arc<AppState>>,
+) -> Result<AndroidPreferences, String> {
+    let prefs = state.preferences.lock().await;
+    Ok(AndroidPreferences {
+        notify_device_connected: prefs.notify_device_connected,
+        notify_device_disconnected: prefs.notify_device_disconnected,
+        notify_layer_switch: prefs.notify_layer_switch,
+        notify_profile_switch: prefs.notify_profile_switch,
+        haptics_enabled: prefs.haptics_enabled,
+        haptic_on_tap: prefs.haptic_on_tap,
+        haptic_on_layer_switch: prefs.haptic_on_layer_switch,
+        haptic_on_profile_switch: prefs.haptic_on_profile_switch,
+        accessibility_setup_done: prefs.accessibility_setup_done,
+        battery_setup_done: prefs.battery_setup_done,
+        auto_start_service: prefs.auto_start_service,
+    })
+}
+
+/// Persist updated Android preferences.
+#[cfg(mobile)]
+#[tauri::command]
+pub async fn save_android_preferences(
+    state: State<'_, Arc<AppState>>,
+    prefs_update: AndroidPreferences,
+) -> Result<(), String> {
+    let mut prefs = state.preferences.lock().await;
+    prefs.notify_device_connected = prefs_update.notify_device_connected;
+    prefs.notify_device_disconnected = prefs_update.notify_device_disconnected;
+    prefs.notify_layer_switch = prefs_update.notify_layer_switch;
+    prefs.notify_profile_switch = prefs_update.notify_profile_switch;
+    prefs.haptics_enabled = prefs_update.haptics_enabled;
+    prefs.haptic_on_tap = prefs_update.haptic_on_tap;
+    prefs.haptic_on_layer_switch = prefs_update.haptic_on_layer_switch;
+    prefs.haptic_on_profile_switch = prefs_update.haptic_on_profile_switch;
+    prefs.accessibility_setup_done = prefs_update.accessibility_setup_done;
+    prefs.battery_setup_done = prefs_update.battery_setup_done;
+    prefs.auto_start_service = prefs_update.auto_start_service;
+    prefs.save(&state.preferences_path).map_err(|e| e.to_string())
+}
+
+// ── process_tap_event (Android) ──────────────────────────────────────────────
+
+/// Forward a raw Tap Strap BLE notification to the combo engine (Android only).
+///
+/// Called by the WebView JS shim (`android-bridge.ts`) which listens for
+/// `tap-bytes-received` events triggered by `BlePlugin.kt` and proxies them
+/// here so the Rust pump can process them through `ComboEngine`.
+///
+/// `bytes` is a `Vec<u8>` matching the Tap packet format:
+/// - `bytes[0]`: tap code bitmask
+/// - `bytes[1–2]`: little-endian interval\_ms (informational; ignored by engine)
+#[cfg(mobile)]
+#[tauri::command]
+pub async fn process_tap_event(
+    state: State<'_, Arc<AppState>>,
+    address: String,
+    bytes: Vec<u8>,
+) -> Result<(), String> {
+    use crate::android_pump::TapEventMsg;
+    state
+        .tap_event_tx
+        .send(TapEventMsg { address, bytes })
+        .await
+        .map_err(|_| "android pump channel closed".into())
+}
+
+// ── Android device management commands ───────────────────────────────────────
+
+/// Called by the android-bridge when `BlePlugin` emits `ble-device-connected`.
+///
+/// Looks up the device address in the persisted `android_devices` map:
+/// - **Found** → emits `device-connected` with the persisted role (auto-reconnect path).
+/// - **Not found** → emits `ble-device-pending` so the UI can prompt for role assignment.
+#[cfg(mobile)]
+#[tauri::command]
+pub async fn notify_android_device_connected(
+    app: tauri::AppHandle,
+    state: State<'_, Arc<AppState>>,
+    address: String,
+    name: Option<String>,
+) -> Result<(), String> {
+    use tauri::Emitter as _;
+    let record = state.android_devices.lock().await.get(&address).cloned();
+    if let Some(rec) = record {
+        let _ = app.emit(
+            crate::events::DEVICE_CONNECTED,
+            crate::events::DeviceStatusPayload { role: rec.role, address: rec.address },
+        );
+    } else {
+        let _ = app.emit(
+            crate::events::BLE_DEVICE_PENDING,
+            crate::events::BleDevicePendingPayload { address, name },
+        );
+    }
+    Ok(())
+}
+
+/// Assign a role to a BLE-connected device that has no persisted role.
+///
+/// Called by the devices page when the user selects a role for a pending device.
+/// Saves the record to `android_devices.json` and emits `device-connected`.
+#[cfg(mobile)]
+#[tauri::command]
+pub async fn assign_android_device(
+    app: tauri::AppHandle,
+    state: State<'_, Arc<AppState>>,
+    address: String,
+    role: String,
+    name: Option<String>,
+) -> Result<(), String> {
+    use tauri::Emitter as _;
+    if !matches!(role.as_str(), "solo" | "left" | "right") {
+        return Err(format!("invalid role '{role}'; must be solo, left, or right"));
+    }
+    let record = crate::state::AndroidDeviceRecord { address: address.clone(), role: role.clone(), name };
+    {
+        let mut devices = state.android_devices.lock().await;
+        devices.insert(address.clone(), record);
+        crate::state::save_android_devices(&state.android_devices_path, &devices);
+    }
+    let _ = app.emit(
+        crate::events::DEVICE_CONNECTED,
+        crate::events::DeviceStatusPayload { role, address },
+    );
+    Ok(())
+}
+
+/// Called by the android-bridge when `BlePlugin` emits `ble-device-disconnected`.
+///
+/// Looks up the role for the device and emits `device-disconnected`.
+/// The record is **not** removed from `android_devices` — it is kept for the
+/// next reconnect so the role is restored automatically.
+#[cfg(mobile)]
+#[tauri::command]
+pub async fn notify_android_device_disconnected(
+    app: tauri::AppHandle,
+    state: State<'_, Arc<AppState>>,
+    address: String,
+) -> Result<(), String> {
+    use tauri::Emitter as _;
+    let record = state.android_devices.lock().await.get(&address).cloned();
+    if let Some(rec) = record {
+        let _ = app.emit(
+            crate::events::DEVICE_DISCONNECTED,
+            crate::events::DeviceStatusPayload { role: rec.role, address: rec.address },
+        );
+    } else {
+        log::warn!("notify_android_device_disconnected: no record for address {address}");
+    }
+    Ok(())
+}
+
+/// Reassign the role of an already-connected Android device.
+///
+/// Emits `device-disconnected` for the old role then `device-connected` for
+/// the new role. Updates `android_devices.json`.
+#[cfg(mobile)]
+#[tauri::command]
+pub async fn reassign_android_device_role(
+    app: tauri::AppHandle,
+    state: State<'_, Arc<AppState>>,
+    address: String,
+    new_role: String,
+) -> Result<(), String> {
+    use tauri::Emitter as _;
+    if !matches!(new_role.as_str(), "solo" | "left" | "right") {
+        return Err(format!("invalid role '{new_role}'; must be solo, left, or right"));
+    }
+    let old_role = {
+        let devices = state.android_devices.lock().await;
+        devices.get(&address).map(|r| r.role.clone())
+    };
+    let old_role = old_role.ok_or_else(|| format!("device {address} not found"))?;
+    let _ = app.emit(
+        crate::events::DEVICE_DISCONNECTED,
+        crate::events::DeviceStatusPayload { role: old_role, address: address.clone() },
+    );
+    {
+        let mut devices = state.android_devices.lock().await;
+        if let Some(rec) = devices.get_mut(&address) {
+            rec.role = new_role.clone();
+        }
+        crate::state::save_android_devices(&state.android_devices_path, &devices);
+    }
+    let _ = app.emit(
+        crate::events::DEVICE_CONNECTED,
+        crate::events::DeviceStatusPayload { role: new_role, address },
+    );
+    Ok(())
 }
 
 // ── get_platform ─────────────────────────────────────────────────────────────

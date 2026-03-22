@@ -313,6 +313,77 @@ export interface LayerChangedPayload {
   active: string;
 }
 
+// ── Android BLE device management types ──────────────────────────────────────
+
+/** A device found during an Android BLE scan, streamed via `ble-device-found` events. */
+export interface BleDeviceFoundPayload {
+  /** MAC address in "AA:BB:CC:DD:EE:FF" format. */
+  address: BleAddress;
+  /** Device name, or null if BLUETOOTH_CONNECT permission is not yet granted. */
+  name: string | null;
+  /** Signal strength in dBm. */
+  rssi: number;
+}
+
+/** Emitted by Rust when a BLE-connected device has no persisted role assignment. */
+export interface BleDevicePendingPayload {
+  address: BleAddress;
+  name: string | null;
+}
+
+/** Payload emitted by `BlePlugin` when a GATT connection completes. */
+export interface BleDeviceConnectedPayload {
+  address: BleAddress;
+  name: string | null;
+}
+
+/** Payload emitted by `BlePlugin` when a GATT connection drops. */
+export interface BleDeviceDisconnectedPayload {
+  address: BleAddress;
+  /** "user_request" | "reconnect_failed" | other BlePlugin error string. */
+  reason: string;
+}
+
+// ── Android-specific types ────────────────────────────────────────────────────
+
+/**
+ * OEM manufacturer information returned by the `BatteryPlugin.getOemInfo` command.
+ *
+ * Used by `BatterySetupWizard.svelte` to show manufacturer-specific instructions
+ * and deep-link to the correct settings screen.
+ */
+export interface OemInfo {
+  /** Raw `Build.MANUFACTURER` value, lowercased. */
+  manufacturer: string;
+  /** Human-readable name, e.g. "Xiaomi / Redmi / POCO". */
+  displayName: string;
+  /** Whether an OEM-specific setup step is needed (false for stock Android). */
+  hasOemStep: boolean;
+  /** Step-by-step instructions for the OEM setting (empty string if !hasOemStep). */
+  oemInstructions: string;
+  /** Whether the battery optimisation exemption is already granted. */
+  exemptionGranted: boolean;
+}
+
+/**
+ * Android-specific user preferences (mobile only).
+ *
+ * Mirrors `AndroidPreferences` in `src-tauri/src/commands.rs`.
+ */
+export interface AndroidPreferences {
+  notify_device_connected: boolean;
+  notify_device_disconnected: boolean;
+  notify_layer_switch: boolean;
+  notify_profile_switch: boolean;
+  haptics_enabled: boolean;
+  haptic_on_tap: boolean;
+  haptic_on_layer_switch: boolean;
+  haptic_on_profile_switch: boolean;
+  accessibility_setup_done: boolean;
+  battery_setup_done: boolean;
+  auto_start_service: boolean;
+}
+
 /** Payload for the `profile-error` Tauri event. */
 export interface ProfileErrorPayload {
   file_name: string;

@@ -14,6 +14,10 @@ pub const PROFILE_ERROR: &str = "profile-error";
 pub const CONTEXT_RULE_MATCHED: &str = "context-rule-matched";
 pub const UPDATE_AVAILABLE: &str = "update-available";
 pub const UPDATE_DOWNLOAD_PROGRESS: &str = "update-download-progress";
+/// Emitted on Android when a device has connected via BLE but has no persisted role.
+/// The UI must prompt the user to assign a role before the engine will route its events.
+#[cfg(mobile)]
+pub const BLE_DEVICE_PENDING: &str = "ble-device-pending";
 
 // ── Payload types ─────────────────────────────────────────────────────────────
 
@@ -117,6 +121,18 @@ pub struct UpdateProgressPayload {
     pub downloaded: u64,
     /// Total download size in bytes, if the server sent a `Content-Length` header.
     pub total: Option<u64>,
+}
+
+/// Payload for [`BLE_DEVICE_PENDING`].
+///
+/// Emitted on Android when a device has connected via BLE but has no persisted role.
+#[cfg(mobile)]
+#[derive(Serialize, Clone)]
+pub struct BleDevicePendingPayload {
+    /// MAC address of the newly-connected device.
+    pub address: String,
+    /// Human-readable device name, if available.
+    pub name: Option<String>,
 }
 
 /// A connected device as returned by `get_engine_state`.

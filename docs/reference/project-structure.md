@@ -83,6 +83,8 @@ mapxr/
     ├── log/
     │   ├── progress.md             ← session logs (recent entries only; older entries archived)
     │   └── archive/                ← archived log entries by month
+    ├── testing/                    ← manual test plans
+    │   └── android-manual-tests.md ← Phase 1 Android test matrix
     └── reference/                  ← hardware reference docs, project structure
         └── project-structure.md    ← this file
 ```

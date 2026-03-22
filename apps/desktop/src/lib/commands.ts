@@ -16,6 +16,8 @@ import type {
   ContextRules,
   TrayPreferences,
   UpdateInfo,
+  OemInfo,
+  AndroidPreferences,
 } from "./types";
 
 // ── Device commands ───────────────────────────────────────────────────────────
@@ -265,6 +267,196 @@ export async function checkForUpdate(): Promise<UpdateInfo | null> {
  */
 export async function downloadAndInstallUpdate(): Promise<void> {
   return invoke("download_and_install_update");
+}
+
+// ── Android battery commands ──────────────────────────────────────────────────
+//
+// These call into the Kotlin BatteryPlugin registered in MainActivity.kt.
+// The invoke format is "plugin:<identifier>|<commandName>" where the identifier
+// is the plugin class name without the "Plugin" suffix, lowercased.
+
+/**
+ * Return OEM manufacturer info and battery setup instructions.
+ *
+ * Android only — returns a placeholder on other platforms.
+ */
+export async function getOemInfo(): Promise<OemInfo> {
+  return invoke("plugin:battery|getOemInfo");
+}
+
+/**
+ * Check whether the battery optimisation exemption is currently granted.
+ *
+ * Android only.
+ */
+export async function checkBatteryExemptionGranted(): Promise<{ granted: boolean }> {
+  return invoke("plugin:battery|checkBatteryExemptionGranted");
+}
+
+/**
+ * Open the system dialog requesting battery optimisation exemption.
+ *
+ * The call resolves once the intent is launched. Re-check the result with
+ * {@link checkBatteryExemptionGranted} after the user returns.
+ *
+ * Android only.
+ */
+export async function requestBatteryExemption(): Promise<void> {
+  return invoke("plugin:battery|requestBatteryExemption");
+}
+
+/**
+ * Open the OEM-specific battery settings screen (deep link).
+ *
+ * Falls back to the generic battery optimisation settings if the OEM
+ * deep link is unavailable.
+ *
+ * Android only.
+ */
+export async function openOemBatterySettings(): Promise<void> {
+  return invoke("plugin:battery|openOemBatterySettings");
+}
+
+// ── Platform ──────────────────────────────────────────────────────────────────
+
+/**
+ * Return the current platform identifier.
+ *
+ * Possible values: `"android"`, `"linux"`, `"windows"`, `"macos"`, `"ios"`,
+ * `"unknown"`.
+ */
+export async function getPlatform(): Promise<string> {
+  return invoke("get_platform");
+}
+
+// ── Android accessibility commands ───────────────────────────────────────────
+//
+// These call into the Kotlin AccessibilityPlugin registered in MainActivity.kt.
+
+/**
+ * Return whether `MapxrAccessibilityService` is currently enabled in system settings.
+ *
+ * Android only.
+ */
+export async function checkAccessibilityEnabled(): Promise<{ enabled: boolean }> {
+  return invoke("plugin:accessibility|checkAccessibilityEnabled");
+}
+
+/**
+ * Open the Android Accessibility Settings screen so the user can enable
+ * `MapxrAccessibilityService`.
+ *
+ * Android only.
+ */
+export async function openAccessibilitySettings(): Promise<void> {
+  return invoke("plugin:accessibility|openAccessibilitySettings");
+}
+
+// ── Android preferences (mobile only) ────────────────────────────────────────
+
+/**
+ * Return the current Android-specific user preferences.
+ *
+ * Android only — the Rust command is gated with `#[cfg(mobile)]`.
+ */
+export async function getAndroidPreferences(): Promise<AndroidPreferences> {
+  return invoke("get_android_preferences");
+}
+
+/**
+ * Persist updated Android-specific user preferences.
+ *
+ * Android only — the Rust command is gated with `#[cfg(mobile)]`.
+ *
+ * @param prefs - The full replacement preferences object.
+ * @throws If the preferences file cannot be written.
+ */
+export async function saveAndroidPreferences(
+  prefs: AndroidPreferences,
+): Promise<void> {
+  return invoke("save_android_preferences", { prefsUpdate: prefs });
+}
+
+// ── Android BLE device management commands ────────────────────────────────────
+
+/**
+ * [Android] Assign a role to a BLE-connected device that has no persisted role.
+ *
+ * Call after the user selects a role for a device in the "Assign role" UI.
+ * Emits `device-connected` when successful.
+ */
+export async function assignAndroidDevice(
+  address: string,
+  role: string,
+  name: string | null,
+): Promise<void> {
+  return invoke("assign_android_device", { address, role, name });
+}
+
+/**
+ * [Android] Reassign the role of an already-connected device.
+ *
+ * Emits `device-disconnected` for the old role then `device-connected` for
+ * the new role. The BLE connection is preserved.
+ */
+export async function reassignAndroidDeviceRole(
+  address: string,
+  newRole: string,
+): Promise<void> {
+  return invoke("reassign_android_device_role", { address, newRole });
+}
+
+/**
+ * [Android] Check whether BLE permissions are currently granted.
+ *
+ * Returns `{ granted: true }` if all required permissions are in place.
+ */
+export async function checkBlePermissions(): Promise<{ granted: boolean }> {
+  return invoke("plugin:ble|checkBlePermissions");
+}
+
+/**
+ * [Android] Request the BLE runtime permissions required for scanning.
+ *
+ * Shows the system permission dialog if needed. Resolves with
+ * `{ granted: true }` if permissions are (now) granted.
+ */
+export async function requestBlePermissions(): Promise<{ granted: boolean }> {
+  return invoke("plugin:ble|requestBlePermissions");
+}
+
+/**
+ * [Android] Return all Bluetooth-bonded (paired) devices known to the OS.
+ *
+ * Classic-only (BR/EDR) peripherals such as audio headsets are excluded.
+ * The caller should connect to a returned device and let GATT service
+ * discovery confirm it is a Tap before assigning a role.
+ */
+export async function listBondedDevices(): Promise<{ devices: { address: string; name: string | null }[] }> {
+  return invoke("plugin:ble|listBondedDevices");
+}
+
+/**
+ * [Android] Connect to a Tap Strap by MAC address.
+ *
+ * Performs the full GATT setup sequence in `BlePlugin.kt`. On success,
+ * `BlePlugin` emits `ble-device-connected`; the android-bridge proxies this
+ * to `notify_android_device_connected` which emits either `device-connected`
+ * (if a role is persisted) or `ble-device-pending` (if role is unknown).
+ */
+export async function bleConnect(address: string): Promise<void> {
+  return invoke("plugin:ble|connect", { address });
+}
+
+/**
+ * [Android] Disconnect from a Tap Strap by MAC address.
+ *
+ * Sets the `userDisconnected` flag in `BlePlugin` so no automatic reconnect
+ * is attempted. `BlePlugin` emits `ble-device-disconnected`; the
+ * android-bridge proxies this to `notify_android_device_disconnected`.
+ */
+export async function bleDisconnect(address: string): Promise<void> {
+  return invoke("plugin:ble|disconnect", { address });
 }
 
 // ── Filesystem helpers ────────────────────────────────────────────────────────

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Minimal AccessibilityService configuration for mapxr.
+
+    We subscribe to typeWindowStateChanged (the minimum required for the service
+    to remain active) but ignore all received events in onAccessibilityEvent().
+    We only use the service to inject key events via dispatchKeyEvent() and
+    synthesise mouse clicks/scrolls via GestureDescription — no content scanning.
+-->
+<accessibility-service
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:accessibilityEventTypes="typeWindowStateChanged"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:accessibilityFlags="flagRequestFilterKeyEvents"
+    android:canPerformGestures="true"
+    android:description="@string/accessibility_service_description"
+    android:notificationTimeout="0"
+    android:settingsActivity="com.mapxr.app.MainActivity" />

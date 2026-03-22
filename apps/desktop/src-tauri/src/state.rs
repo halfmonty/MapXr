@@ -1,4 +1,5 @@
 use std::path::{Path, PathBuf};
+#[cfg(not(mobile))]
 use std::sync::Arc;
 
 use mapping_core::{engine::ComboEngine, LayerRegistry};
@@ -6,6 +7,9 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 
 use crate::platform;
+
+#[cfg(mobile)]
+use tokio::sync::mpsc;
 
 #[cfg(not(mobile))]
 use std::sync::atomic::AtomicBool;
@@ -84,6 +88,25 @@ pub struct AppState {
     /// handler can read it without an async `block_on` call (desktop only).
     #[cfg(not(mobile))]
     pub(crate) close_to_tray: Arc<AtomicBool>,
+
+    /// Sender end of the Android tap event channel.
+    ///
+    /// Kotlin `BlePlugin` → WebView JS shim → `process_tap_event` command →
+    /// this sender → `run_android_pump` task → `tap-actions-fired` events.
+    #[cfg(mobile)]
+    pub(crate) tap_event_tx: mpsc::Sender<crate::android_pump::TapEventMsg>,
+
+    /// Persisted device→role mapping for Android.
+    ///
+    /// Keyed by BLE MAC address string. Loaded from `android_devices.json` at
+    /// startup; updated by the `assign_android_device` and
+    /// `reassign_android_device_role` commands. Not present on desktop.
+    #[cfg(mobile)]
+    pub android_devices: Mutex<std::collections::HashMap<String, AndroidDeviceRecord>>,
+
+    /// Absolute path to `android_devices.json` (Android only).
+    #[cfg(mobile)]
+    pub android_devices_path: PathBuf,
 }
 
 impl AppState {
@@ -96,6 +119,20 @@ impl AppState {
             Ok(())
         }
     }
+}
+
+// ── Android device record ─────────────────────────────────────────────────────
+
+/// A BLE device with a user-assigned role, persisted to `android_devices.json`.
+#[cfg(mobile)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AndroidDeviceRecord {
+    /// MAC address in `"AA:BB:CC:DD:EE:FF"` format.
+    pub address: String,
+    /// Logical role: `"solo"`, `"left"`, or `"right"`.
+    pub role: String,
+    /// Human-readable device name, if known.
+    pub name: Option<String>,
 }
 
 // ── build_app_state ───────────────────────────────────────────────────────────
@@ -204,14 +241,25 @@ pub async fn build_app_state(
 /// Initialise [`AppState`] from the Tauri app handle (Android).
 ///
 /// The Android build has no BLE manager, device registry, or context rules —
-/// those are handled by Kotlin plugins. Returns just the `AppState`.
+/// those are handled by Kotlin plugins. Returns `(AppState, tap_rx)` where
+/// `tap_rx` is the receiving end of the tap event channel that
+/// [`run_android_pump`](crate::android_pump::run_android_pump) consumes.
 #[cfg(mobile)]
-pub async fn build_app_state(app: &tauri::AppHandle) -> Result<AppState, anyhow::Error> {
+pub async fn build_app_state(
+    app: &tauri::AppHandle,
+) -> Result<
+    (
+        AppState,
+        mpsc::Receiver<crate::android_pump::TapEventMsg>,
+    ),
+    anyhow::Error,
+> {
     let profiles_dir = platform::profile_dir(app).map_err(anyhow::Error::msg)?;
-    let preferences_path = profiles_dir
+    let config_dir = profiles_dir
         .parent()
-        .ok_or_else(|| anyhow::anyhow!("profiles_dir has no parent"))?
-        .join("preferences.json");
+        .ok_or_else(|| anyhow::anyhow!("profiles_dir has no parent"))?;
+    let preferences_path = config_dir.join("preferences.json");
+    let android_devices_path = config_dir.join("android_devices.json");
 
     let preferences = Preferences::load(&preferences_path);
 
@@ -234,13 +282,78 @@ pub async fn build_app_state(app: &tauri::AppHandle) -> Result<AppState, anyhow:
 
     let engine = ComboEngine::new(default_profile);
 
-    Ok(AppState {
+    let android_devices = load_android_devices(&android_devices_path);
+
+    // Channel capacity of 64 is well above any burst rate from a Tap Strap
+    // (max ~200 Hz = one event per 5 ms); it is bounded to prevent unbounded
+    // memory growth if the pump ever falls behind.
+    let (tap_tx, tap_rx) = mpsc::channel(64);
+
+    let state = AppState {
         engine: Mutex::new(engine),
         layer_registry: Mutex::new(layer_registry),
         profiles_dir,
         preferences_path,
         preferences: Mutex::new(preferences),
-    })
+        tap_event_tx: tap_tx,
+        android_devices: Mutex::new(android_devices),
+        android_devices_path,
+    };
+
+    Ok((state, tap_rx))
+}
+
+// ── Android device persistence (mobile only) ──────────────────────────────────
+
+/// Load `android_devices.json` from `path`.
+///
+/// Returns an empty map if the file is absent or unreadable — never fails.
+#[cfg(mobile)]
+pub(crate) fn load_android_devices(
+    path: &Path,
+) -> std::collections::HashMap<String, AndroidDeviceRecord> {
+    let text = match std::fs::read_to_string(path) {
+        Ok(t) => t,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Default::default(),
+        Err(e) => {
+            log::warn!("load_android_devices: failed to read {path:?}: {e}");
+            return Default::default();
+        }
+    };
+    let records: Vec<AndroidDeviceRecord> = match serde_json::from_str(&text) {
+        Ok(v) => v,
+        Err(e) => {
+            log::warn!("load_android_devices: failed to parse {path:?}: {e}");
+            return Default::default();
+        }
+    };
+    records.into_iter().map(|r| (r.address.clone(), r)).collect()
+}
+
+/// Persist the `android_devices` map to `path` atomically (write-then-rename).
+///
+/// Errors are logged and swallowed — a failure to persist is not fatal.
+#[cfg(mobile)]
+pub(crate) fn save_android_devices(
+    path: &Path,
+    devices: &std::collections::HashMap<String, AndroidDeviceRecord>,
+) {
+    let records: Vec<&AndroidDeviceRecord> = devices.values().collect();
+    let json = match serde_json::to_string_pretty(&records) {
+        Ok(j) => j,
+        Err(e) => {
+            log::warn!("save_android_devices: failed to serialise: {e}");
+            return;
+        }
+    };
+    let tmp = path.with_extension("json.tmp");
+    if let Err(e) = std::fs::write(&tmp, &json) {
+        log::warn!("save_android_devices: failed to write tmp file: {e}");
+        return;
+    }
+    if let Err(e) = std::fs::rename(&tmp, path) {
+        log::warn!("save_android_devices: failed to rename tmp to final: {e}");
+    }
 }
 
 // ── Auto-reconnect (desktop only) ────────────────────────────────────────────
@@ -407,6 +520,19 @@ struct StoredPreferences {
     /// Vibrate on profile activate.  Default `true`.
     #[serde(default = "default_true")]
     haptic_on_profile_switch: bool,
+
+    // ── Android-specific fields ───────────────────────────────────────────────
+    // These default to `false` and are harmlessly ignored on desktop.
+
+    /// Whether the user has completed the AccessibilityService setup step.
+    #[serde(default)]
+    accessibility_setup_done: bool,
+    /// Whether the user has completed the OEM battery setup wizard.
+    #[serde(default)]
+    battery_setup_done: bool,
+    /// Start the foreground service automatically when the app opens.  Default `true` on Android.
+    #[serde(default = "default_true")]
+    auto_start_service: bool,
 }
 
 fn default_true() -> bool {
@@ -450,6 +576,14 @@ pub(crate) struct Preferences {
     pub haptic_on_layer_switch: bool,
     /// Vibrate on profile activate (default `true`).
     pub haptic_on_profile_switch: bool,
+
+    // ── Android-specific ─────────────────────────────────────────────────────
+    /// Whether the user has completed the AccessibilityService setup step.
+    pub accessibility_setup_done: bool,
+    /// Whether the user has completed the OEM battery setup wizard.
+    pub battery_setup_done: bool,
+    /// Start the foreground service automatically when the app opens (default `true`).
+    pub auto_start_service: bool,
 }
 
 impl Default for Preferences {
@@ -469,6 +603,9 @@ impl Default for Preferences {
             haptic_on_tap: false,
             haptic_on_layer_switch: true,
             haptic_on_profile_switch: true,
+            accessibility_setup_done: false,
+            battery_setup_done: false,
+            auto_start_service: true,
         }
     }
 }
@@ -502,6 +639,9 @@ impl Preferences {
                 haptic_on_tap: stored.haptic_on_tap,
                 haptic_on_layer_switch: stored.haptic_on_layer_switch,
                 haptic_on_profile_switch: stored.haptic_on_profile_switch,
+                accessibility_setup_done: stored.accessibility_setup_done,
+                battery_setup_done: stored.battery_setup_done,
+                auto_start_service: stored.auto_start_service,
             },
             Err(e) => {
                 log::warn!("failed to parse preferences: {e}");
@@ -528,6 +668,9 @@ impl Preferences {
             haptic_on_tap: self.haptic_on_tap,
             haptic_on_layer_switch: self.haptic_on_layer_switch,
             haptic_on_profile_switch: self.haptic_on_profile_switch,
+            accessibility_setup_done: self.accessibility_setup_done,
+            battery_setup_done: self.battery_setup_done,
+            auto_start_service: self.auto_start_service,
         };
         let json = serde_json::to_string_pretty(&stored)?;
         let tmp = path.with_extension("json.tmp");

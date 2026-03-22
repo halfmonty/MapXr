@@ -3,6 +3,9 @@ pub mod events;
 pub mod platform;
 pub mod state;
 
+#[cfg(mobile)]
+pub mod android_pump;
+
 #[cfg(not(mobile))]
 pub mod context_rules;
 #[cfg(not(mobile))]
@@ -15,6 +18,26 @@ pub mod pump;
 use std::sync::Arc;
 
 use tauri::{Manager as _};
+
+// ── Android Kotlin plugin stubs ───────────────────────────────────────────────
+//
+// Each Tauri plugin registered here has an empty invoke_handler (returns false).
+// On Android/mobile, when a Rust plugin returns false from invoke_handler, Tauri
+// automatically forwards the call via JNI to pluginManager.runCommand(), which
+// dispatches to the Kotlin plugin loaded under the same name in MainActivity.kt.
+//
+// The Rust plugins exist only to satisfy the ACL authority check (which requires
+// a registered Rust plugin manifest for "plugin:X|Y" invocations). The actual
+// command execution happens in the Kotlin plugins (BlePlugin, AccessibilityPlugin,
+// BatteryPlugin) that are already registered via pluginManager.load() in
+// MainActivity.kt.
+
+#[cfg(mobile)]
+fn kotlin_plugin<R: tauri::Runtime>(name: &'static str) -> tauri::plugin::TauriPlugin<R> {
+    tauri::plugin::Builder::<R>::new(name)
+        .invoke_handler(|_invoke| false)
+        .build()
+}
 
 #[cfg(not(mobile))]
 use tauri::image::Image;
@@ -56,6 +79,9 @@ fn run_mobile() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
+        .plugin(kotlin_plugin::<tauri::Wry>("ble"))
+        .plugin(kotlin_plugin::<tauri::Wry>("accessibility"))
+        .plugin(kotlin_plugin::<tauri::Wry>("battery"))
         .setup(|app| {
             let app_handle = app.handle().clone();
 
@@ -65,12 +91,21 @@ fn run_mobile() {
                 tx.send(state::build_app_state(&setup_handle).await)
                     .expect("setup channel send failed");
             });
-            let app_state = rx
+            let (app_state, tap_rx) = rx
                 .recv()
                 .expect("setup channel recv failed")
                 .expect("failed to initialise app state");
 
-            app.manage(Arc::new(app_state));
+            let state_arc = Arc::new(app_state);
+            app.manage(Arc::clone(&state_arc));
+
+            // Spawn the Android event pump.
+            tauri::async_runtime::spawn(android_pump::run_android_pump(
+                app_handle.clone(),
+                Arc::clone(&state_arc),
+                tap_rx,
+            ));
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -86,6 +121,13 @@ fn run_mobile() {
             commands::get_engine_state,
             commands::read_file_text,
             commands::get_platform,
+            commands::get_android_preferences,
+            commands::save_android_preferences,
+            commands::process_tap_event,
+            commands::notify_android_device_connected,
+            commands::assign_android_device,
+            commands::notify_android_device_disconnected,
+            commands::reassign_android_device_role,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -307,6 +349,7 @@ fn run_desktop() {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 /// Build (or rebuild) the tray context menu with the given active profile name.
+#[cfg(not(mobile))]
 fn build_tray_menu(
     app: &tauri::AppHandle,
     profile_name: &str,
@@ -334,6 +377,7 @@ fn build_tray_menu(
 }
 
 /// Toggle window between visible-and-focused and hidden.
+#[cfg(not(mobile))]
 fn toggle_window_visibility(win: &WebviewWindow) {
     if win.is_visible().unwrap_or(false) {
         let _ = win.hide();
@@ -344,6 +388,7 @@ fn toggle_window_visibility(win: &WebviewWindow) {
 }
 
 /// Disconnect all connected BLE devices.
+#[cfg(not(mobile))]
 async fn ble_disconnect_all(state: &state::AppState) {
     if let Some(ble) = &state.ble_manager {
         let mut manager = ble.lock().await;
@@ -357,6 +402,7 @@ async fn ble_disconnect_all(state: &state::AppState) {
 }
 
 /// Show the first-hide tray notification (once only).
+#[cfg(not(mobile))]
 fn maybe_show_tray_hint(app: &tauri::AppHandle) {
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
@@ -392,6 +438,7 @@ fn maybe_show_tray_hint(app: &tauri::AppHandle) {
 ///
 /// Errors from the notification subsystem are logged at `warn` level and never
 /// propagated — notifications are advisory only.
+#[cfg(not(mobile))]
 pub(crate) fn send_notification(app: &tauri::AppHandle, title: &str, body: &str) {
     use tauri_plugin_notification::NotificationExt as _;
     if let Err(e) = app.notification().builder().title(title).body(body).show() {
@@ -402,6 +449,7 @@ pub(crate) fn send_notification(app: &tauri::AppHandle, title: &str, body: &str)
 /// Check for an available update and emit [`events::UPDATE_AVAILABLE`] if one is found.
 ///
 /// Best-effort — errors are logged at `warn` level and never propagated.
+#[cfg(not(mobile))]
 pub(crate) async fn trigger_update_check(app: &tauri::AppHandle) {
     use tauri::Emitter as _;
     use tauri_plugin_updater::UpdaterExt as _;
@@ -417,6 +465,7 @@ pub(crate) async fn trigger_update_check(app: &tauri::AppHandle) {
 }
 
 /// Background task: wait 5 s on startup, then check for updates every 24 hours.
+#[cfg(not(mobile))]
 async fn run_update_checker(app: tauri::AppHandle) {
     use tokio::time::{sleep, Duration};
     sleep(Duration::from_secs(5)).await;
@@ -429,6 +478,7 @@ async fn run_update_checker(app: tauri::AppHandle) {
 /// Update the tray tooltip and menu profile label with the current engine state.
 ///
 /// Called from the event pump after layer changes and device connect/disconnect.
+#[cfg(not(mobile))]
 pub(crate) fn update_tray(app: &tauri::AppHandle, profile_name: &str, device_count: usize) {
     let tooltip = format!(
         "tap-mapper\n{profile_name} · {} device{} connected",

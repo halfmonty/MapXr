@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Monochrome notification icon for the MapXr foreground service.
+
+    Android requires notification icons to be white/transparent monochrome
+    (the system tints them with the app's notification colour at runtime).
+    This is a simple "M" lettermark at 24dp.
+-->
+<vector
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- "M" lettermark: two peaks representing finger taps -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M3,19 L3,5 L8,14 L12,5 L16,14 L21,5 L21,19 L19,19 L19,9.5 L16,16 L12,9.5 L8,16 L5,9.5 L5,19 Z" />
+</vector>

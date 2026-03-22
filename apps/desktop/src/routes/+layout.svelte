@@ -8,7 +8,10 @@
   import { debugStore } from "$lib/stores/debug.svelte";
   import { contextRulesStore } from "$lib/stores/contextRules.svelte";
   import { setupEventListeners } from "$lib/events";
-  import { setDebugMode } from "$lib/commands";
+  import { setDebugMode, getPlatform } from "$lib/commands";
+  import { startAndroidBridge } from "$lib/android-bridge";
+  import { getAndroidPreferences } from "$lib/commands";
+  import AndroidOnboarding from "$lib/components/AndroidOnboarding.svelte";
   import FingerPattern from "$lib/components/FingerPattern.svelte";
   import TitleBar from "$lib/components/TitleBar.svelte";
   import UpdateBanner from "$lib/components/UpdateBanner.svelte";
@@ -16,6 +19,7 @@
   import { tapCodeToPattern } from "$lib/utils/tapCode";
 
   let updateDialogOpen = $state(false);
+  let onboardingOpen = $state(false);
 
   let { children } = $props();
 
@@ -23,8 +27,33 @@
     let cleanupListeners: (() => void) | null = null;
 
     (async () => {
-      await Promise.all([engineStore.init(), profileStore.init(), contextRulesStore.init()]);
+      // Detect platform first: contextRulesStore.init() calls list_context_rules which is
+      // a desktop-only command (#[cfg(not(mobile))]) and must be skipped on Android.
+      const platform = await getPlatform();
+      const inits: Promise<void>[] = [engineStore.init(), profileStore.init()];
+      if (platform !== "android") {
+        inits.push(contextRulesStore.init());
+      }
+      await Promise.all(inits);
       cleanupListeners = await setupEventListeners();
+
+      // Android: wire BLE tap bytes from Kotlin BlePlugin to the Rust engine;
+      // show onboarding if setup is not yet complete.
+      if (platform === "android") {
+        const stopBridge = await startAndroidBridge();
+        const _prevCleanup = cleanupListeners;
+        cleanupListeners = () => { _prevCleanup(); stopBridge(); };
+
+        // Check whether any onboarding step needs to be shown.
+        try {
+          const androidPrefs = await getAndroidPreferences();
+          if (!androidPrefs.accessibility_setup_done || !androidPrefs.battery_setup_done) {
+            onboardingOpen = true;
+          }
+        } catch (_) {
+          // Non-fatal — proceed without onboarding check.
+        }
+      }
 
       // Restore persisted debug mode (task 7.6).
       const stored = localStorage.getItem("mapxr.debugMode");
@@ -215,3 +244,4 @@
 </div>
 
 <UpdateDialog open={updateDialogOpen} onClose={() => (updateDialogOpen = false)} />
+<AndroidOnboarding open={onboardingOpen} onClose={() => (onboardingOpen = false)} />

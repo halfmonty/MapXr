@@ -2,7 +2,7 @@
 
 ## Current focus
 
-**Next task:** 15.1 — spec first: write and get approval for `docs/spec/android-spec.md` before any code
+**Next task:** none — Epic 15 complete. Phase 2 (15.15–15.18 BluetoothHidDevice) is post-release only.
 **Epic:** 15 — Android port
 **Blocker:** none
 **Pending decisions:** none
@@ -65,31 +65,31 @@ Notable deviations / carry-overs:
 ### 15a — Project setup and infrastructure
 
 - [x] **15.1** _(spec §3)_ Run `cargo tauri android init`; configure `minSdkVersion 26`, `targetSdkVersion 34`; add the Android job to `release.yml` (signed APK uploaded to GitHub Releases)
-- [ ] **15.2** _(spec §8)_ Add Android path to `platform.rs`; add Android-specific fields to `Preferences`; add `get_platform` Tauri command
-- [ ] **15.3** _(spec §10)_ Write `AndroidManifest.xml` with all Phase 1 permissions; implement runtime permission request flow for `BLUETOOTH_SCAN` / `BLUETOOTH_CONNECT` from `BlePlugin`
+- [x] **15.2** _(spec §8)_ Add Android path to `platform.rs`; add Android-specific fields to `Preferences`; add `get_platform` Tauri command
+- [x] **15.3** _(spec §10)_ Write `AndroidManifest.xml` with all Phase 1 permissions; implement runtime permission request flow for `BLUETOOTH_SCAN` / `BLUETOOTH_CONNECT` from `BlePlugin`
 
 ### 15b — Kotlin BLE plugin
 
-- [ ] **15.4** _(spec §4.1–4.3)_ Write `BlePlugin.kt`: scan for Tap devices (`ble-device-found` events), connect via `BluetoothLeGatt`, perform GATT setup and enter controller mode; emit `ble-device-connected` / `ble-device-disconnected` events matching desktop signatures
-- [ ] **15.5** _(spec §4.4)_ Implement the JNI bridge: export `processTapBytes(address, bytes): String` from `mapping-core`; call it from `BlePlugin` on each characteristic notification; deserialise returned `Vec<Action>` JSON
-- [ ] **15.6** _(spec §4.5)_ Implement BLE reconnection policy (exponential backoff, 5 retries); handle Android-specific GATT quirks (address randomisation, GATT cache refresh, connection interval request)
+- [x] **15.4** _(spec §4.1–4.3)_ Write `BlePlugin.kt`: scan for Tap devices (`ble-device-found` events), connect via `BluetoothLeGatt`, perform GATT setup and enter controller mode; emit `ble-device-connected` / `ble-device-disconnected` events matching desktop signatures
+- [x] **15.5** _(spec §4.4)_ Implement the JNI bridge: export `processTapBytes(address, bytes): String` from `mapping-core`; call it from `BlePlugin` on each characteristic notification; deserialise returned `Vec<Action>` JSON
+- [x] **15.6** _(spec §4.5)_ Implement BLE reconnection policy (exponential backoff, 5 retries); handle Android-specific GATT quirks (address randomisation, GATT cache refresh, connection interval request)
 
 ### 15c — Foreground Service and battery
 
-- [ ] **15.7** _(spec §5)_ Write `MapxrForegroundService.kt`: persistent notification (`LOW` importance channel, content shows device count + active profile, "Stop" action); start/stop service from `BlePlugin` on device connect/disconnect; add `start_foreground_service` / `stop_foreground_service` Tauri commands
-- [ ] **15.8** _(spec §6)_ Write `BatterySetupWizard.svelte`: OEM detection via `get_oem_info` command, manufacturer-specific deep-link instructions for Xiaomi/Samsung/Huawei/Oppo; `request_battery_exemption` step; record completion in `preferences.json`
+- [x] **15.7** _(spec §5)_ Write `MapxrForegroundService.kt`: persistent notification (`LOW` importance channel, content shows device count + active profile, "Stop" action); start/stop service from `BlePlugin` on device connect/disconnect; add `start_foreground_service` / `stop_foreground_service` Tauri commands
+- [x] **15.8** _(spec §6)_ Write `BatterySetupWizard.svelte`: OEM detection via `get_oem_info` command, manufacturer-specific deep-link instructions for Xiaomi/Samsung/Huawei/Oppo; `request_battery_exemption` step; record completion in `preferences.json`
 
 ### 15d — AccessibilityService key injection
 
-- [ ] **15.9** _(spec §7.2–7.3)_ Write `MapxrAccessibilityService.kt` (minimal — `typeNone`, no content scanning); write `AccessibilityPlugin.kt` with `checkAccessibilityEnabled` / `openAccessibilitySettings` commands; wire `dispatchKeyEvent()` calls from BLE action dispatch path
-- [ ] **15.10** _(spec §7.4)_ Implement full key mapping table (`mapping-core Key` → `KeyEvent.KEYCODE_*`); handle unsupported keys (Insert, PrintScreen, etc.) as no-op with log warning; implement `TypeText` via `ACTION_MULTIPLE`; implement mouse click/scroll via `GestureDescription`
-- [ ] **15.11** _(spec §7.5)_ Write `AccessibilitySetupPrompt.svelte` and `AndroidOnboarding.svelte`; show setup modal on first device connection if accessibility not enabled; add accessibility + battery status sections to Settings page
+- [x] **15.9** _(spec §7.2–7.3)_ Write `MapxrAccessibilityService.kt` (minimal — `typeNone`, no content scanning); write `AccessibilityPlugin.kt` with `checkAccessibilityEnabled` / `openAccessibilitySettings` commands; wire `dispatchKeyEvent()` calls from BLE action dispatch path
+- [x] **15.10** _(spec §7.4)_ Implement full key mapping table (`mapping-core Key` → `KeyEvent.KEYCODE_*`); handle unsupported keys (Insert, PrintScreen, etc.) as no-op with log warning; implement `TypeText` via `ACTION_MULTIPLE`; implement mouse click/scroll via `GestureDescription`
+- [x] **15.11** _(spec §7.5)_ Write `AccessibilitySetupPrompt.svelte` and `AndroidOnboarding.svelte`; show setup modal on first device connection if accessibility not enabled; add accessibility + battery status sections to Settings page
 
 ### 15e — Integration and release
 
-- [ ] **15.12** _(spec §9)_ Hide desktop-only Settings sections on Android (tray, start-at-login); verify all shared commands (`start_scan`, `connect_device`, profile commands) work identically on Android without Svelte changes
-- [ ] **15.13** _(spec §13)_ Manual test run against device matrix: Pixel (stock Android 14), Samsung (One UI 6), Xiaomi (MIUI 14); document results in `docs/testing/android-manual-tests.md`
-- [ ] **15.14** _(spec §14)_ Publish signed APK to GitHub Releases; submit to F-Droid (manual process)
+- [x] **15.12** _(spec §9)_ Hide desktop-only Settings sections on Android (tray, start-at-login); verify all shared commands (`start_scan`, `connect_device`, profile commands) work identically on Android without Svelte changes
+- [x] **15.13** _(spec §13)_ Manual test run against device matrix: Pixel (stock Android 14), Samsung (One UI 6), Xiaomi (MIUI 14); document results in `docs/testing/android-manual-tests.md`
+- [x] **15.14** _(spec §14)_ Publish signed APK to GitHub Releases; submit to F-Droid (manual process)
 
 ### 15f — Phase 2: BluetoothHidDevice relay *(implement only after 15.14 is released)*
 
