@@ -214,7 +214,7 @@
       value={action.type}
       onchange={(e) => changeType((e.target as HTMLSelectElement).value as Action["type"])}
     >
-      {#each availableTypes as t}
+      {#each availableTypes as t (t)}
         <option value={t}>{TYPE_LABELS[t]}</option>
       {/each}
     </select>
@@ -229,9 +229,9 @@
         value={action.key}
         onchange={(e) => onchange({ ...action, key: (e.target as HTMLSelectElement).value })}
       >
-        {#each KEY_GROUPS as group}
+        {#each KEY_GROUPS as group (group.label)}
           <optgroup label={group.label}>
-            {#each group.keys as k}
+            {#each group.keys as k (k.name)}
               <option value={k.name} title={k.platformNote ? `${k.platformNote} only` : undefined}>
                 {k.name}{k.platformNote ? ` (${k.platformNote})` : ""}
               </option>
@@ -243,7 +243,7 @@
     <div>
       <p class="label-text mb-1 text-xs">Modifiers</p>
       <div class="flex gap-2">
-        {#each ["ctrl", "shift", "alt", "meta"] as m}
+        {#each ["ctrl", "shift", "alt", "meta"] as m (m)}
           <label class="flex cursor-pointer items-center gap-1 text-sm">
             <input
               type="checkbox"
@@ -262,7 +262,7 @@
     <div>
       <p class="label-text mb-1 text-xs">Keys</p>
       <div class="flex flex-wrap gap-1 mb-2">
-        {#each action.keys as k, i}
+        {#each action.keys as k, i (i)}
           <span class="badge badge-neutral gap-1 font-mono">
             {k}
             <button
@@ -285,8 +285,8 @@
         <button class="btn btn-sm btn-ghost" onclick={addChordKey}>Add</button>
       </div>
       <datalist id="known-keys-chord">
-        {#each KEY_GROUPS as group}
-          {#each group.keys as k}
+        {#each KEY_GROUPS as group (group.label)}
+          {#each group.keys as k (k.name)}
             <option value={k.name}>{k.name}{k.platformNote ? ` (${k.platformNote})` : ""}</option>
           {/each}
         {/each}
@@ -308,7 +308,7 @@
   <!-- ── Macro ─────────────────────────────────────────────────────────────── -->
   {:else if action.type === "macro"}
     <div class="space-y-2">
-      {#each action.steps as step, i}
+      {#each action.steps as step, i (i)}
         <div class="rounded-lg border border-base-300 p-3 space-y-2">
           <div class="flex items-center justify-between">
             <span class="text-xs font-medium text-base-content/60">Step {i + 1}</span>
@@ -351,7 +351,7 @@
         onchange={(e) => setPushLayer("layer", (e.target as HTMLSelectElement).value)}
       >
         <option value="">— select profile —</option>
-        {#each profileStore.profiles as p}
+        {#each profileStore.profiles as p (p.layer_id)}
           <option value={p.layer_id}>{p.name} ({p.layer_id})</option>
         {/each}
       </select>
@@ -359,7 +359,7 @@
     <div>
       <p class="label-text mb-1 text-xs">Mode</p>
       <div class="join">
-        {#each ["permanent", "count", "timeout"] as m}
+        {#each ["permanent", "count", "timeout"] as m (m)}
           <button
             class="btn join-item btn-xs {pushMode === m ? 'btn-primary' : 'btn-ghost'}"
             onclick={() => setPushLayer("mode", m)}
@@ -397,7 +397,7 @@
         onchange={(e) => onchange({ ...action, layer: (e.target as HTMLSelectElement).value })}
       >
         <option value="">— select profile —</option>
-        {#each profileStore.profiles as p}
+        {#each profileStore.profiles as p (p.layer_id)}
           <option value={p.layer_id}>{p.name} ({p.layer_id})</option>
         {/each}
       </select>
@@ -413,7 +413,7 @@
         onchange={(e) => setVariableField("variable", (e.target as HTMLSelectElement).value)}
       >
         <option value="">— select variable —</option>
-        {#each variableNames as v}<option value={v}>{v}</option>{/each}
+        {#each variableNames as v (v)}<option value={v}>{v}</option>{/each}
       </select>
     </label>
     <div class="rounded-lg border border-base-300 p-3 space-y-2">
@@ -445,7 +445,7 @@
         onchange={(e) => setVariableField("variable", (e.target as HTMLSelectElement).value)}
       >
         <option value="">— select variable —</option>
-        {#each variableNames as v}<option value={v}>{v}</option>{/each}
+        {#each variableNames as v (v)}<option value={v}>{v}</option>{/each}
       </select>
     </label>
     <div>
@@ -470,7 +470,7 @@
         onchange={(e) => setVariableField("variable", (e.target as HTMLSelectElement).value)}
       >
         <option value="">— select variable —</option>
-        {#each variableNames as v}<option value={v}>{v}</option>{/each}
+        {#each variableNames as v (v)}<option value={v}>{v}</option>{/each}
       </select>
     </label>
     <div class="rounded-lg border border-base-300 p-3 space-y-2">
@@ -497,7 +497,7 @@
     <div>
       <p class="label-text mb-1 text-xs">Button</p>
       <div class="join">
-        {#each (["left", "right", "middle"] as MouseButton[]) as b}
+        {#each (["left", "right", "middle"] as MouseButton[]) as b (b)}
           <button
             class="btn join-item btn-xs {action.button === b ? 'btn-primary' : 'btn-ghost'}"
             onclick={() => onchange({ ...action, button: b })}
@@ -511,7 +511,7 @@
     <div>
       <p class="label-text mb-1 text-xs">Direction</p>
       <div class="join">
-        {#each (["up", "down", "left", "right"] as ScrollDirection[]) as d}
+        {#each (["up", "down", "left", "right"] as ScrollDirection[]) as d (d)}
           <button
             class="btn join-item btn-xs {action.direction === d ? 'btn-primary' : 'btn-ghost'}"
             onclick={() => onchange({ ...action, direction: d })}
@@ -526,7 +526,7 @@
       <div>
         <p class="label-text mb-1 text-xs">Presets</p>
         <div class="flex flex-wrap gap-1">
-          {#each VIBRATE_PRESETS as preset}
+          {#each VIBRATE_PRESETS as preset (preset.label)}
             <button
               class="btn btn-xs btn-ghost btn-outline"
               onclick={() => vibrateSetPattern(preset.pattern)}
@@ -539,7 +539,7 @@
           Pattern (alternating on/off durations in ms, max 18 segments)
         </p>
         <div class="space-y-1">
-          {#each action.pattern as duration, i}
+          {#each action.pattern as duration, i (i)}
             <div class="flex items-center gap-2">
               <span class="w-14 shrink-0 text-xs text-base-content/60 font-mono">
                 {i % 2 === 0 ? "On" : "Off"} {Math.floor(i / 2) + 1}
@@ -590,7 +590,7 @@
         onchange={(e) => onchange({ ...action, name: (e.target as HTMLSelectElement).value })}
       >
         <option value="">— select alias —</option>
-        {#each Object.keys(profile.aliases) as a}<option value={a}>{a}</option>{/each}
+        {#each Object.keys(profile.aliases) as a (a)}<option value={a}>{a}</option>{/each}
       </select>
     </label>
 
@@ -599,7 +599,7 @@
     <div>
       <p class="label-text mb-1 text-xs">Modifiers to hold</p>
       <div class="flex gap-2">
-        {#each ["ctrl", "shift", "alt", "meta"] as m}
+        {#each ["ctrl", "shift", "alt", "meta"] as m (m)}
           <label class="flex cursor-pointer items-center gap-1 text-sm">
             <input
               type="checkbox"
@@ -615,7 +615,7 @@
     <div>
       <p class="label-text mb-1 text-xs">Mode</p>
       <div class="join">
-        {#each ["toggle", "count", "timeout"] as m}
+        {#each ["toggle", "count", "timeout"] as m (m)}
           <button
             class="btn join-item btn-xs {holdMode === m ? 'btn-primary' : 'btn-ghost'}"
             onclick={() => setHoldMode(m as HoldMode)}

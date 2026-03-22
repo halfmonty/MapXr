@@ -13,7 +13,7 @@
   import { engineStore } from "$lib/stores/engine.svelte";
   import { profileStore } from "$lib/stores/profile.svelte";
   import { logger } from "$lib/logger";
-  import type { TapDeviceInfo, BleDeviceFoundPayload, BleDevicePendingPayload, DeviceRole } from "$lib/types";
+  import type { TapDeviceInfo, BleDevicePendingPayload, DeviceRole } from "$lib/types";
 
   // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -159,8 +159,9 @@
     if (!role) return;
     try {
       await assignAndroidDevice(address, role, name);
-      const { [address]: _, ...rest } = pendingRoles;
-      pendingRoles = rest;
+      const updated = { ...pendingRoles };
+      delete updated[address];
+      pendingRoles = updated;
     } catch (e) {
       logger.error("assignAndroidDevice failed", e);
     }
@@ -229,8 +230,9 @@
     try {
       await connectDevice(address, role);
       deviceStore.setName(address, name);
-      const { [address]: _, ...rest } = pendingRole;
-      pendingRole = rest;
+      const updatedRole = { ...pendingRole };
+      delete updatedRole[address];
+      pendingRole = updatedRole;
     } catch (e) {
       connectError = e instanceof Error ? e.message : String(e);
       logger.error("connect_device failed", e);
@@ -430,7 +432,7 @@
                 </tr>
               </thead>
               <tbody>
-                {#each bleDiscovered.filter((d) => !connectedAddresses.has(d.address) && !pendingDevices.some((p) => p.address === d.address)) as device}
+                {#each bleDiscovered.filter((d) => !connectedAddresses.has(d.address) && !pendingDevices.some((p) => p.address === d.address)) as device (device.address)}
                   <tr>
                     <td>
                       <div class="font-medium">{device.name ?? "Unknown"}</div>
@@ -471,7 +473,7 @@
           <p class="text-sm text-base-content/60">
             Choose a role for each connected device.
           </p>
-          {#each pendingDevices as device}
+          {#each pendingDevices as device (device.address)}
             <div class="flex flex-col gap-2 rounded-lg border border-base-300 p-3">
               <div>
                 <span class="font-medium">{device.name ?? "Unknown"}</span>
@@ -479,7 +481,7 @@
               </div>
               <div class="flex items-center gap-2">
                 <div class="join">
-                  {#each ROLES as role}
+                  {#each ROLES as role (role)}
                     <button
                       class="btn join-item btn-sm {pendingRoles[device.address] === role ? 'btn-primary' : 'btn-ghost'}"
                       onclick={() => selectPendingRole(device.address, role)}
@@ -516,7 +518,7 @@
                 </tr>
               </thead>
               <tbody>
-                {#each deviceStore.connected as device}
+                {#each deviceStore.connected as device (device.address)}
                   <tr>
                     <td>
                       <div class="font-medium">{device.name ?? "—"}</div>
@@ -524,7 +526,7 @@
                     </td>
                     <td>
                       <div class="join">
-                        {#each ROLES as role}
+                        {#each ROLES as role (role)}
                           <button
                             class="btn join-item btn-xs {device.role === role ? 'btn-primary' : 'btn-ghost'}"
                             onclick={() => handleAndroidReassign(device.address, role)}
@@ -557,7 +559,7 @@
             <button class="btn btn-xs btn-ghost" onclick={() => (bleDebugLog = [])}>Clear</button>
           </div>
           <div class="max-h-48 overflow-y-auto rounded bg-base-200 p-2">
-            {#each bleDebugLog as line}
+            {#each bleDebugLog as line, i (i)}
               <p class="font-mono text-xs leading-5">{line}</p>
             {/each}
           </div>
@@ -604,7 +606,7 @@
                 </tr>
               </thead>
               <tbody>
-                {#each availableDevices as device}
+                {#each availableDevices as device (device.address)}
                   <tr>
                     <td class="font-medium">{device.name ?? "Unknown"}</td>
                     <td class="font-mono text-xs">{device.address}</td>
@@ -615,7 +617,7 @@
                     </td>
                     <td>
                       <div class="join">
-                        {#each ROLES as role}
+                        {#each ROLES as role (role)}
                           <button
                             class="btn join-item btn-xs
                               {pendingRole[device.address] === role
@@ -689,7 +691,7 @@
                 </tr>
               </thead>
               <tbody>
-                {#each deviceStore.connected as device}
+                {#each deviceStore.connected as device (device.address)}
                   <tr>
                     <td class="font-medium">
                       {#if renamingAddress === device.address}
@@ -734,7 +736,7 @@
                     <td class="font-mono text-xs">{device.address}</td>
                     <td>
                       <div class="join">
-                        {#each ROLES as role}
+                        {#each ROLES as role (role)}
                           <button
                             class="btn join-item btn-xs
                               {device.role === role ? 'btn-primary' : 'btn-ghost'}"

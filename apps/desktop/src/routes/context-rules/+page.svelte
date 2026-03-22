@@ -184,7 +184,7 @@
     </div>
   {:else}
     <div class="space-y-1.5">
-      {#each contextRulesStore.rules as rule, i}
+      {#each contextRulesStore.rules as rule, i (i)}
         <div
           role="listitem"
           draggable="true"
@@ -298,7 +298,7 @@
         </div>
         <select class="select select-bordered w-full" bind:value={editState.layerId}>
           <option value="" disabled>— select a profile —</option>
-          {#each profileStore.profiles as p}
+          {#each profileStore.profiles as p (p.layer_id)}
             <option value={p.layer_id}>{p.name}</option>
           {/each}
         </select>

@@ -173,14 +173,14 @@
     role="group"
     aria-label="Finger pattern"
   >
-    {#each groups as group, gi}
+    {#each groups as group, gi (gi)}
       <!-- Visual gap between dual groups -->
       {#if gi > 0}
         <div class="w-3 self-stretch border-l border-base-content/20 mx-1"></div>
       {/if}
 
       <div role="group" aria-label={group.ariaLabel} class="flex items-end gap-1">
-        {#each group.chars as char, fi}
+        {#each group.chars as char, fi (fi)}
           <div class="flex flex-col items-center gap-0.5">
             {#if readonly}
               <!-- Non-interactive circle (task 6.5) -->

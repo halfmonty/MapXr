@@ -282,7 +282,7 @@
   {/if}
 
   <!-- Load errors from registry reload -->
-  {#each profileStore.loadErrors as err}
+  {#each profileStore.loadErrors as err (err.file_name)}
     {@const errLayerId = err.file_name.replace(/\.json$/, "")}
     <div class="alert alert-warning text-sm flex items-start justify-between gap-2">
       <span><strong>{err.file_name}</strong>: {err.message}</span>
@@ -304,7 +304,7 @@
     </div>
   {:else}
     <div class="space-y-2">
-      {#each profileStore.profiles as profile}
+      {#each profileStore.profiles as profile (profile.layer_id)}
         {@const isActive = profile.layer_id === engineStore.activeLayerId}
         <div
           class="card bg-base-100 shadow transition-shadow
@@ -450,7 +450,7 @@
         <div class="form-control">
           <div class="label"><span class="label-text">Kind</span></div>
           <div class="join">
-            {#each ["single", "dual"] as k}
+            {#each ["single", "dual"] as k (k)}
               <button
                 class="btn join-item btn-sm
                   {wizardKind === k ? 'btn-primary' : 'btn-ghost'}"
@@ -467,7 +467,7 @@
           <div class="form-control">
             <div class="label"><span class="label-text">Hand</span></div>
             <div class="join">
-              {#each ["right", "left"] as h}
+              {#each ["right", "left"] as h (h)}
                 <button
                   class="btn join-item btn-sm
                     {wizardHand === h ? 'btn-primary' : 'btn-ghost'}"

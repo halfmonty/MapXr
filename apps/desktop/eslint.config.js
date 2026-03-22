@@ -24,9 +24,18 @@ export default [
     },
   },
   {
+    // Svelte 5 rune files (.svelte.ts) must be parsed as TypeScript.
+    files: ["**/*.svelte.ts"],
+    languageOptions: {
+      parser: ts.parser,
+    },
+  },
+  {
     rules: {
       "no-console": "error",
       "@typescript-eslint/no-explicit-any": "error",
+      // This app is built with Tauri (no base path), so resolve() wrapping is unnecessary.
+      "svelte/no-navigation-without-resolve": "off",
     },
   },
   {

@@ -72,7 +72,7 @@
       accessibilityEnabled = accessResult.enabled;
       batteryExemptionGranted = batteryResult.granted;
       androidPrefs = ap;
-    } catch (_) {
+    } catch {
       // Non-fatal.
     }
   }
@@ -129,7 +129,7 @@
   }
 </script>
 
-<div class="max-w-lg space-y-8">
+<div class="max-w-2xl m-auto space-y-8">
   <div class="flex items-center gap-3">
     <h1 class="text-2xl font-bold">Settings</h1>
     {#if saved}
@@ -148,243 +148,245 @@
   {:else}
     <!-- ── Desktop-only sections ─────────────────────────────────────────────── -->
     {#if !isAndroid}
-    <!-- Window behaviour -->
-    <section class="space-y-4">
-      <h2 class="text-sm font-semibold uppercase tracking-wider text-base-content/50">
-        Window behaviour
-      </h2>
+      <!-- Window behaviour -->
+      <section class="space-y-4">
+        <h2 class="text-sm font-semibold uppercase tracking-wider text-base-content/50">
+          Window behaviour
+        </h2>
 
-      <div class="card bg-base-100 shadow-sm">
-        <div class="card-body gap-4 p-4">
-          <!-- close_to_tray -->
-          <label class="flex cursor-pointer items-start justify-between gap-4">
-            <div>
-              <p class="font-medium">Minimise to tray when closed</p>
-              <p class="text-sm text-base-content/60">
-                Closing the window keeps tap-mapper running in the background.
-                Use the tray icon to show it again.
-              </p>
-            </div>
-            <input
-              type="checkbox"
-              class="toggle toggle-primary mt-0.5 flex-shrink-0"
-              checked={prefs.close_to_tray}
-              onchange={() => toggle("close_to_tray")}
-            />
-          </label>
-
-          <div class="divider my-0"></div>
-
-          <!-- start_minimised -->
-          <label class="flex cursor-pointer items-start justify-between gap-4">
-            <div>
-              <p class="font-medium">Start minimised</p>
-              <p class="text-sm text-base-content/60">
-                Launch directly to the tray without showing the main window.
-              </p>
-            </div>
-            <input
-              type="checkbox"
-              class="toggle toggle-primary mt-0.5 flex-shrink-0"
-              checked={prefs.start_minimised}
-              onchange={() => toggle("start_minimised")}
-            />
-          </label>
-        </div>
-      </div>
-    </section>
-
-    <!-- Notifications -->
-    <section class="space-y-4">
-      <h2 class="text-sm font-semibold uppercase tracking-wider text-base-content/50">
-        Notifications
-      </h2>
-
-      <div class="card bg-base-100 shadow-sm">
-        <div class="card-body gap-4 p-4">
-          <!-- notify_device_connected -->
-          <label class="flex cursor-pointer items-start justify-between gap-4">
-            <div>
-              <p class="font-medium">Device connected</p>
-              <p class="text-sm text-base-content/60">Notify when a Tap device connects.</p>
-            </div>
-            <input
-              type="checkbox"
-              class="toggle toggle-primary mt-0.5 flex-shrink-0"
-              checked={prefs.notify_device_connected}
-              onchange={() => toggle("notify_device_connected")}
-            />
-          </label>
-
-          <div class="divider my-0"></div>
-
-          <!-- notify_device_disconnected -->
-          <label class="flex cursor-pointer items-start justify-between gap-4">
-            <div>
-              <p class="font-medium">Device disconnected</p>
-              <p class="text-sm text-base-content/60">Notify when a Tap device disconnects.</p>
-            </div>
-            <input
-              type="checkbox"
-              class="toggle toggle-primary mt-0.5 flex-shrink-0"
-              checked={prefs.notify_device_disconnected}
-              onchange={() => toggle("notify_device_disconnected")}
-            />
-          </label>
-
-          <div class="divider my-0"></div>
-
-          <!-- notify_layer_switch -->
-          <label class="flex cursor-pointer items-start justify-between gap-4">
-            <div>
-              <p class="font-medium">Layer switched</p>
-              <p class="text-sm text-base-content/60">
-                Notify when the active layer changes. Off by default to avoid noise with
-                frequent layer switches.
-              </p>
-            </div>
-            <input
-              type="checkbox"
-              class="toggle toggle-primary mt-0.5 flex-shrink-0"
-              checked={prefs.notify_layer_switch}
-              onchange={() => toggle("notify_layer_switch")}
-            />
-          </label>
-
-          <div class="divider my-0"></div>
-
-          <!-- notify_profile_switch -->
-          <label class="flex cursor-pointer items-start justify-between gap-4">
-            <div>
-              <p class="font-medium">Profile switched</p>
-              <p class="text-sm text-base-content/60">Notify when the active profile changes.</p>
-            </div>
-            <input
-              type="checkbox"
-              class="toggle toggle-primary mt-0.5 flex-shrink-0"
-              checked={prefs.notify_profile_switch}
-              onchange={() => toggle("notify_profile_switch")}
-            />
-          </label>
-        </div>
-      </div>
-    </section>
-
-    <!-- Haptics -->
-    <section class="space-y-4">
-      <h2 class="text-sm font-semibold uppercase tracking-wider text-base-content/50">
-        Haptics
-      </h2>
-
-      <div class="card bg-base-100 shadow-sm">
-        <div class="card-body gap-4 p-4">
-          <!-- haptics_enabled -->
-          <label class="flex cursor-pointer items-start justify-between gap-4">
-            <div>
-              <p class="font-medium">Enable haptic feedback</p>
-              <p class="text-sm text-base-content/60">
-                Allow tap-mapper to send vibration patterns to connected Tap devices.
-                Disabling this overrides all per-event toggles below.
-              </p>
-            </div>
-            <input
-              type="checkbox"
-              class="toggle toggle-primary mt-0.5 flex-shrink-0"
-              checked={prefs.haptics_enabled}
-              onchange={() => toggle("haptics_enabled")}
-            />
-          </label>
-
-          <div class="divider my-0"></div>
-
-          <!-- per-event toggles (greyed when master is off) -->
-          <div class:opacity-40={!prefs.haptics_enabled} class:pointer-events-none={!prefs.haptics_enabled} class="space-y-4">
-
-            <!-- haptic_on_tap -->
+        <div class="card bg-base-100 shadow-sm">
+          <div class="card-body gap-4 p-4">
+            <!-- close_to_tray -->
             <label class="flex cursor-pointer items-start justify-between gap-4">
               <div>
-                <p class="font-medium">Vibrate on tap</p>
+                <p class="font-medium">Minimise to tray when closed</p>
                 <p class="text-sm text-base-content/60">
-                  Short pulse on every resolved tap gesture — confirms the device registered it.
-                  Off by default to avoid buzz on every keystroke.
+                  Closing the window keeps tap-mapper running in the background. Use the tray icon
+                  to show it again.
                 </p>
               </div>
               <input
                 type="checkbox"
                 class="toggle toggle-primary mt-0.5 flex-shrink-0"
-                checked={prefs.haptic_on_tap}
-                onchange={() => toggle("haptic_on_tap")}
+                checked={prefs.close_to_tray}
+                onchange={() => toggle("close_to_tray")}
               />
             </label>
 
             <div class="divider my-0"></div>
 
-            <!-- haptic_on_layer_switch -->
+            <!-- start_minimised -->
             <label class="flex cursor-pointer items-start justify-between gap-4">
               <div>
-                <p class="font-medium">Vibrate on layer switch</p>
-                <p class="text-sm text-base-content/60">Double pulse when the active layer changes.</p>
+                <p class="font-medium">Start minimised</p>
+                <p class="text-sm text-base-content/60">
+                  Launch directly to the tray without showing the main window.
+                </p>
               </div>
               <input
                 type="checkbox"
                 class="toggle toggle-primary mt-0.5 flex-shrink-0"
-                checked={prefs.haptic_on_layer_switch}
-                onchange={() => toggle("haptic_on_layer_switch")}
-              />
-            </label>
-
-            <div class="divider my-0"></div>
-
-            <!-- haptic_on_profile_switch -->
-            <label class="flex cursor-pointer items-start justify-between gap-4">
-              <div>
-                <p class="font-medium">Vibrate on profile switch</p>
-                <p class="text-sm text-base-content/60">Triple pulse when the active profile changes.</p>
-              </div>
-              <input
-                type="checkbox"
-                class="toggle toggle-primary mt-0.5 flex-shrink-0"
-                checked={prefs.haptic_on_profile_switch}
-                onchange={() => toggle("haptic_on_profile_switch")}
+                checked={prefs.start_minimised}
+                onchange={() => toggle("start_minimised")}
               />
             </label>
           </div>
         </div>
-      </div>
-    </section>
+      </section>
 
-    <!-- System -->
-    <section class="space-y-4">
-      <h2 class="text-sm font-semibold uppercase tracking-wider text-base-content/50">
-        System
-      </h2>
+      <!-- Notifications -->
+      <section class="space-y-4">
+        <h2 class="text-sm font-semibold uppercase tracking-wider text-base-content/50">
+          Notifications
+        </h2>
 
-      <div class="card bg-base-100 shadow-sm">
-        <div class="card-body gap-4 p-4">
-          <!-- start_at_login -->
-          <label class="flex cursor-pointer items-start justify-between gap-4">
-            <div>
-              <p class="font-medium">Start at system login</p>
-              <p class="text-sm text-base-content/60">
-                Automatically launch tap-mapper when you log in to your computer.
-              </p>
-            </div>
-            <input
-              type="checkbox"
-              class="toggle toggle-primary mt-0.5 flex-shrink-0"
-              checked={prefs.start_at_login}
-              onchange={() => toggle("start_at_login")}
-            />
-          </label>
+        <div class="card bg-base-100 shadow-sm">
+          <div class="card-body gap-4 p-4">
+            <!-- notify_device_connected -->
+            <label class="flex cursor-pointer items-start justify-between gap-4">
+              <div>
+                <p class="font-medium">Device connected</p>
+                <p class="text-sm text-base-content/60">Notify when a Tap device connects.</p>
+              </div>
+              <input
+                type="checkbox"
+                class="toggle toggle-primary mt-0.5 flex-shrink-0"
+                checked={prefs.notify_device_connected}
+                onchange={() => toggle("notify_device_connected")}
+              />
+            </label>
+
+            <div class="divider my-0"></div>
+
+            <!-- notify_device_disconnected -->
+            <label class="flex cursor-pointer items-start justify-between gap-4">
+              <div>
+                <p class="font-medium">Device disconnected</p>
+                <p class="text-sm text-base-content/60">Notify when a Tap device disconnects.</p>
+              </div>
+              <input
+                type="checkbox"
+                class="toggle toggle-primary mt-0.5 flex-shrink-0"
+                checked={prefs.notify_device_disconnected}
+                onchange={() => toggle("notify_device_disconnected")}
+              />
+            </label>
+
+            <div class="divider my-0"></div>
+
+            <!-- notify_layer_switch -->
+            <label class="flex cursor-pointer items-start justify-between gap-4">
+              <div>
+                <p class="font-medium">Layer switched</p>
+                <p class="text-sm text-base-content/60">
+                  Notify when the active layer changes. Off by default to avoid noise with frequent
+                  layer switches.
+                </p>
+              </div>
+              <input
+                type="checkbox"
+                class="toggle toggle-primary mt-0.5 flex-shrink-0"
+                checked={prefs.notify_layer_switch}
+                onchange={() => toggle("notify_layer_switch")}
+              />
+            </label>
+
+            <div class="divider my-0"></div>
+
+            <!-- notify_profile_switch -->
+            <label class="flex cursor-pointer items-start justify-between gap-4">
+              <div>
+                <p class="font-medium">Profile switched</p>
+                <p class="text-sm text-base-content/60">Notify when the active profile changes.</p>
+              </div>
+              <input
+                type="checkbox"
+                class="toggle toggle-primary mt-0.5 flex-shrink-0"
+                checked={prefs.notify_profile_switch}
+                onchange={() => toggle("notify_profile_switch")}
+              />
+            </label>
+          </div>
         </div>
-      </div>
-    </section>
+      </section>
+
+      <!-- Haptics -->
+      <section class="space-y-4">
+        <h2 class="text-sm font-semibold uppercase tracking-wider text-base-content/50">Haptics</h2>
+
+        <div class="card bg-base-100 shadow-sm">
+          <div class="card-body gap-4 p-4">
+            <!-- haptics_enabled -->
+            <label class="flex cursor-pointer items-start justify-between gap-4">
+              <div>
+                <p class="font-medium">Enable haptic feedback</p>
+                <p class="text-sm text-base-content/60">
+                  Allow tap-mapper to send vibration patterns to connected Tap devices. Disabling
+                  this overrides all per-event toggles below.
+                </p>
+              </div>
+              <input
+                type="checkbox"
+                class="toggle toggle-primary mt-0.5 flex-shrink-0"
+                checked={prefs.haptics_enabled}
+                onchange={() => toggle("haptics_enabled")}
+              />
+            </label>
+
+            <div class="divider my-0"></div>
+
+            <!-- per-event toggles (greyed when master is off) -->
+            <div
+              class:opacity-40={!prefs.haptics_enabled}
+              class:pointer-events-none={!prefs.haptics_enabled}
+              class="space-y-4"
+            >
+              <!-- haptic_on_tap -->
+              <label class="flex cursor-pointer items-start justify-between gap-4">
+                <div>
+                  <p class="font-medium">Vibrate on tap</p>
+                  <p class="text-sm text-base-content/60">
+                    Short pulse on every resolved tap gesture — confirms the device registered it.
+                    Off by default to avoid buzz on every keystroke.
+                  </p>
+                </div>
+                <input
+                  type="checkbox"
+                  class="toggle toggle-primary mt-0.5 flex-shrink-0"
+                  checked={prefs.haptic_on_tap}
+                  onchange={() => toggle("haptic_on_tap")}
+                />
+              </label>
+
+              <div class="divider my-0"></div>
+
+              <!-- haptic_on_layer_switch -->
+              <label class="flex cursor-pointer items-start justify-between gap-4">
+                <div>
+                  <p class="font-medium">Vibrate on layer switch</p>
+                  <p class="text-sm text-base-content/60">
+                    Double pulse when the active layer changes.
+                  </p>
+                </div>
+                <input
+                  type="checkbox"
+                  class="toggle toggle-primary mt-0.5 flex-shrink-0"
+                  checked={prefs.haptic_on_layer_switch}
+                  onchange={() => toggle("haptic_on_layer_switch")}
+                />
+              </label>
+
+              <div class="divider my-0"></div>
+
+              <!-- haptic_on_profile_switch -->
+              <label class="flex cursor-pointer items-start justify-between gap-4">
+                <div>
+                  <p class="font-medium">Vibrate on profile switch</p>
+                  <p class="text-sm text-base-content/60">
+                    Triple pulse when the active profile changes.
+                  </p>
+                </div>
+                <input
+                  type="checkbox"
+                  class="toggle toggle-primary mt-0.5 flex-shrink-0"
+                  checked={prefs.haptic_on_profile_switch}
+                  onchange={() => toggle("haptic_on_profile_switch")}
+                />
+              </label>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- System -->
+      <section class="space-y-4">
+        <h2 class="text-sm font-semibold uppercase tracking-wider text-base-content/50">System</h2>
+
+        <div class="card bg-base-100 shadow-sm">
+          <div class="card-body gap-4 p-4">
+            <!-- start_at_login -->
+            <label class="flex cursor-pointer items-start justify-between gap-4">
+              <div>
+                <p class="font-medium">Start at system login</p>
+                <p class="text-sm text-base-content/60">
+                  Automatically launch tap-mapper when you log in to your computer.
+                </p>
+              </div>
+              <input
+                type="checkbox"
+                class="toggle toggle-primary mt-0.5 flex-shrink-0"
+                checked={prefs.start_at_login}
+                onchange={() => toggle("start_at_login")}
+              />
+            </label>
+          </div>
+        </div>
+      </section>
     {/if}
     <!-- ── End desktop-only sections ────────────────────────────────────────── -->
 
     <!-- ── Android-only sections ──────────────────────────────────────────── -->
     {#if isAndroid && androidPrefs}
-
       <!-- Accessibility -->
       <section class="space-y-4">
         <h2 class="text-sm font-semibold uppercase tracking-wider text-base-content/50">
@@ -417,10 +419,14 @@
             <div class="divider my-0"></div>
 
             <div class="rounded bg-base-200 p-3 text-xs text-base-content/60 space-y-1">
-              <p><strong>Banking and secure apps:</strong> Key injection is blocked by apps that
-              set <code>FLAG_SECURE</code>. This is intentional security behaviour.</p>
-              <p><strong>API 26–27:</strong> Key injection requires Android 9 (API 28).
-              On older versions, keys will not be dispatched.</p>
+              <p>
+                <strong>Banking and secure apps:</strong> Key injection is blocked by apps that set
+                <code>FLAG_SECURE</code>. This is intentional security behaviour.
+              </p>
+              <p>
+                <strong>API 26–27:</strong> Key injection requires Android 9 (API 28). On older versions,
+                keys will not be dispatched.
+              </p>
             </div>
           </div>
         </div>
@@ -437,8 +443,8 @@
               <div>
                 <p class="font-medium">Battery optimisation</p>
                 <p class="text-sm text-base-content/60">
-                  Disabling battery optimisation prevents Android from killing MapXr when it
-                  runs in the background.
+                  Disabling battery optimisation prevents Android from killing MapXr when it runs in
+                  the background.
                 </p>
                 <p class="mt-1 text-sm">
                   {#if batteryExemptionGranted}
@@ -476,50 +482,47 @@
           </div>
         </div>
       </section>
-
     {/if}
     <!-- ── End Android sections ──────────────────────────────────────────────── -->
 
     <!-- Updates (desktop only — check_for_update command not available on Android) -->
     {#if !isAndroid}
-    <section class="space-y-4">
-      <h2 class="text-sm font-semibold uppercase tracking-wider text-base-content/50">
-        Updates
-      </h2>
+      <section class="space-y-4">
+        <h2 class="text-sm font-semibold uppercase tracking-wider text-base-content/50">Updates</h2>
 
-      <div class="card bg-base-100 shadow-sm">
-        <div class="card-body gap-3 p-4">
-          <div class="flex items-center justify-between gap-4">
-            <div>
-              <p class="font-medium">Check for updates</p>
-              <p class="text-sm text-base-content/60">
-                MapXr checks automatically on launch and every 24 hours.
-              </p>
+        <div class="card bg-base-100 shadow-sm">
+          <div class="card-body gap-3 p-4">
+            <div class="flex items-center justify-between gap-4">
+              <div>
+                <p class="font-medium">Check for updates</p>
+                <p class="text-sm text-base-content/60">
+                  MapXr checks automatically on launch and every 24 hours.
+                </p>
+              </div>
+              <button
+                class="btn btn-outline btn-sm flex-shrink-0"
+                onclick={manualCheckForUpdate}
+                disabled={checkingForUpdate}
+              >
+                {#if checkingForUpdate}
+                  <span class="loading loading-spinner loading-xs"></span>
+                  Checking…
+                {:else}
+                  Check now
+                {/if}
+              </button>
             </div>
-            <button
-              class="btn btn-outline btn-sm flex-shrink-0"
-              onclick={manualCheckForUpdate}
-              disabled={checkingForUpdate}
-            >
-              {#if checkingForUpdate}
-                <span class="loading loading-spinner loading-xs"></span>
-                Checking…
-              {:else}
-                Check now
-              {/if}
-            </button>
-          </div>
 
-          {#if updateCheckResult === "up-to-date"}
-            <p class="text-sm text-success">MapXr is up to date.</p>
-          {:else if updateCheckResult === "found" && updateStore.available}
-            <p class="text-sm text-info">
-              Version {updateStore.available.version} is available — see the banner above.
-            </p>
-          {/if}
+            {#if updateCheckResult === "up-to-date"}
+              <p class="text-sm text-success">MapXr is up to date.</p>
+            {:else if updateCheckResult === "found" && updateStore.available}
+              <p class="text-sm text-info">
+                Version {updateStore.available.version} is available — see the banner above.
+              </p>
+            {/if}
+          </div>
         </div>
-      </div>
-    </section>
+      </section>
     {/if}
   {/if}
 </div>
@@ -528,10 +531,16 @@
 <AccessibilitySetupPrompt
   open={accessibilityPromptOpen}
   onClose={() => (accessibilityPromptOpen = false)}
-  onDone={async () => { accessibilityPromptOpen = false; await refreshAndroidStatus(); }}
+  onDone={async () => {
+    accessibilityPromptOpen = false;
+    await refreshAndroidStatus();
+  }}
 />
 <BatterySetupWizard
   open={batteryWizardOpen}
   onClose={() => (batteryWizardOpen = false)}
-  onDone={async () => { batteryWizardOpen = false; await refreshAndroidStatus(); }}
+  onDone={async () => {
+    batteryWizardOpen = false;
+    await refreshAndroidStatus();
+  }}
 />

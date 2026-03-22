@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { SvelteSet } from "svelte/reactivity";
   import { debugStore } from "$lib/stores/debug.svelte";
   import { engineStore } from "$lib/stores/engine.svelte";
   import { setDebugMode } from "$lib/commands";
@@ -22,16 +23,14 @@
 
   // ── Event type filter (task 7.11) ─────────────────────────────────────────
 
-  let enabledKinds = $state(new Set<string>(["resolved", "unmatched", "combo_timeout"]));
+  let enabledKinds = new SvelteSet<string>(["resolved", "unmatched", "combo_timeout"]);
 
   function toggleKind(kind: string) {
-    const next = new Set(enabledKinds);
-    if (next.has(kind)) {
-      next.delete(kind);
+    if (enabledKinds.has(kind)) {
+      enabledKinds.delete(kind);
     } else {
-      next.add(kind);
+      enabledKinds.add(kind);
     }
-    enabledKinds = next;
   }
 
   // ── Pause / resume (task 7.12) ────────────────────────────────────────────
@@ -65,9 +64,7 @@
   // ── Rendered list (filtered + possibly frozen) ────────────────────────────
 
   let displayEvents = $derived(
-    (paused ? pausedSnapshot : debugStore.debugEvents).filter((e) =>
-      enabledKinds.has(e.kind),
-    ),
+    (paused ? pausedSnapshot : debugStore.debugEvents).filter((e) => enabledKinds.has(e.kind))
   );
 
   // ── Clear (task 7.13) ─────────────────────────────────────────────────────
@@ -99,7 +96,7 @@
   }
 </script>
 
-<div class="flex flex-col h-full gap-4">
+<div class="flex flex-col h-full max-w-2xl m-auto gap-4">
   <!-- Toolbar -->
   <div class="flex items-center gap-3 flex-wrap">
     <h1 class="text-lg font-bold mr-2">Debug</h1>
@@ -119,15 +116,11 @@
 
     <!-- Filter buttons (task 7.11) -->
     <div class="join">
-      {#each ([
-        { kind: "resolved",      label: "Resolved",      cls: "btn-success" },
-        { kind: "unmatched",     label: "Unmatched",     cls: "btn-warning" },
-        { kind: "combo_timeout", label: "Combo timeout", cls: "btn-error"   },
-      ] as const) as f}
+      {#each [{ kind: "resolved", label: "Resolved", cls: "btn-success" }, { kind: "unmatched", label: "Unmatched", cls: "btn-warning" }, { kind: "combo_timeout", label: "Combo timeout", cls: "btn-error" }] as const as f (f.kind)}
         <button
           class="join-item btn btn-xs {enabledKinds.has(f.kind) ? f.cls : 'btn-ghost opacity-50'}"
-          onclick={() => toggleKind(f.kind)}
-        >{f.label}</button>
+          onclick={() => toggleKind(f.kind)}>{f.label}</button
+        >
       {/each}
     </div>
 
@@ -140,15 +133,15 @@
     <button
       class="btn btn-sm btn-ghost"
       onclick={handleClear}
-      disabled={debugStore.debugEvents.length === 0}
-    >Clear</button>
+      disabled={debugStore.debugEvents.length === 0}>Clear</button
+    >
 
     <!-- Export (task 7.14) -->
     <button
       class="btn btn-sm btn-ghost"
       onclick={exportEvents}
-      disabled={debugStore.debugEvents.length === 0}
-    >Export</button>
+      disabled={debugStore.debugEvents.length === 0}>Export</button
+    >
   </div>
 
   <!-- Paused indicator -->
@@ -173,15 +166,14 @@
         {engineStore.debugMode ? "No events yet." : "Debug mode is off."}
       </p>
     {:else}
-      {#each displayEvents as event}
-
+      {#each displayEvents as event, i (i)}
         <!-- Resolved event (task 7.8) -->
         {#if event.kind === "resolved"}
           <div class="card bg-base-100 shadow-sm border-l-4 border-success">
             <div class="card-body p-3 space-y-2">
               <div class="flex items-start gap-3 flex-wrap">
                 <FingerPattern code={event.pattern} readonly showLabels={false} />
-                <div class="flex-1 min-w-0 space-y-1">
+                <div class="flex-1 min-w-50 space-y-1">
                   <div class="flex items-center gap-2 flex-wrap">
                     <span class="badge badge-success badge-sm">resolved</span>
                     <span class="badge badge-ghost badge-sm">{event.device}</span>
@@ -221,13 +213,13 @@
             </div>
           </div>
 
-        <!-- Unmatched event (task 7.9) -->
+          <!-- Unmatched event (task 7.9) -->
         {:else if event.kind === "unmatched"}
           <div class="card bg-base-100 shadow-sm border-l-4 border-warning">
             <div class="card-body p-3">
               <div class="flex items-start gap-3 flex-wrap">
                 <FingerPattern code={event.pattern} readonly showLabels={false} />
-                <div class="flex-1 min-w-0 space-y-1">
+                <div class="flex-1 min-w-50 space-y-1">
                   <div class="flex items-center gap-2 flex-wrap">
                     <span class="badge badge-warning badge-sm">no match</span>
                     <span class="badge badge-ghost badge-sm">{event.device}</span>
@@ -240,7 +232,7 @@
             </div>
           </div>
 
-        <!-- Combo timeout event (task 7.10) -->
+          <!-- Combo timeout event (task 7.10) -->
         {:else if event.kind === "combo_timeout"}
           <div class="card bg-base-100 shadow-sm border-l-4 border-error">
             <div class="card-body p-3 space-y-2">
@@ -262,7 +254,7 @@
               {#if true}
                 {@const windowPct = Math.min(
                   (event.combo_window_ms / event.actual_gap_ms) * 100,
-                  100,
+                  100
                 )}
                 <div class="space-y-0.5">
                   <div class="flex justify-between text-xs">
@@ -278,7 +270,6 @@
             </div>
           </div>
         {/if}
-
       {/each}
     {/if}
   </div>

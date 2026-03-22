@@ -74,7 +74,7 @@
       // Record wizard completion in preferences.json.
       const prefs = await getAndroidPreferences();
       await saveAndroidPreferences({ ...prefs, battery_setup_done: true });
-    } catch (_) {
+    } catch {
       // Non-fatal — completion is advisory.
     }
     onDone?.();

@@ -32,7 +32,7 @@
         onClose();
         return;
       }
-    } catch (_) {
+    } catch {
       // If we can't read prefs, skip onboarding gracefully.
       onClose();
       return;

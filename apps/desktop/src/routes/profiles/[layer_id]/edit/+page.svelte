@@ -2,9 +2,9 @@
   import { page } from "$app/stores";
   import { goto, beforeNavigate } from "$app/navigation";
   import { onMount, onDestroy } from "svelte";
+  import { SvelteSet } from "svelte/reactivity";
   import { loadProfile, saveProfile } from "$lib/commands";
   import { profileStore } from "$lib/stores/profile.svelte";
-  import { engineStore } from "$lib/stores/engine.svelte";
   import ActionEditor from "$lib/components/ActionEditor.svelte";
   import FingerPattern from "$lib/components/FingerPattern.svelte";
   import TriggerSummary from "$lib/components/TriggerSummary.svelte";
@@ -16,10 +16,8 @@
   import type {
     Profile,
     Mapping,
-    MappingCondition,
     Trigger,
     Action,
-    VariableValue,
   } from "$lib/types";
 
   // ── Load ─────────────────────────────────────────────────────────────────
@@ -91,8 +89,6 @@
   // ── Mapping list (5.18–5.22) ──────────────────────────────────────────────
 
   let selectedMappingIdx = $state<number | null>(null);
-  /** Index pending soft-delete with undo. */
-  let pendingDeleteIdx = $state<number | null>(null);
   let pendingDeleteTimer = $state<ReturnType<typeof setTimeout> | null>(null);
   /** Soft-deleted mapping kept for undo. */
   let deletedMapping = $state<{ mapping: Mapping; index: number } | null>(null);
@@ -275,8 +271,9 @@
 
   function deleteAlias(name: string) {
     if (!profile) return;
-    const { [name]: _, ...rest } = profile.aliases;
-    profile.aliases = rest;
+    const aliases = { ...profile.aliases };
+    delete aliases[name];
+    profile.aliases = aliases;
     if (editingAlias === name) editingAlias = null;
   }
 
@@ -299,16 +296,17 @@
 
   function deleteVariable(name: string) {
     if (!profile) return;
-    const { [name]: _, ...rest } = profile.variables;
-    profile.variables = rest;
+    const variables = { ...profile.variables };
+    delete variables[name];
+    profile.variables = variables;
   }
 
   /** Variable names referenced in mappings but not defined in variables. */
   let undefinedVariables = $derived(
     (() => {
       if (!profile) return [] as string[];
-      const defined = new Set(Object.keys(profile.variables));
-      const referenced = new Set<string>();
+      const defined = new SvelteSet(Object.keys(profile.variables));
+      const referenced = new SvelteSet<string>();
       function scan(action: Action) {
         if (action.type === "toggle_variable") { referenced.add(action.variable); scan(action.on_true); scan(action.on_false); }
         if (action.type === "set_variable") referenced.add(action.variable);
@@ -388,7 +386,7 @@
 
     <!-- Tabs -->
     <div class="tabs tabs-bordered">
-      {#each ["mappings", "settings", "aliases", "variables", "lifecycle"] as const as tab}
+      {#each ["mappings", "settings", "aliases", "variables", "lifecycle"] as const as tab (tab)}
         <button
           class="tab {activeTab === tab ? 'tab-active' : ''}"
           onclick={() => (activeTab = tab)}
@@ -419,7 +417,7 @@
                 </tr>
               </thead>
               <tbody class="{dragIndex !== null ? 'select-none cursor-grabbing' : ''}">
-                {#each profile.mappings as mapping, i}
+                {#each profile.mappings as mapping, i (i)}
                   <tr
                     data-mapping-idx={i}
                     class="cursor-pointer hover:bg-base-200
@@ -545,7 +543,7 @@
                             {#if mapping.trigger.type === "sequence"}
                               <div class="space-y-2">
                                 <p class="label-text text-xs">Steps</p>
-                                {#each mapping.trigger.steps as step, si}
+                                {#each mapping.trigger.steps as step, si (si)}
                                   <div class="flex items-center gap-2">
                                     <span class="text-xs text-base-content/50 w-4">{si + 1}.</span>
                                     <FingerPattern
@@ -662,7 +660,7 @@
                                   })}
                                 >
                                   <option value="">— select variable —</option>
-                                  {#each Object.keys(profile.variables) as v}
+                                  {#each Object.keys(profile.variables) as v (v)}
                                     <option value={v}>{v}</option>
                                   {/each}
                                 </select>
@@ -700,7 +698,7 @@
     {:else if activeTab === "settings"}
       <div class="card bg-base-100 shadow">
         <div class="card-body space-y-4">
-          {#each [{ field: "combo_window_ms", label: "Combo window (ms)", hint: "Cross-device chord detection window. Dual profiles only.", default: 80 }, { field: "double_tap_window_ms", label: "Double-tap window (ms)", hint: "Max time between first and second tap.", default: 250 }, { field: "triple_tap_window_ms", label: "Triple-tap window (ms)", hint: "Max time from first to third tap.", default: 400 }, { field: "sequence_window_ms", label: "Sequence step timeout (ms)", hint: "Max gap between consecutive sequence steps.", default: 500 }] as const as row}
+          {#each ([{ field: "combo_window_ms", label: "Combo window (ms)", hint: "Cross-device chord detection window. Dual profiles only.", default: 80 }, { field: "double_tap_window_ms", label: "Double-tap window (ms)", hint: "Max time between first and second tap.", default: 250 }, { field: "triple_tap_window_ms", label: "Triple-tap window (ms)", hint: "Max time from first to third tap.", default: 400 }, { field: "sequence_window_ms", label: "Sequence step timeout (ms)", hint: "Max gap between consecutive sequence steps.", default: 500 }] as const) as row (row.field)}
             <label class="form-control">
               <div class="label">
                 <span class="label-text">{row.label}</span>
@@ -746,7 +744,7 @@
         {#if Object.keys(profile.aliases).length === 0 && !editingAlias}
           <p class="text-sm text-base-content/50 py-2">No aliases defined.</p>
         {:else}
-          {#each Object.entries(profile.aliases) as [name, action]}
+          {#each Object.entries(profile.aliases) as [name, action] (name)}
             <div class="card bg-base-100 shadow">
               <div class="card-body py-3 space-y-2">
                 <div class="flex items-center justify-between">
@@ -824,7 +822,7 @@
             <table class="table table-sm">
               <thead><tr><th>Name</th><th>Type</th><th>Initial value</th><th></th></tr></thead>
               <tbody>
-                {#each Object.entries(profile.variables) as [name, value]}
+                {#each Object.entries(profile.variables) as [name, value] (name)}
                   <tr>
                     <td class="font-mono">{name}</td>
                     <td

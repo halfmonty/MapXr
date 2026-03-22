@@ -1,12 +1,14 @@
 <script lang="ts">
+  import type { Snippet } from "svelte";
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import { browser } from "$app/environment";
 
   interface Props {
     title: string;
+    leading?: Snippet;
   }
 
-  let { title }: Props = $props();
+  let { title, leading }: Props = $props();
 
   const appWindow = getCurrentWindow();
 
@@ -41,10 +43,15 @@
   class="flex h-9 w-full flex-shrink-0 select-none items-center justify-between
          border-b border-base-300 bg-base-100"
 >
+  <!-- Optional leading content (e.g. hamburger menu on mobile) -->
+  {#if leading}
+    {@render leading()}
+  {/if}
+
   <!-- Title -->
   <span
     data-tauri-drag-region
-    class="pointer-events-none truncate pl-4 text-sm font-medium text-base-content/60"
+    class="pointer-events-none flex-1 truncate {leading ? 'pl-2' : 'pl-4'} text-sm font-medium text-base-content/60"
   >
     {title}
   </span>

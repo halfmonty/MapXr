@@ -54,7 +54,7 @@
     try {
       const prefs = await getAndroidPreferences();
       await saveAndroidPreferences({ ...prefs, accessibility_setup_done: true });
-    } catch (_) {
+    } catch {
       // Non-fatal — completion is advisory.
     }
     onDone?.();
