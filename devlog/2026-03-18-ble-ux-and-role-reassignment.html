@@ -14,16 +14,16 @@
                 stored ?? (prefersDark ? "business" : "corporate"),
             );
         </script>
-        <link href="../_app/immutable/entry/start.C52J93SD.js" rel="modulepreload">
+        <link href="../_app/immutable/entry/start.D5EpkWL7.js" rel="modulepreload">
 		<link href="../_app/immutable/chunks/CGwnShg4.js" rel="modulepreload">
-		<link href="../_app/immutable/chunks/CyUtBfIa.js" rel="modulepreload">
-		<link href="../_app/immutable/entry/app.CFdIDFkL.js" rel="modulepreload">
+		<link href="../_app/immutable/chunks/DF5kQQXa.js" rel="modulepreload">
+		<link href="../_app/immutable/entry/app.rs_CnH5O.js" rel="modulepreload">
 		<link href="../_app/immutable/chunks/CFKVnMbq.js" rel="modulepreload">
-		<link href="../_app/immutable/nodes/0.C93o40Xj.js" rel="modulepreload">
+		<link href="../_app/immutable/nodes/0.5N-bQup8.js" rel="modulepreload">
 		<link href="../_app/immutable/chunks/D40A1Rfp.js" rel="modulepreload">
-		<link href="../_app/immutable/nodes/4.D1uorAE_.js" rel="modulepreload">
-		<link href="../_app/immutable/chunks/Dijf7hSe.js" rel="modulepreload">
-		<link href="../_app/immutable/chunks/D8tjqQzh.js" rel="modulepreload">
+		<link href="../_app/immutable/nodes/4.0lrmYtrC.js" rel="modulepreload">
+		<link href="../_app/immutable/chunks/C6RGsjzH.js" rel="modulepreload">
+		<link href="../_app/immutable/chunks/gFhHgSfH.js" rel="modulepreload">
 		<!--170evqy--><meta name="description" content="Improved scan UX with seen/paired/cached device states and stale-RSSI fixes. Added connected device name persistence. Seeded a starter profile on first launch. Renamed reference docs. Implemented live device role reassignment without disconnecting."/> <meta property="og:title" content="BLE UX polish, starter profiles, and live role reassignment — MapXr Devlog"/> <meta property="og:description" content="Improved scan UX with seen/paired/cached device states and stale-RSSI fixes. Added connected device name persistence. Seeded a starter profile on first launch. Renamed reference docs. Implemented live device role reassignment without disconnecting."/><!----><title>BLE UX polish, starter profiles, and live role reassignment — MapXr Devlog</title>
 		<link href="../_app/immutable/assets/0.BdFf_rzI.css" rel="stylesheet">
     </head>
@@ -32,28 +32,28 @@
   but noticeable rough edges in the device-management flow got addressed, a quality-of-life
   improvement was shipped for connected device handling, and the reference docs got a long-overdue
   rename pass.</p> <h2>BLE scan UX: cached devices, stale RSSI, and the "Paired" state</h2> <p>The scan list was showing stale data in a few scenarios that were easy to reproduce but annoying
-  to diagnose. Three distinct device states needed to be tracked and displayed differently:</p> <ul><li><strong>Seen in scan</strong> — the device was actively advertising during the scan window.
-    Shows a signal-strength badge (Strong / Good / Fair / Weak) and the Connect button is enabled.</li> <li><strong>Paired</strong> — the device has an active BLE connection to the OS (BlueZ, Windows
+  to diagnose. Three distinct device states needed to be tracked and displayed differently:</p> <ul><li><strong>Seen in scan:</strong> the device was actively advertising during the scan window.
+    Shows a signal-strength badge (Strong / Good / Fair / Weak) and the Connect button is enabled.</li> <li><strong>Paired:</strong> the device has an active BLE connection to the OS (BlueZ, Windows
     Bluetooth stack, etc.). The OS clears RSSI for connected peripherals and they stop advertising,
     so no signal reading is available. These show a "Paired" badge and Connect remains enabled so
-    the user can take over the connection from the OS.</li> <li><strong>Cached</strong> — the device is in the OS Bluetooth cache from a previous scan but was
+    the user can take over the connection from the OS.</li> <li><strong>Cached:</strong> the device is in the OS Bluetooth cache from a previous scan but was
     not seen this time. It is likely off or out of range. Shows a greyed-out "Cached" badge and
     Connect is disabled.</li></ul> <p>The Linux path had an extra wrinkle. After a device is connected and then disconnected, BlueZ
   clears its RSSI entry. On the next scan the device's first <code>PropertiesChanged</code> signal
   can arrive after the scan event-loop deadline, leaving the RSSI map empty even though the device
   is genuinely present. The fix is a pre-scan RSSI snapshot taken via <code>get_devices()</code> before <code>start_discovery</code>. If RSSI was absent pre-scan (cleared by the prior
-  connection) and is present post-scan, the device counts as seen.</p> <p>Two new fields were added to <code>TapDeviceInfo</code> — <code>seen_in_scan</code> and <code>is_connected_to_os</code> — and propagated through the DTO, TypeScript types, and
-  Svelte UI.</p> <h2>Connected device name display</h2> <p>Previously the connected-devices panel showed only the role and address — the human-readable
+  connection) and is present post-scan, the device counts as seen.</p> <p>Two new fields were added to <code>TapDeviceInfo</code> (<code>seen_in_scan</code> and <code>is_connected_to_os</code>) and propagated through the DTO, TypeScript types, and
+  Svelte UI.</p> <h2>Connected device name display</h2> <p>Previously the connected-devices panel showed only the role and address. The human-readable
   device name (e.g. "TapXR_A0363") was lost the moment you clicked Connect.</p> <p>The fix has two parts. First, the name is captured from the scan result <em>before</em> the <code>await connectDevice(...)</code> call, not after. After the await, the Tauri <code>device-connected</code> event has already fired, which reactively removes the device from <code>availableDevices</code> (the filtered scan list). Looking up the name after the await
   therefore finds nothing.</p> <p>Second, names are persisted to <code>localStorage</code> under <code>mapxr:device-names</code> as
   an address → name map. On app restart, the auto-reconnect loop fires <code>device-connected</code> events with no UI interaction, so <code>setName</code> is never called. Loading from storage on <code>DeviceStore</code> construction means reconnect events immediately resolve the correct name.</p> <h2>Starter profile seeding on first launch</h2> <p>New installations had no profiles and no obvious way to get started. A <code>starter-right.json</code> profile with 15 right-hand single-finger mappings (copy, paste,
   undo, save, arrow navigation, etc.) is now embedded in the binary via <code>include_str!</code> and seeded into the OS config directory on first launch.</p> <p>Seeding is a no-op if any <code>.json</code> file already exists in the config dir, so existing
   users and developers with their own profiles are unaffected.</p> <h2>Reference docs reorganisation</h2> <p>The <code>docs/reference/</code> directory had accumulated six files with names that didn't
-  reflect their contents. Most notably, <code>other-uuids.txt</code> — which is actually the best
-  annotated GATT characteristic map in the project — got renamed to <code>gatt-characteristics.txt</code>. The full rename list:</p> <ul><li><code>api-doc.txt</code> → <code>tap-ble-api.txt</code></li> <li><code>other-uuids.txt</code> → <code>gatt-characteristics.txt</code></li> <li><code>gatt-output.txt</code> → <code>gatt-probe-output.txt</code></li> <li><code>windows-sdk-guid-reference.txt</code> → <code>windows-sdk-guids.cs</code> (it's C# source; now syntax-highlighted in editors)</li> <li><code>gettingfirmware.txt</code> → <code>firmware-update-aws.txt</code></li></ul> <h2>Live role reassignment without disconnecting</h2> <p>The most substantial change today: you can now change a connected device's role (solo → left,
+  reflect their contents. Most notably, <code>other-uuids.txt</code> (which is actually the best
+  annotated GATT characteristic map in the project) got renamed to <code>gatt-characteristics.txt</code>. The full rename list:</p> <ul><li><code>api-doc.txt</code> → <code>tap-ble-api.txt</code></li> <li><code>other-uuids.txt</code> → <code>gatt-characteristics.txt</code></li> <li><code>gatt-output.txt</code> → <code>gatt-probe-output.txt</code></li> <li><code>windows-sdk-guid-reference.txt</code> → <code>windows-sdk-guids.cs</code> (it's C# source; now syntax-highlighted in editors)</li> <li><code>gettingfirmware.txt</code> → <code>firmware-update-aws.txt</code></li></ul> <h2>Live role reassignment without disconnecting</h2> <p>The most substantial change today: you can now change a connected device's role (solo → left,
   left → right, etc.) without disconnecting and reconnecting. Previously this was the only way to
   reassign, which meant exiting controller mode, dropping the BLE connection, waiting for the OS to
-  release the connection slot, scanning again, and reconnecting.</p> <p>The key insight is that <code>DeviceId</code> (the role) is just a label — it gets stamped onto <code>RawTapEvent</code>s and onto <code>BleStatusEvent</code> notifications, but the underlying
+  release the connection slot, scanning again, and reconnecting.</p> <p>The key insight is that <code>DeviceId</code> (the role) is just a label. It gets stamped onto <code>RawTapEvent</code>s and onto <code>BleStatusEvent</code> notifications, but the underlying
   BLE connection, GATT characteristic handles, controller mode, and notification subscription are
   all properties of the <code>btleplug</code> <code>Peripheral</code> object and don't care about
   the role at all.</p> <p>The complication is that the role is captured by value in three background tasks spawned at
@@ -62,14 +62,14 @@
   then respawning all three tasks with the new <code>DeviceId</code>.</p> <p><code>BleManager::reassign_role()</code> moves the entry in the connected map, calls <code>reassign()</code>, then emits <code>BleStatusEvent::Disconnected</code> (old role) followed
   by <code>BleStatusEvent::Connected</code> (new role). The existing Tauri event pump picks these
   up and pushes <code>device-disconnected</code> / <code>device-connected</code> events to the
-  frontend — no new plumbing required.</p> <p>On the UI side, the connected-devices table now shows solo / left / right role buttons inline on
+  frontend. No new plumbing required.</p> <p>On the UI side, the connected-devices table now shows solo / left / right role buttons inline on
   each row. A role button is disabled if it is the device's current role, or if that role is
   already occupied by another connected device. This prevents conflicts entirely in the UI rather
   than returning an error from the backend.</p><!--]--></article><!--]--></div><!--]--><!----></div> <footer class="footer footer-center bg-base-200 text-base-content p-6 mt-auto border-t border-base-300"><aside><p class="font-bold"><span class="text-primary">Map</span>Xr</p> <p class="text-sm text-base-content/60">Map your TAP Strap to anything — keyboard shortcuts, app controls, custom macros.</p> <p class="text-xs text-base-content/40 mt-2">MIT License · Built with Svelte 5 + Tauri + Rust</p> <a href="https://www.buymeacoffee.com/halfmonty" target="_blank" rel="noreferrer" class="text-xs text-base-content/50 hover:text-primary transition-colors mt-2">☕ Buy me a coffee</a> <p class="text-xs text-base-content/30 mt-1">TAP Strap and TapXr are a product of <a href="https://www.tapwithus.com" target="_blank" rel="noreferrer" class="underline hover:text-base-content/50">Tap Systems Inc.</a> MapXr is an independent project and is not affiliated with or endorsed by Tap Systems Inc.</p></aside></footer><!----></div><!--]--><!--]--> <!--[-1--><!--]--><!--]-->
 			
 			<script>
 				{
-					__sveltekit_14k5p3t = {
+					__sveltekit_vmh3tj = {
 						base: new URL("..", location).pathname.slice(0, -1),
 						assets: "/mapxr"
 					};
@@ -77,8 +77,8 @@
 					const element = document.currentScript.parentElement;
 
 					Promise.all([
-						import("../_app/immutable/entry/start.C52J93SD.js"),
-						import("../_app/immutable/entry/app.CFdIDFkL.js")
+						import("../_app/immutable/entry/start.D5EpkWL7.js"),
+						import("../_app/immutable/entry/app.rs_CnH5O.js")
 					]).then(([kit, app]) => {
 						kit.start(app, element, {
 							node_ids: [0, 4],

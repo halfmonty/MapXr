@@ -1,0 +1,259 @@
+import{$ as e,C as t,D as n,I as r,J as i,L as a,N as o,Q as s,R as c,S as l,U as u,Y as d,_ as f,b as p,et as m,h,j as ee,m as g,u as _,v,x as y,y as b,z as x}from"../chunks/CGwnShg4.js";import{s as S}from"../chunks/DF5kQQXa.js";import"../chunks/CFKVnMbq.js";import"../chunks/D40A1Rfp.js";import{t as C}from"../chunks/gFhHgSfH.js";import{t as w}from"../chunks/C6RGsjzH.js";var T=m({entries:()=>E,load:()=>D});function E(){return C.map(e=>({slug:e.slug}))}function D({params:e}){let t=C.find(t=>t.slug===e.slug);return t||w(404,`Post not found`),{entry:t}}var O=m({default:()=>A}),k=t(`<h1>Core types and JSON schema</h1> <p>The first real session on MapXr after the initial project setup. The goal was to define the
+  complete data model that everything else would build on. Get this right and the rest follows
+  naturally; get it wrong and every subsequent layer pays the price.</p> <h2>The type hierarchy</h2> <p>The core model is intentionally flat and serialization-first. Everything is designed to round-trip
+  cleanly through <code>serde_json</code>:</p> <ul><li><strong>TapCode:</strong> a 5-bit finger mask (one bit per finger, thumb to pinky) plus a device identifier. This is the raw event the BLE layer emits.</li> <li><strong>Trigger:</strong> a single, double, or cross-device combo specification. Wraps one or two TapCodes with timing semantics.</li> <li><strong>Action:</strong> what happens when a trigger fires. An enum covering key output, text typing, mouse, layer switching, and hold_modifier.</li> <li><strong>Mapping:</strong> a (Trigger, Action) pair.</li> <li><strong>Layer:</strong> a named list of Mappings.</li> <li><strong>Profile:</strong> the top-level document: metadata, default layer name, and a map of Layer names to Layer definitions.</li></ul> <h2>Design decisions</h2> <p><strong>Why a 5-bit mask rather than named fingers?</strong> The TAP Strap hardware reports
+  finger state as a bitmask. Keeping that representation in the type system means zero conversion
+  overhead in the hot path (BLE event → engine lookup) and makes test fixtures trivial to write.</p> <p><strong>Why serde's adjacently-tagged enum representation?</strong> The JSON <code>&#123;"type": "key", "key": "ctrl+c"&#125;</code> shape is readable by humans editing profiles by
+  hand, and unambiguous for the parser. Internal enum tags would leak Rust naming conventions into
+  the user-facing format.</p> <h2>Test fixtures</h2> <p>Sample profile JSON files live in <code>crates/mapping-core/tests/fixtures/</code> and are
+  loaded via <code>include_str!()</code> in tests. This tests the full deserialization path with
+  real files rather than inline strings, catching any mismatch between the schema spec and the
+  actual Rust types.</p>`,1);function A(e){var t=k();s(18),y(e,t)}var j=m({default:()=>N}),M=t(`<h1>Profile validation and layer stack</h1> <p>A MapXr profile is a JSON file that users write by hand. That means the engine needs to catch
+  mistakes clearly and early. Validation runs at load time, not at runtime when a tap fires the wrong action.
+  This session focused on building out that validation layer and the LayerStack that manages
+  runtime layer switching.</p> <h2>Profile validation</h2> <p>Validation runs immediately after deserialization, before any profile is made active.
+  The rules enforced include:</p> <ul><li><strong>Duplicate triggers:</strong> the same finger combination bound to two actions in the same layer is always a mistake</li> <li><strong>Missing layer references:</strong> a <code>push_layer</code> action that names a layer not defined in the profile</li> <li><strong>Empty layers:</strong> a layer with no mappings is valid but suspicious; flagged as a warning</li> <li><strong>Hold modifier constraints:</strong> the modifier key in a <code>hold_modifier</code> action can't also be a trigger key in the same layer</li> <li><strong>Default layer must exist:</strong> the <code>default_layer</code> field must name a layer actually defined in the profile</li></ul> <p>Each rule has at least one passing test and one failing test in the unit suite, as required by
+  the project's testing rules.</p> <h2>LayerStack</h2> <p>The LayerStack maintains the ordered list of active layers at runtime. Trigger resolution walks
+  the stack from top to bottom. The first layer with a matching mapping wins; lower layers act
+  as fallbacks.</p> <p>Three operations are supported:</p> <dl><dt><strong>push_layer(name)</strong></dt> <dd>Adds a layer on top of the current stack. The previous layers remain as fallbacks.</dd> <dt><strong>pop_layer()</strong></dt> <dd>Removes the topmost layer. Has no effect if only the default layer remains.</dd> <dt><strong>activate_layer(name)</strong></dt> <dd>Replaces the entire stack with a single layer. Used for switching contexts completely.</dd></dl>`,1);function N(e){var t=M();s(18),y(e,t)}var P=m({default:()=>I}),F=t(`<h1>ComboEngine and cross-device combo resolution</h1> <p>The ComboEngine is the most complex piece of MapXr's core logic. It has to correctly
+  distinguish between a single tap, a double tap, and a two-handed combo. All from a stream
+  of raw tap events arriving over Bluetooth with no inherent timing guarantees.</p> <h2>The resolution problem</h2> <p>When a tap event arrives, the engine can't immediately know whether it's:</p> <ul><li>A standalone single tap</li> <li>The first tap of a double-tap</li> <li>The first half of a cross-device combo</li></ul> <p>It has to wait for a short window to see if more events arrive before resolving. This window
+  (300 ms by default) is long enough to catch intentional combos but short enough that single
+  taps feel instantaneous.</p> <h2>State machine</h2> <p>The engine tracks a <code>TapPending</code> state per profile type:</p> <ul><li><strong>None:</strong> no pending events</li> <li><strong>One(event, deadline):</strong> one event received, waiting for a possible second</li> <li><strong>Two(event1, event2):</strong> two events received, resolving as double-tap or combo</li></ul> <p>When the deadline passes without a second event, the pending single tap resolves. When a second
+  event arrives before the deadline, the engine checks whether they form a valid cross-device
+  combo (different devices, matching a combo trigger) or a double-tap (same device, same fingers).</p> <h2>Deterministic tests with tokio::time</h2> <p>Timing-sensitive tests use <code>tokio::time::pause()</code> and <code>tokio::time::advance(Duration)</code> to control the clock without actually sleeping.
+  This makes the test suite fast and deterministic. The 300 ms combo window can be "waited out"
+  in zero real time.</p> <p>The test suite covers single, double, cross-device combos, timeout resolution, rapid alternating
+  events, and the dual-profile stacking behaviour where same-device events intentionally accumulate.</p>`,1);function I(e){var t=F();s(24),y(e,t)}var L=m({default:()=>z}),R=t(`<h1>BLE scanner filtering for TAP devices</h1> <p>Before this change, MapXr's Bluetooth scanner would surface every BLE device in range: phones,
+  headphones, fitness trackers, smart lightbulbs, all of it. Useful for debugging, but not
+  something you want to ship to users.</p> <h2>How TAP Strap devices advertise</h2> <p>TAP Strap devices include a known service UUID in their BLE advertisement packets. By filtering
+  scan results to only those that include this UUID, we can limit the device list to genuine TAP
+  Straps without requiring any connection attempt first.</p> <p>The filter is applied in the <code>btleplug</code> scan filter configuration, so unrelated
+  devices never even reach MapXr's application layer. The OS-level BLE stack discards them before
+  they're passed up.</p> <h2>Why this matters</h2> <p>Beyond the obvious UX improvement, filtering also reduces the churn of advertisement events that
+  the application needs to process. In a busy BLE environment (an office, a coffee shop) an
+  unfiltered scan can receive dozens of advertisement packets per second. Filtering to TAP devices
+  only reduces that to essentially zero noise between actual device events.</p>`,1);function z(e){var t=R();s(12),y(e,t)}var B=m({default:()=>H}),V=t(`<h1>Hold modifier action (sticky keys)</h1> <p>This feature came out of a specific use case: one-handed typing with the TAP Strap. When only
+  one hand is available, pressing Shift + a letter requires two separate taps: one to activate
+  Shift, one for the letter. The <code>hold_modifier</code> action makes that possible.</p> <h2>What it does</h2> <p>A <code>hold_modifier</code> action keeps a modifier key (Shift, Ctrl, Alt, etc.) held down at
+  the OS level until a release condition is met. The next key event the OS sees will have that
+  modifier applied, exactly as if you were physically holding the key.</p> <h2>Three release modes</h2> <p>Different workflows need different release behaviour, so three modes were spec'd and implemented:</p> <dl><dt><strong>Toggle</strong></dt> <dd>The first tap holds the modifier; any subsequent tap from the user releases it. Good for
+    capitalising a single character.</dd> <dt><strong>Count (n)</strong></dt> <dd>The modifier stays held for exactly <em>n</em> key events, then releases automatically. Useful
+    for capitalising a fixed-length word.</dd> <dt><strong>Timeout (ms)</strong></dt> <dd>The modifier releases after a specified number of milliseconds regardless of what the user
+    does. Good for press-and-hold style shortcuts.</dd></dl> <h2>Validation rules</h2> <p>Several validation rules were added to catch common mistakes at profile load time rather than
+  at runtime:</p> <ul><li>A <code>hold_modifier</code> cannot target the same key as a trigger in the same layer (would create an unresolvable loop)</li> <li>Count must be ≥ 1</li> <li>Timeout must be &gt; 0 ms</li> <li>The modifier key must be a recognised modifier (<code>shift</code>, <code>ctrl</code>, <code>alt</code>, <code>meta</code>)</li></ul> <h2>Test coverage</h2> <p>15 new unit tests cover the happy paths for all three modes plus all validation failure cases.
+  The spec was written and confirmed before any implementation code was written, per project rules.</p>`,1);function H(e){var t=V();s(22),y(e,t)}var U=m({default:()=>te}),W=t(`<h1>Hardware debounce fix + Windows CI</h1> <p>Two separate but both overdue pieces of work landed in this session: a fix for an infuriating
+  double-tap inversion bug, and the first working Windows build pipeline.</p> <h2>The double-tap inversion bug</h2> <p>Users reported that intentional double-taps were sometimes firing the single-tap action instead,
+  and single taps were occasionally triggering double-tap actions. After adding some diagnostic
+  logging, the root cause became clear.</p> <p>The TAP Strap hardware emits spurious duplicate BLE notifications within roughly 10–30 ms of a
+  genuine tap event. This is normal for the hardware (it's a byproduct of how the firmware
+  debounces the capacitive sensors internally), but it was invisible to MapXr's engine.</p> <p>With a double-tap binding present, the sequence looked like this to the engine:</p> <ol><li>Genuine tap event → engine starts waiting for a possible second tap</li> <li>Hardware bounce (8 ms later) → engine sees a "second tap", advances to <code>TapPending::Two</code>, fires double-tap action</li> <li>User's actual intended second tap (150 ms later) → engine has already resolved, starts a new single-tap sequence</li></ol> <p>The fix is a 50 ms debounce window per device: if the same tap code arrives from the same device
+  within 50 ms of the previous event, it's silently discarded. Real double-taps arrive 100–300 ms
+  apart, well outside the window. Dual-device profiles (where two TAP Straps legitimately stack
+  same-device events for cross-device combo detection) are exempt from debouncing.</p> <h2>Windows CI via GitHub Actions</h2> <p>The workflow uses <code>tauri-apps/tauri-action@v0</code> on a <code>windows-latest</code> runner.
+  It produces both an <code>.msi</code> installer and an NSIS <code>.exe</code> as build artifacts,
+  uploaded to the GitHub Actions run. The workflow triggers on <code>workflow_dispatch</code> or a <code>v*</code> tag push, so it doesn't burn CI minutes on every commit.</p> <p><code>GITHUB_TOKEN</code> is a GitHub built-in secret, so no manual secret creation is needed. The
+  repo just needs "Read and write permissions" enabled under Settings → Actions → General for the
+  release upload step to work.</p>`,1);function te(e){var t=W();s(20),y(e,t)}var G=m({default:()=>q}),K=t(`<h1>BLE UX polish, starter profiles, and live role reassignment</h1> <p>Today was a housekeeping-and-polish session rather than an epic-level feature push. Several small
+  but noticeable rough edges in the device-management flow got addressed, a quality-of-life
+  improvement was shipped for connected device handling, and the reference docs got a long-overdue
+  rename pass.</p> <h2>BLE scan UX: cached devices, stale RSSI, and the "Paired" state</h2> <p>The scan list was showing stale data in a few scenarios that were easy to reproduce but annoying
+  to diagnose. Three distinct device states needed to be tracked and displayed differently:</p> <ul><li><strong>Seen in scan:</strong> the device was actively advertising during the scan window.
+    Shows a signal-strength badge (Strong / Good / Fair / Weak) and the Connect button is enabled.</li> <li><strong>Paired:</strong> the device has an active BLE connection to the OS (BlueZ, Windows
+    Bluetooth stack, etc.). The OS clears RSSI for connected peripherals and they stop advertising,
+    so no signal reading is available. These show a "Paired" badge and Connect remains enabled so
+    the user can take over the connection from the OS.</li> <li><strong>Cached:</strong> the device is in the OS Bluetooth cache from a previous scan but was
+    not seen this time. It is likely off or out of range. Shows a greyed-out "Cached" badge and
+    Connect is disabled.</li></ul> <p>The Linux path had an extra wrinkle. After a device is connected and then disconnected, BlueZ
+  clears its RSSI entry. On the next scan the device's first <code>PropertiesChanged</code> signal
+  can arrive after the scan event-loop deadline, leaving the RSSI map empty even though the device
+  is genuinely present. The fix is a pre-scan RSSI snapshot taken via <code>get_devices()</code> before <code>start_discovery</code>. If RSSI was absent pre-scan (cleared by the prior
+  connection) and is present post-scan, the device counts as seen.</p> <p>Two new fields were added to <code>TapDeviceInfo</code> (<code>seen_in_scan</code> and <code>is_connected_to_os</code>) and propagated through the DTO, TypeScript types, and
+  Svelte UI.</p> <h2>Connected device name display</h2> <p>Previously the connected-devices panel showed only the role and address. The human-readable
+  device name (e.g. "TapXR_A0363") was lost the moment you clicked Connect.</p> <p>The fix has two parts. First, the name is captured from the scan result <em>before</em> the <code>await connectDevice(...)</code> call, not after. After the await, the Tauri <code>device-connected</code> event has already fired, which reactively removes the device from <code>availableDevices</code> (the filtered scan list). Looking up the name after the await
+  therefore finds nothing.</p> <p>Second, names are persisted to <code>localStorage</code> under <code>mapxr:device-names</code> as
+  an address → name map. On app restart, the auto-reconnect loop fires <code>device-connected</code> events with no UI interaction, so <code>setName</code> is never called. Loading from storage on <code>DeviceStore</code> construction means reconnect events immediately resolve the correct name.</p> <h2>Starter profile seeding on first launch</h2> <p>New installations had no profiles and no obvious way to get started. A <code>starter-right.json</code> profile with 15 right-hand single-finger mappings (copy, paste,
+  undo, save, arrow navigation, etc.) is now embedded in the binary via <code>include_str!</code> and seeded into the OS config directory on first launch.</p> <p>Seeding is a no-op if any <code>.json</code> file already exists in the config dir, so existing
+  users and developers with their own profiles are unaffected.</p> <h2>Reference docs reorganisation</h2> <p>The <code>docs/reference/</code> directory had accumulated six files with names that didn't
+  reflect their contents. Most notably, <code>other-uuids.txt</code> (which is actually the best
+  annotated GATT characteristic map in the project) got renamed to <code>gatt-characteristics.txt</code>. The full rename list:</p> <ul><li><code>api-doc.txt</code> → <code>tap-ble-api.txt</code></li> <li><code>other-uuids.txt</code> → <code>gatt-characteristics.txt</code></li> <li><code>gatt-output.txt</code> → <code>gatt-probe-output.txt</code></li> <li><code>windows-sdk-guid-reference.txt</code> → <code>windows-sdk-guids.cs</code> (it's C# source; now syntax-highlighted in editors)</li> <li><code>gettingfirmware.txt</code> → <code>firmware-update-aws.txt</code></li></ul> <h2>Live role reassignment without disconnecting</h2> <p>The most substantial change today: you can now change a connected device's role (solo → left,
+  left → right, etc.) without disconnecting and reconnecting. Previously this was the only way to
+  reassign, which meant exiting controller mode, dropping the BLE connection, waiting for the OS to
+  release the connection slot, scanning again, and reconnecting.</p> <p>The key insight is that <code>DeviceId</code> (the role) is just a label. It gets stamped onto <code>RawTapEvent</code>s and onto <code>BleStatusEvent</code> notifications, but the underlying
+  BLE connection, GATT characteristic handles, controller mode, and notification subscription are
+  all properties of the <code>btleplug</code> <code>Peripheral</code> object and don't care about
+  the role at all.</p> <p>The complication is that the role is captured by value in three background tasks spawned at
+  connect time: <code>keepalive_task</code>, <code>notification_task</code>, and <code>connection_monitor_task</code>. A new <code>TapDevice::reassign()</code> method handles
+  this by cancelling the existing tasks via the <code>watch</code> channel, writing <code>ENTER_CONTROLLER_MODE</code> immediately to reset the device's 10-second keepalive timer,
+  then respawning all three tasks with the new <code>DeviceId</code>.</p> <p><code>BleManager::reassign_role()</code> moves the entry in the connected map, calls <code>reassign()</code>, then emits <code>BleStatusEvent::Disconnected</code> (old role) followed
+  by <code>BleStatusEvent::Connected</code> (new role). The existing Tauri event pump picks these
+  up and pushes <code>device-disconnected</code> / <code>device-connected</code> events to the
+  frontend. No new plumbing required.</p> <p>On the UI side, the connected-devices table now shows solo / left / right role buttons inline on
+  each row. A role button is disabled if it is the device's current role, or if that role is
+  already occupied by another connected device. This prevents conflicts entirely in the UI rather
+  than returning an error from the backend.</p>`,1);function q(e){var t=K();s(44),y(e,t)}var J=m({default:()=>X}),Y=t(`<h1>Profile persistence and startup profile selection</h1> <p>Two related quality-of-life improvements landed today around how the app decides which profile
+  to activate at startup, and how it remembers that decision across sessions.</p> <h2>The problem: alphabetical roulette</h2> <p>Before this change, the startup profile was determined by a single line:</p> <pre><code>layer_registry.profiles().min_by_key(|p| &amp;p.name)</code></pre> <p>Whichever profile name sorted first alphabetically became the active profile on every launch.
+  No "last used" memory, no user intent. Just alphabetical order. If you had spent the session
+  using a specific profile, closing and reopening the app silently reset to whatever name happened
+  to sort first.</p> <h2>The fix: preferences.json</h2> <p>A new <code>preferences.json</code> file lives alongside <code>devices.json</code> in the app
+  config directory. It is written every time the user explicitly activates or deactivates a profile.</p> <pre><code></code></pre> <p>On startup, the backend reads this file before initialising the engine. The selection logic is:</p> <ol><li>If <code>profile_active</code> is <code>false</code>: start with the built-in empty profile (no mappings). The user explicitly asked for no profile.</li> <li>If <code>profile_active</code> is <code>true</code> and <code>last_active_profile_id</code> names a profile that still exists: activate it.</li> <li>If the named profile no longer exists (deleted between sessions): fall back to alphabetically-first.</li> <li>If there are no profiles at all: use the built-in empty profile.</li></ol> <p>Persistence lives on the Rust side so the engine is initialised with the correct profile before
+  the frontend even loads. Doing this in <code>localStorage</code> and calling <code>activate_profile</code> from the frontend would have caused a brief flicker. The wrong
+  profile would be active during the window between page load and the first invoke.</p> <h2>Bug: deactivate didn't stick across restarts</h2> <p>The initial implementation had a subtle flaw. When <code>deactivate_profile</code> was called,
+  it saved <code>last_active_profile_id: null</code> to disk. On the next launch, this was
+  indistinguishable from a first-launch state where <code>preferences.json</code> doesn't exist
+  yet. In both cases the field is absent or null, and both fell through to the alphabetical
+  fallback. So the app always activated a profile on restart regardless of whether the user had
+  explicitly deactivated.</p> <p>The fix is the <code>profile_active</code> boolean. It defaults to <code>true</code> (so
+  first-launch still picks the seeded starter profile), and is only set to <code>false</code> by
+  an explicit <code>deactivate_profile</code> call. The startup logic now checks this flag first
+  and short-circuits to the empty built-in if it is <code>false</code>, skipping all fallbacks.</p> <p>The field uses <code>#[serde(default = "default_true")]</code> so any <code>preferences.json</code> written before this field existed (or on a fresh install before
+  the first deactivate) reads as <code>true</code> and behaves identically to before.</p> <h2>Device-aware profile suggestions</h2> <p>A related UX gap: the app already warned when a dual profile was active with only one device
+  connected, but said nothing about the reverse. Two devices connected with only a single-hand
+  profile active. A dismissible suggestion banner now appears on the Devices page in that case:</p> <p><em>"You have two devices connected. Consider switching to a dual profile."</em></p> <p>The banner includes a direct link to the Profiles page and a Dismiss button. The dismiss is
+  session-only and resets on the next launch so the user is reminded if the condition still holds.
+  Auto-switching was deliberately not implemented: changing the active profile clears the layer
+  stack and fires <code>on_exit</code> actions, which would be disruptive mid-session without
+  explicit user intent.</p>`,1);function X(t){var n=Y(),r=x(c(n),16),i=a(r);i.textContent=JSON.stringify({version:1,profile_active:!0,last_active_profile_id:`starter-right`},null,2),e(r),s(22),y(t,n)}var Z=m({default:()=>ne}),Q=t(`<h1>Project website launched</h1> <p>With the core application logic well underway, it felt like the right time to give MapXr a proper
+  home on the web. This entry covers the decisions behind the site's technical stack and structure.</p> <h2>Stack choices</h2> <p>The site lives inside the existing monorepo at <code>mapxr-site/</code>. Since the app itself
+  already uses Svelte 5 and Vite, reusing those tools was a natural fit. No context switching,
+  and the same Tailwind + DaisyUI pair used in the main UI carries over cleanly.</p> <ul><li><strong>Svelte 5</strong> with runes (<code>$state</code>, <code>$derived</code>, <code>$effect</code>)</li> <li><strong>Tailwind CSS v4</strong> via its native Vite plugin (no <code>postcss.config</code> needed)</li> <li><strong>DaisyUI v5</strong> for component classes (<code>navbar</code>, <code>hero</code>, <code>card</code>, <code>steps</code>, etc.)</li> <li><strong>Hash-based routing:</strong> no router library, just <code>window.location.hash</code> and a <code>$state</code> rune</li></ul> <h2>Why hash routing?</h2> <p>GitHub Pages serves static files from a single directory. Any URL that doesn't correspond to an
+  actual file returns a 404. Hash routing sidesteps this entirely. The browser never sends the
+  fragment to the server, so <code>#/docs/triggers</code> and <code>#/devlog</code> both load <code>index.html</code> without any redirect tricks.</p> <h2>Lazy-loaded doc pages</h2> <p>Each documentation topic is a plain <code>.svelte</code> file under <code>src/docs-pages/</code>.
+  Vite's <code>import.meta.glob</code> discovers them at build time and splits each into its own
+  JS chunk. Navigating to a doc page fetches only that page's chunk. The rest stay unloaded until
+  needed. The same pattern is used for devlog articles.</p> <h2>Theme</h2> <p>DaisyUI's <code>corporate</code> theme is the light default; <code>business</code> is the dark
+  alternative. The toggle reads <code>prefers-color-scheme</code> on first visit so the site
+  matches the user's OS preference without any stored setting.</p> <h2>Deployment</h2> <p>A GitHub Actions workflow at <code>.github/workflows/deploy-site.yml</code> triggers on any push
+  to <code>main</code> that touches <code>mapxr-site/**</code>. It runs <code>npm ci && npm run build</code> then pushes <code>mapxr-site/dist</code> to the <code>gh-pages</code> branch via <code>peaceiris/actions-gh-pages</code>.</p>`,1);function ne(e){var t=Q();s(24),y(e,t)}var re=m({default:()=>ae}),ie=t(`<h1>Extended key support, OS notifications, and six silent bugs fixed</h1> <p>Today had two distinct acts: shipping OS desktop notifications (Epic 16) and overhauling the
+  keyboard key dispatch layer (Epic 17). The second one started as "add F13–F24 and media keys" and
+  quickly turned into an audit that uncovered six categories of silent failure. Keys that profiles
+  happily accepted but that never actually fired.</p> <h2>OS desktop notifications (Epic 16)</h2> <p>mapxr now sends native OS notifications for device connect/disconnect, layer switches, and profile
+  switches. Each event type is independently toggleable in Settings, so users who switch layers
+  constantly via combos don't have to live with a notification storm.</p> <p>A few design decisions worth noting. Notifications are best-effort. OS errors are logged at <code>warn!</code> and never propagated to the UI. The layer-switch toggle defaults to <em>off</em> for this reason. Profile switches default to on since they're infrequent and
+  represent a meaningful mode change the user almost certainly wants to know about.</p> <p>Device notifications now include the human-readable device name and role in the body, e.g. <em>"TapXR_A0363 (Right) connected"</em>. Getting the name into the notification required
+  fetching it from <code>TapDevice</code> before the map entry is removed at disconnect time. This
+  was a subtle ordering issue that had caused the name to show as empty in an earlier attempt.</p> <p>On the same day: <code>save_profile</code> gained a hot-reload path. If the profile being saved
+  is currently active in the engine's layer stack, the engine's <code>set_profile</code> is called
+  immediately and a <code>layer-changed</code> event fires. No need to deactivate and reactivate
+  to pick up edits.</p> <h2>The key audit (Epic 17)</h2> <p>The work started with an enigo 0.2 source audit: what named keys does it actually expose, on which
+  platforms, and how do those map to mapxr's key name strings? The answer was uncomfortable.</p> <p>The key dispatch path has two moving parts that need to stay in sync: <code>VALID_KEYS</code> in <code>mapping-core</code> (the list profiles are validated against at load time) and <code>name_to_key</code> in <code>pump.rs</code> (the function that converts a name string to an <code>enigo::Key</code> at fire time). They had drifted badly.</p> <h3>Bug 1: All arrow keys silently broken</h3> <p><code>VALID_KEYS</code> uses <code>"left_arrow"</code>, <code>"right_arrow"</code>, <code>"up_arrow"</code>, <code>"down_arrow"</code>. <code>name_to_key</code> was matching <code>"left"</code>, <code>"right"</code>, <code>"up"</code>, <code>"down"</code>. Every arrow
+  key in every profile was firing nothing and logging a warning. Since most profiles use <code>ctrl+c</code>-style shortcuts rather than arrows this went unnoticed.</p> <h3>Bug 2: All function keys silently broken</h3> <p><code>VALID_KEYS</code> stores lowercase <code>"f1"</code>–<code>"f12"</code>. <code>name_to_key</code> was matching uppercase <code>"F1"</code>–<code>"F12"</code>. Zero
+  function keys worked. The spec examples use <code>"f13"</code> and <code>"f15"</code> extensively
+  for virtual-button tricks. All of those were silently no-ops.</p> <h3>Bugs 3–6: F13–F24, punctuation, system keys, and media keys</h3> <p>Even if the case had been right, F13–F24 had no arms at all. The same was true for every
+  punctuation key (<code>grave</code>, <code>minus</code>, <code>left_bracket</code>, etc.),
+  all locking/system keys (<code>caps_lock</code>, <code>insert</code>, <code>num_lock</code>, <code>print_screen</code>, <code>scroll_lock</code>), and all media/volume keys
+  (<code>media_play</code>, <code>volume_up</code>, etc.). All were in <code>VALID_KEYS</code>,
+  all silently no-oped.</p> <h2>The fix and new additions</h2> <p><code>name_to_key</code> was rewritten from scratch. The new version is around 130 lines of
+  straightforward match arms organised by group. Platform-specific keys use <code>#[cfg(...)]</code> directly on match arms. On unsupported platforms those arms simply
+  aren't compiled, so the name falls through to the catch-all <code>other</code> arm which logs a
+  warning and returns <code>None</code>. No runtime platform detection needed.</p> <p>Five new keys were also added to the canonical list: <code>media_stop</code>, <code>pause</code>, <code>brightness_down</code> and <code>brightness_up</code> (macOS only), <code>eject</code> (macOS), and <code>mic_mute</code> (Linux). Platform availability is
+  documented in a new <code>docs/spec/extended-keys-spec.md</code>.</p> <p>The platform matrix in brief:</p> <ul><li><strong>Cross-platform:</strong> a–z, 0–9, F1–F20, all punctuation, all navigation (arrows, home/end, page up/down, backspace, delete, etc.), caps lock, media play/next/prev, volume up/down/mute</li> <li><strong>Windows + Linux, not macOS:</strong> insert, num lock, print screen, pause, media stop, F21–F24, scroll lock (Linux only)</li> <li><strong>macOS only:</strong> brightness down/up, eject</li> <li><strong>Linux only:</strong> mic mute, scroll lock</li></ul> <h2>Key picker UI</h2> <p>The key picker in the action editor was a plain text input with a <code>&lt;datalist&gt;</code> autocomplete. Fine for a small list, but impractical with 100+ keys and no way to convey which
+  keys are platform-limited. It's now a <code>&lt;select&gt;</code> with four <code>&lt;optgroup&gt;</code> sections: Standard, Navigation, Function, and Media / System.
+  Platform-limited keys show a note in parentheses (e.g. <em>f24 (Windows / Linux)</em>) so users
+  know before they bind.</p> <p>The key name data lives in a <code>KEY_GROUPS</code> constant in <code>types.ts</code>. The
+  flat <code>KNOWN_KEY_NAMES</code> array that other parts of the codebase use is now derived from
+  it via <code>flatMap</code>, so there's a single source of truth.</p> <h2>Haptic feedback (Epic 18)</h2> <p>mapxr can now send vibration patterns to connected Tap devices. There are two surfaces: a <code>vibrate</code> action type in the profile editor (bind any tap code to a custom on/off
+  sequence), and automatic event-driven haptics for tap confirmation, layer switches, and profile
+  switches. Each is independently toggleable in Settings.</p> <p>The BLE protocol is straightforward. The haptic characteristic (<code>C3FF0009</code>) accepts a
+  payload of alternating on/off durations encoded as <code>duration_ms / 10</code> per byte.
+  Durations are clamped to [10, 2550] ms with 10 ms resolution, and sequences longer than 18
+  elements are truncated before sending.</p> <p>Shipping it surfaced two bugs, one predictable and one not.</p> <h3>Bug 1: Context monitor firing haptics on every browser tab switch</h3> <p>After connecting a device and triggering a layer shift, the device would vibrate again and again
+  without any user input. The culprit was the Wayland focus monitor: it calls <code>publish_focused()</code> on every <code>Done</code> event from any toplevel, which includes
+  window <em>title</em> changes of the already-focused window (browser tabs, document titles, anything).
+  The context monitor had no guard against re-applying a profile that was already active, so every
+  title change on a matching window re-fired the profile-switch haptic. The fix was a one-line
+  idempotency check: skip the activation if <code>last_active_profile_id</code> already matches the
+  rule's target.</p> <h3>Bug 2: Every vibrate action produced a shower of phantom buzzes</h3> <p>Even with all event-driven haptics disabled, firing a <code>vibrate</code> action with pattern <code>[1000, 100, 200]</code> would produce the correct long-then-short buzz followed by three to
+  five additional random-length vibrations. The first suspects (duplicate BLE notifications,
+  double-tap buffering, the context monitor) were all ruled out by adding diagnostic logging that
+  confirmed a single BLE notification and a single software dispatch per physical tap.</p> <p>The real cause was in <code>VibrationPattern::encode()</code>. Our implementation sent only as
+  many bytes as the pattern contained. Five bytes for a three-element pattern. The Tap device
+  firmware, it turns out, requires exactly 20 bytes (2-byte header + 18 duration slots). When the
+  payload is short, the firmware reads the remainder from uninitialised RAM and plays whatever
+  garbage values it finds as additional durations. The fix came from comparing against the C# SDK,
+  which always zero-initialises a 20-byte buffer before filling in the pattern. We now do the same: <code>encode()</code> always returns a fixed 20-byte payload with unused slots explicitly zeroed.</p>`,1);function ae(e){var t=ie();s(64),y(e,t)}var oe=m({default:()=>se}),$=t(`<h1>First public release: three bugs, two platforms, one coffee button</h1> <p>v0.1.2 is the first release where the full pipeline works end-to-end: push a tag, GitHub Actions
+  builds Linux and Windows installers in parallel, signs them, publishes a GitHub Release, uploads <code>latest.json</code>, and in-app update checking picks it up automatically. Getting there
+  required fixing three separate bugs, each one silent enough that it had slipped through
+  earlier testing.</p> <h2>Bug 1: The auto-updater manifest was never generated</h2> <p>The first release had all the right pieces: a signing keypair, the <code>TAURI_SIGNING_PRIVATE_KEY</code> GitHub secret, a <code>tauri-action</code> step configured to publish a release. But <code>latest.json</code> never appeared in the release assets.</p> <p>The cause was a single missing line in <code>tauri.conf.json</code>. Tauri v2 requires <code>"createUpdaterArtifacts": true</code> in the <code>bundle</code> section before it will
+  generate <code>.sig</code> signature files during the build. Without those signature files, <code>tauri-action</code> has nothing to sign and produces no manifest. The config option isn't
+  mentioned prominently anywhere in the getting-started path. It lives in a note partway down the
+  plugin documentation.</p> <p>Once the config was added, the manual third job I had written to stitch together <code>latest.json</code> from GitHub Actions artifacts became unnecessary. <code>tauri-action</code> handles it automatically. That job was deleted.</p> <h2>Bug 2: Windows CI broke after a crate update</h2> <p>The Windows build was failing with a type mismatch in the focus monitor. The <code>windows</code> crate 0.58 changed the inner type of <code>HWND</code> from <code>isize</code> to <code>*mut c_void</code>, which broke a null-check written against the old type. The same update
+  changed <code>GetWindowTextW</code> to take <code>&amp;mut [u16]</code> directly instead of a
+  raw pointer plus length. Both call sites needed updating.</p> <h2>Bug 3: The RPM crashed before the first window opened</h2> <p>Installing and running the RPM on Fedora/Nobara produced an immediate panic: <em>tray icon error: Zero width not allowed</em>. The app never reached the main window.</p> <p>The tray icon setup tried two file paths at runtime: the Tauri resource directory and, as a
+  fallback, the source tree path baked in at compile time via <code>env!("CARGO_MANIFEST_DIR")</code>.
+  Both failed silently under the RPM install layout, and the final fallback was <code>Image::new(&amp;[], 0, 0)</code>. This is a valid call that creates a zero-width image. <code>TrayIconBuilder</code> then rejected it with a hard panic.</p> <p>The fix was to stop doing runtime path lookups for this at all. The icon is now embedded directly
+  in the binary via <code>include_bytes!</code> at compile time. It's always available regardless of
+  where the binary is installed, and the fallback chain is gone.</p> <p>The AppImage on NVIDIA + Wayland systems hits a separate crash in the NVIDIA EGL Wayland driver
+  during WebKit initialization. This is a known incompatibility between the AppImage's bundled WebKitGTK
+  and certain NVIDIA driver versions. The workaround is to run with <code>WEBKIT_DISABLE_DMABUF_RENDERER=1</code>, or to use the RPM/DEB package instead, which uses
+  the system's WebKitGTK and doesn't have this problem.</p> <h2>Release automation</h2> <p>Getting the first release out surfaced how many manual steps the process had. A <code>scripts/bump-version.sh</code> script now handles the version increment across all three
+  files that need it (<code>tauri.conf.json</code>, <code>Cargo.toml</code>, <code>package.json</code>) in one command. A <code>docs/release-checklist.md</code> documents the
+  full sequence from "tests pass" to "verify the release artifacts" so nothing gets missed.</p>`,1);function se(e){var t=$();s(28),y(e,t)}var ce=m({default:()=>ue}),le=t(`<h1>Porting MapXr to Android: three dead ends and one great open-source library</h1> <p>The Android port has been the most technically demanding part of this project, and not just
+  because cross-platform mobile development is inherently fiddly. The real challenge was finding a
+  way to inject keystrokes into arbitrary apps without requiring root access. Android does not make
+  this easy by design. The OS has progressively locked down the input injection APIs over
+  successive releases. Getting here required three distinct implementation attempts before landing on
+  something that actually works.</p> <h2>Attempt 1: AccessibilityService</h2> <p>The first approach was <code>AccessibilityService</code>. It's the API Android officially exposes
+  for keyboard-adjacent automation: screen readers, switch access, assistive tools. It can dispatch
+  key events via <code>performGlobalAction</code> and send typed text via <code>performAction(ACTION_SET_TEXT)</code>. It's well-documented, requires no root, and every
+  Android device supports it. The obvious choice.</p> <p>The problem is what it can't do. <code>ACTION_SET_TEXT</code> replaces the content of the focused
+  text field. It doesn't simulate a keypress arriving at the app. There is no modifier key support.
+  Hotkeys like Ctrl+Z or Ctrl+Tab are impossible because there's no mechanism to hold a modifier
+  while firing another key. Navigation keys like arrow keys and Page Down work in text fields but
+  not in games, editors, or anything that handles raw key events. The deeper problem is that <code>AccessibilityService</code> is built for screen reader use cases, not general-purpose
+  keyboard emulation. MapXr needs to send arbitrary key chords to any app, and AccessibilityService
+  can't do that.</p> <h2>Attempt 2: Custom input method (IME)</h2> <p>The second attempt was building a custom <code>InputMethodService</code>. Essentially a software
+  keyboard that MapXr controls behind the scenes. An IME has access to <code>InputConnection</code>, which lets it inject text and some key events into the currently
+  focused text field with decent fidelity.</p> <p>This hits the same ceiling from a different direction. <code>InputConnection</code> only reaches
+  the currently focused editable view. A browser, a game, a terminal app. None of these route key
+  events through the IME at all. The IME approach works well if your goal is a smarter text input
+  experience, but MapXr needs to be a keyboard replacement for <em>everything</em>. An IME that
+  can't send Escape to a terminal or arrow keys to a game is not a keyboard replacement.</p> <h2>Attempt 3: ADB wireless debugging shell</h2> <p>The third attempt was more ambitious. Android's developer options expose a wireless debugging
+  mode, and <code>adb shell input keyevent</code> can inject arbitrary key events as the shell user,
+  bypassing all the usual input API restrictions. If MapXr could establish its own ADB connection
+  over the local Wi-Fi interface, it could fire shell commands directly without any external tool.</p> <p>This turned into a substantial engineering effort. The ADB wireless debugging pairing protocol
+  involves SPAKE2 password-authenticated key exchange, followed by TLS negotiation using the
+  exchanged keys. The ADB transport protocol for sending shell commands sits on top of that. None of
+  this is formally documented. The spec is the AOSP source code.</p> <p>Pairing worked. The SPAKE2 exchange completed, the device showed "mapxr@mapxr" in the Paired
+  Devices list. The TLS connection attempt then failed with <code>CERTIFICATE_VERIFY_FAILED</code>.
+  Logcat on the device showed <em>"Invalid base64 key"</em> for every entry in the ADB keystore
+  loaded from our pairing. The key was structurally correct. The base64 decoded to 524 bytes,
+  the RSA header fields matched the format exactly, and the same key format is accepted without
+  complaint on desktop Linux. Something in the Samsung Android 16 (API 36) <code>adbd</code> implementation was rejecting it for a reason that can't be diagnosed without root access to the
+  device. After exhausting every diagnostic angle available from the unprivileged side, the approach
+  was abandoned.</p> <h2>Shizuku</h2> <p><a href="https://shizuku.rikka.app/" target="_blank" rel="noopener noreferrer">Shizuku</a> is an
+  open-source project by <a href="https://rikka.app/" target="_blank" rel="noopener noreferrer">Rikka</a> that solves exactly this class of problem in a way the previous approaches couldn't.
+  It uses Android's wireless debugging infrastructure (the same pairing mechanism that already
+  works) to launch a persistent background service as the shell user. Apps that have been granted
+  permission via Shizuku can then bind to that service over Binder IPC and make calls as if they
+  were running as shell uid 2000, without requiring root and without needing to implement any ADB
+  protocol themselves.</p> <p>The key Android API this unlocks is <code>InputManager.injectInputEvent()</code>. This is the same
+  method that <code>adb shell input</code> uses internally. With shell uid access, MapXr can inject
+  any <code>KeyEvent</code> or <code>MotionEvent</code> into the global input pipeline. Modifier
+  keys, function keys, key chords, everything.</p> <p>I want to specifically thank the Shizuku team for what they've built. This is a genuinely
+  difficult problem to solve. Navigating Android's increasingly restrictive permission model while
+  keeping things user-friendly and not requiring root is no small feat. The library is well-designed,
+  the documentation is clear, and the project has been actively maintained across multiple Android
+  major versions. MapXr would not have an Android port without their work.</p> <h2>How the Shizuku integration works</h2> <p>The integration has three layers: a Shizuku UserService running as shell uid, a dispatcher
+  singleton on the app side, and a JNI bridge to the Rust engine.</p> <h3>InputUserService</h3> <p><code>InputUserService</code> is a bound service that Shizuku launches as the shell user.
+  It implements an AIDL interface (<code>IInputService</code>) with two methods: <code>injectKey(KeyEvent)</code> and <code>injectMotion(MotionEvent)</code>. The implementation
+  uses reflection to call <code>InputManagerGlobal.injectInputEvent()</code> directly, with a
+  fallback to the public <code>InputManager</code> API. Running as shell uid 2000, these calls
+  succeed where they would be silently dropped from a normal app process.</p> <h3>ShizukuDispatcher</h3> <p><code>ShizukuDispatcher</code> is a Kotlin singleton that owns the Shizuku connection lifecycle
+  and translates mapping-core action JSON into <code>KeyEvent</code> and <code>MotionEvent</code> calls. It exposes a <code>StateFlow&lt;ShizukuState&gt;</code> that tracks whether Shizuku is
+  installed, running, permission-granted, binding, active, or reconnecting. The UI wizard drives
+  from that state. It polls every second and auto-advances through the setup steps as each
+  condition is met.</p> <p>The dispatcher handles the full action vocabulary: <code>key</code> (with complete modifier key
+  sequencing: down all modifiers, down+up the primary key, up modifiers in reverse), <code>key_chord</code>, <code>type_string</code> (via <code>ACTION_MULTIPLE</code> with a per-character fallback for
+  OEMs that drop it), <code>mouse_click</code>, <code>mouse_double_click</code>, <code>mouse_scroll</code>, and <code>macro</code> with per-step delays.</p> <h3>JNI bridge and background dispatch</h3> <p>The reason background key injection works (even when the MapXr WebView is suspended) is that
+  the dispatch path never goes through JavaScript at all. When a BLE characteristic notification
+  arrives from the Tap Strap, <code>BlePlugin.onTapBytes()</code> calls <code>NativeBridge.processTapBytes()</code>, which crosses the JNI boundary into Rust. The Rust
+  pump resolves the tap bytes into actions, then calls back into Kotlin via JNI to invoke <code>ShizukuDispatcher.dispatch(actionsJson)</code> on the <code>InputUserService</code> binder.
+  The WebView is not involved at any point in this path, so the pipeline keeps working when the app
+  is in the background.</p> <h3>Setup wizard</h3> <p>The <code>ShizukuSetup</code> wizard in Settings walks through three steps: install Shizuku,
+  start it via Wireless Debugging, and grant MapXr permission. Each step polls the dispatcher state
+  every second and advances automatically. The user doesn't need to tap "Next". Once the <code>InputUserService</code> binds successfully, the wizard shows a confirmation screen and
+  that's the full setup. After the first start, Shizuku auto-starts on every reboot via the
+  wireless debugging daemon, so the one-time setup is genuinely one-time.</p> <h2>What's next</h2> <p>The Android implementation is complete. The APK build is working and will be included in the next
+  release alongside the existing Linux and Windows installers. If you've been waiting to try MapXr
+  on Android, it's almost there.</p>`,1);function ue(e){var t=le();s(56),y(e,t)}var de=t(`<meta name="description"/> <meta property="og:title"/> <meta property="og:description"/>`,1),fe=t(`<span class="badge badge-outline badge-sm"> </span>`),pe=t(`<article class="prose prose-base max-w-none"><!></article>`),me=t(`<div class="max-w-3xl mx-auto px-4 py-10"><a class="btn btn-ghost btn-sm mb-8 -ml-2"><svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg> Back to logs</a> <div class="flex flex-wrap items-center gap-2 mb-6"><span class="font-mono text-sm text-base-content/50"> </span> <!></div> <!></div>`);function he(t,s){d(s,!0);let m=Object.assign({"/src/lib/devlog-posts/2026-02-28-core-types.svelte":O,"/src/lib/devlog-posts/2026-03-05-profile-validation-layer-stack.svelte":j,"/src/lib/devlog-posts/2026-03-10-combo-engine.svelte":P,"/src/lib/devlog-posts/2026-03-14-ble-scanner-filtering.svelte":L,"/src/lib/devlog-posts/2026-03-15-hold-modifier.svelte":B,"/src/lib/devlog-posts/2026-03-16-hardware-debounce-windows-ci.svelte":U,"/src/lib/devlog-posts/2026-03-18-ble-ux-and-role-reassignment.svelte":G,"/src/lib/devlog-posts/2026-03-18-profile-persistence.svelte":J,"/src/lib/devlog-posts/2026-03-18-project-website.svelte":Z,"/src/lib/devlog-posts/2026-03-19-extended-keys-and-notifications.svelte":re,"/src/lib/devlog-posts/2026-03-20-first-release-and-distribution.svelte":oe,"/src/lib/devlog-posts/2026-03-24-android-port.svelte":ce}),C=u(()=>m[`/src/lib/devlog-posts/${s.data.entry.slug}.svelte`]?.default??null);var w=me();g(`170evqy`,e=>{var t=de(),n=c(t),i=x(n,2),a=x(i,2);o(()=>{_(n,`content`,s.data.entry.body),_(i,`content`,`${s.data.entry.title??``} — MapXr Devlog`),_(a,`content`,s.data.entry.body)}),ee(()=>{r.title=`${s.data.entry.title??``} — MapXr Devlog`}),y(e,t)});var T=a(w),E=x(T,2),D=a(E),k=a(D,!0);e(D);var A=x(D,2),M=t=>{var r=l();f(c(r),17,()=>s.data.entry.tags,v,(t,r)=>{var i=fe(),s=a(i,!0);e(i),o(()=>p(s,n(r))),y(t,i)}),y(t,r)};b(A,e=>{s.data.entry.tags&&e(M)}),e(E);var N=x(E,2),F=t=>{var r=pe();h(a(r),()=>n(C),(e,t)=>{t(e,{})}),e(r),y(t,r)};b(N,e=>{n(C)&&e(F)}),e(w),o(()=>{_(T,`href`,`${S??``}/devlog`),p(k,s.data.entry.date)}),y(t,w),i()}export{he as component,T as universal};

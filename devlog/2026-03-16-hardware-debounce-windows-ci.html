@@ -14,16 +14,16 @@
                 stored ?? (prefersDark ? "business" : "corporate"),
             );
         </script>
-        <link href="../_app/immutable/entry/start.C52J93SD.js" rel="modulepreload">
+        <link href="../_app/immutable/entry/start.D5EpkWL7.js" rel="modulepreload">
 		<link href="../_app/immutable/chunks/CGwnShg4.js" rel="modulepreload">
-		<link href="../_app/immutable/chunks/CyUtBfIa.js" rel="modulepreload">
-		<link href="../_app/immutable/entry/app.CFdIDFkL.js" rel="modulepreload">
+		<link href="../_app/immutable/chunks/DF5kQQXa.js" rel="modulepreload">
+		<link href="../_app/immutable/entry/app.rs_CnH5O.js" rel="modulepreload">
 		<link href="../_app/immutable/chunks/CFKVnMbq.js" rel="modulepreload">
-		<link href="../_app/immutable/nodes/0.C93o40Xj.js" rel="modulepreload">
+		<link href="../_app/immutable/nodes/0.5N-bQup8.js" rel="modulepreload">
 		<link href="../_app/immutable/chunks/D40A1Rfp.js" rel="modulepreload">
-		<link href="../_app/immutable/nodes/4.D1uorAE_.js" rel="modulepreload">
-		<link href="../_app/immutable/chunks/Dijf7hSe.js" rel="modulepreload">
-		<link href="../_app/immutable/chunks/D8tjqQzh.js" rel="modulepreload">
+		<link href="../_app/immutable/nodes/4.0lrmYtrC.js" rel="modulepreload">
+		<link href="../_app/immutable/chunks/C6RGsjzH.js" rel="modulepreload">
+		<link href="../_app/immutable/chunks/gFhHgSfH.js" rel="modulepreload">
 		<!--170evqy--><meta name="description" content="Fixed double-tap inversion bug caused by TAP Strap hardware bounce. Added 50ms debounce window to ComboEngine. Also added GitHub Actions workflow for Windows builds and a user-facing README."/> <meta property="og:title" content="Hardware debounce fix + Windows CI — MapXr Devlog"/> <meta property="og:description" content="Fixed double-tap inversion bug caused by TAP Strap hardware bounce. Added 50ms debounce window to ComboEngine. Also added GitHub Actions workflow for Windows builds and a user-facing README."/><!----><title>Hardware debounce fix + Windows CI — MapXr Devlog</title>
 		<link href="../_app/immutable/assets/0.BdFf_rzI.css" rel="stylesheet">
     </head>
@@ -32,19 +32,19 @@
   double-tap inversion bug, and the first working Windows build pipeline.</p> <h2>The double-tap inversion bug</h2> <p>Users reported that intentional double-taps were sometimes firing the single-tap action instead,
   and single taps were occasionally triggering double-tap actions. After adding some diagnostic
   logging, the root cause became clear.</p> <p>The TAP Strap hardware emits spurious duplicate BLE notifications within roughly 10–30 ms of a
-  genuine tap event. This is normal for the hardware — it's a byproduct of how the firmware
-  debounces the capacitive sensors internally — but it was invisible to MapXr's engine.</p> <p>With a double-tap binding present, the sequence looked like this to the engine:</p> <ol><li>Genuine tap event → engine starts waiting for a possible second tap</li> <li>Hardware bounce (8 ms later) → engine sees a "second tap", advances to <code>TapPending::Two</code>, fires double-tap action</li> <li>User's actual intended second tap (150 ms later) → engine has already resolved, starts a new single-tap sequence</li></ol> <p>The fix is a 50 ms debounce window per device: if the same tap code arrives from the same device
+  genuine tap event. This is normal for the hardware (it's a byproduct of how the firmware
+  debounces the capacitive sensors internally), but it was invisible to MapXr's engine.</p> <p>With a double-tap binding present, the sequence looked like this to the engine:</p> <ol><li>Genuine tap event → engine starts waiting for a possible second tap</li> <li>Hardware bounce (8 ms later) → engine sees a "second tap", advances to <code>TapPending::Two</code>, fires double-tap action</li> <li>User's actual intended second tap (150 ms later) → engine has already resolved, starts a new single-tap sequence</li></ol> <p>The fix is a 50 ms debounce window per device: if the same tap code arrives from the same device
   within 50 ms of the previous event, it's silently discarded. Real double-taps arrive 100–300 ms
   apart, well outside the window. Dual-device profiles (where two TAP Straps legitimately stack
   same-device events for cross-device combo detection) are exempt from debouncing.</p> <h2>Windows CI via GitHub Actions</h2> <p>The workflow uses <code>tauri-apps/tauri-action@v0</code> on a <code>windows-latest</code> runner.
   It produces both an <code>.msi</code> installer and an NSIS <code>.exe</code> as build artifacts,
-  uploaded to the GitHub Actions run. The workflow triggers on <code>workflow_dispatch</code> or a <code>v*</code> tag push, so it doesn't burn CI minutes on every commit.</p> <p><code>GITHUB_TOKEN</code> is a GitHub built-in secret — no manual secret creation needed. The
+  uploaded to the GitHub Actions run. The workflow triggers on <code>workflow_dispatch</code> or a <code>v*</code> tag push, so it doesn't burn CI minutes on every commit.</p> <p><code>GITHUB_TOKEN</code> is a GitHub built-in secret, so no manual secret creation is needed. The
   repo just needs "Read and write permissions" enabled under Settings → Actions → General for the
   release upload step to work.</p><!--]--></article><!--]--></div><!--]--><!----></div> <footer class="footer footer-center bg-base-200 text-base-content p-6 mt-auto border-t border-base-300"><aside><p class="font-bold"><span class="text-primary">Map</span>Xr</p> <p class="text-sm text-base-content/60">Map your TAP Strap to anything — keyboard shortcuts, app controls, custom macros.</p> <p class="text-xs text-base-content/40 mt-2">MIT License · Built with Svelte 5 + Tauri + Rust</p> <a href="https://www.buymeacoffee.com/halfmonty" target="_blank" rel="noreferrer" class="text-xs text-base-content/50 hover:text-primary transition-colors mt-2">☕ Buy me a coffee</a> <p class="text-xs text-base-content/30 mt-1">TAP Strap and TapXr are a product of <a href="https://www.tapwithus.com" target="_blank" rel="noreferrer" class="underline hover:text-base-content/50">Tap Systems Inc.</a> MapXr is an independent project and is not affiliated with or endorsed by Tap Systems Inc.</p></aside></footer><!----></div><!--]--><!--]--> <!--[-1--><!--]--><!--]-->
 			
 			<script>
 				{
-					__sveltekit_14k5p3t = {
+					__sveltekit_vmh3tj = {
 						base: new URL("..", location).pathname.slice(0, -1),
 						assets: "/mapxr"
 					};
@@ -52,8 +52,8 @@
 					const element = document.currentScript.parentElement;
 
 					Promise.all([
-						import("../_app/immutable/entry/start.C52J93SD.js"),
-						import("../_app/immutable/entry/app.CFdIDFkL.js")
+						import("../_app/immutable/entry/start.D5EpkWL7.js"),
+						import("../_app/immutable/entry/app.rs_CnH5O.js")
 					]).then(([kit, app]) => {
 						kit.start(app, element, {
 							node_ids: [0, 4],

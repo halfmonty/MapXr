@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <link rel="icon" href="../favicon.ico" type="image/x-icon" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <script>
+            const stored = localStorage.getItem("theme");
+            const prefersDark = window.matchMedia(
+                "(prefers-color-scheme: dark)",
+            ).matches;
+            document.documentElement.setAttribute(
+                "data-theme",
+                stored ?? (prefersDark ? "business" : "corporate"),
+            );
+        </script>
+        <link href="../_app/immutable/entry/start.D5EpkWL7.js" rel="modulepreload">
+		<link href="../_app/immutable/chunks/CGwnShg4.js" rel="modulepreload">
+		<link href="../_app/immutable/chunks/DF5kQQXa.js" rel="modulepreload">
+		<link href="../_app/immutable/entry/app.rs_CnH5O.js" rel="modulepreload">
+		<link href="../_app/immutable/chunks/CFKVnMbq.js" rel="modulepreload">
+		<link href="../_app/immutable/nodes/0.5N-bQup8.js" rel="modulepreload">
+		<link href="../_app/immutable/chunks/D40A1Rfp.js" rel="modulepreload">
+		<link href="../_app/immutable/nodes/4.0lrmYtrC.js" rel="modulepreload">
+		<link href="../_app/immutable/chunks/C6RGsjzH.js" rel="modulepreload">
+		<link href="../_app/immutable/chunks/gFhHgSfH.js" rel="modulepreload">
+		<!--170evqy--><meta name="description" content="Getting arbitrary key injection working on Android without root required three attempts: AccessibilityService (too limited for modifier keys and non-text apps), a custom IME (same ceiling), and a hand-rolled ADB wireless debugging client (pairing worked, but Samsung Android 16 rejected the keys for an undiagnosable reason). Shizuku solved it cleanly — shell-uid Binder IPC via the same wireless debugging infrastructure. The full action vocabulary is dispatched through a JNI bridge that bypasses the WebView entirely, so injection keeps working when the app is backgrounded. APK coming soon."/> <meta property="og:title" content="Porting MapXr to Android: three dead ends and one great open-source library — MapXr Devlog"/> <meta property="og:description" content="Getting arbitrary key injection working on Android without root required three attempts: AccessibilityService (too limited for modifier keys and non-text apps), a custom IME (same ceiling), and a hand-rolled ADB wireless debugging client (pairing worked, but Samsung Android 16 rejected the keys for an undiagnosable reason). Shizuku solved it cleanly — shell-uid Binder IPC via the same wireless debugging infrastructure. The full action vocabulary is dispatched through a JNI bridge that bypasses the WebView entirely, so injection keeps working when the app is backgrounded. APK coming soon."/><!----><title>Porting MapXr to Android: three dead ends and one great open-source library — MapXr Devlog</title>
+		<link href="../_app/immutable/assets/0.BdFf_rzI.css" rel="stylesheet">
+    </head>
+    <body data-sveltekit-preload-data="hover">
+        <div style="display: contents"><!--[--><!--[0--><!--[--><div class="min-h-screen flex flex-col bg-base-100"><div class="navbar bg-base-100 border-b border-base-200 sticky top-0 z-50"><div class="navbar-start"><a href="../" class="btn btn-ghost text-2xl font-bold"><span class="text-primary -mr-1">Map</span>Xr</a></div> <div class="navbar-center hidden md:flex"><ul class="menu menu-horizontal px-1 gap-1"><li><a href="../" class="rounded-btn">Home</a></li> <li><a href="../docs" class="rounded-btn">Docs</a></li> <li><a href="../devlog" class="rounded-btn">Devlog</a></li></ul></div> <div class="navbar-end gap-2"><label class="swap swap-rotate btn btn-ghost btn-circle" aria-label="Toggle theme"><input type="checkbox"/> <svg class="swap-off h-5 w-5 fill-current" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M5.64,17l-.71.71a1,1,0,0,0,0,1.41,1,1,0,0,0,1.41,0l.71-.71A1,1,0,0,0,5.64,17ZM5,12a1,1,0,0,0-1-1H3a1,1,0,0,0,0,2H4A1,1,0,0,0,5,12Zm7-7a1,1,0,0,0,1-1V3a1,1,0,0,0-2,0V4A1,1,0,0,0,12,5ZM5.64,7.05a1,1,0,0,0,.7.29,1,1,0,0,0,.71-.29,1,1,0,0,0,0-1.41l-.71-.71A1,1,0,0,0,4.93,6.34Zm12,.29a1,1,0,0,0,.7-.29l.71-.71a1,1,0,1,0-1.41-1.41L17,5.64a1,1,0,0,0,0,1.41A1,1,0,0,0,17.66,7.34ZM21,11H20a1,1,0,0,0,0,2h1a1,1,0,0,0,0-2Zm-9,8a1,1,0,0,0-1,1v1a1,1,0,0,0,2,0V20A1,1,0,0,0,12,19ZM18.36,17A1,1,0,0,0,17,18.36l.71.71a1,1,0,0,0,1.41,0,1,1,0,0,0,0-1.41ZM12,6.5A5.5,5.5,0,1,0,17.5,12,5.51,5.51,0,0,0,12,6.5Zm0,9A3.5,3.5,0,1,1,15.5,12,3.5,3.5,0,0,1,12,15.5Z"></path></svg> <svg class="swap-on h-5 w-5 fill-current" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21.64,13a1,1,0,0,0-1.05-.14,8.05,8.05,0,0,1-3.37.73A8.15,8.15,0,0,1,9.08,5.49a8.59,8.59,0,0,1,.25-2A1,1,0,0,0,8,2.36,10.14,10.14,0,1,0,22,14.05,1,1,0,0,0,21.64,13Zm-9.5,6.69A8.14,8.14,0,0,1,7.08,5.22v.27A10.15,10.15,0,0,0,17.22,15.63a9.79,9.79,0,0,0,2.1-.22A8.11,8.11,0,0,1,12.14,19.73Z"></path></svg></label> <a href="https://www.buymeacoffee.com/halfmonty" target="_blank" rel="noreferrer" class="btn btn-ghost btn-circle" aria-label="Buy me a coffee"><svg class="h-5 w-5 fill-current" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 3H4v10c0 2.21 1.79 4 4 4h6c2.21 0 4-1.79 4-4v-3h2c1.11 0 2-.89 2-2V5c0-1.11-.89-2-2-2zm0 5h-2V5h2v3zM4 19h16v2H4z"></path></svg></a> <a href="https://github.com/halfmonty/mapxr" target="_blank" rel="noreferrer" class="btn btn-ghost btn-circle" aria-label="GitHub"><svg class="h-5 w-5 fill-current" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"></path></svg></a> <div class="dropdown dropdown-end md:hidden"><button tabindex="0" class="btn btn-ghost btn-circle" aria-label="Menu"><svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg></button> <ul class="menu menu-sm dropdown-content bg-base-100 rounded-box z-[1] mt-3 w-52 p-2 shadow"><li><a href="../">Home</a></li> <li><a href="../docs">Docs</a></li> <li><a href="../devlog">Devlog</a></li></ul></div></div></div><!----> <div class="flex-1"><!--[--><div class="max-w-3xl mx-auto px-4 py-10"><a href="../devlog" class="btn btn-ghost btn-sm mb-8 -ml-2"><svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg> Back to logs</a> <div class="flex flex-wrap items-center gap-2 mb-6"><span class="font-mono text-sm text-base-content/50">2026-03-24</span> <!--[0--><!--[--><span class="badge badge-outline badge-sm">android</span><span class="badge badge-outline badge-sm">feature</span><span class="badge badge-outline badge-sm">shizuku</span><!--]--><!--]--></div> <!--[0--><article class="prose prose-base max-w-none"><!--[--><h1>Porting MapXr to Android: three dead ends and one great open-source library</h1> <p>The Android port has been the most technically demanding part of this project, and not just
+  because cross-platform mobile development is inherently fiddly. The real challenge was finding a
+  way to inject keystrokes into arbitrary apps without requiring root access. Android does not make
+  this easy by design. The OS has progressively locked down the input injection APIs over
+  successive releases. Getting here required three distinct implementation attempts before landing on
+  something that actually works.</p> <h2>Attempt 1: AccessibilityService</h2> <p>The first approach was <code>AccessibilityService</code>. It's the API Android officially exposes
+  for keyboard-adjacent automation: screen readers, switch access, assistive tools. It can dispatch
+  key events via <code>performGlobalAction</code> and send typed text via <code>performAction(ACTION_SET_TEXT)</code>. It's well-documented, requires no root, and every
+  Android device supports it. The obvious choice.</p> <p>The problem is what it can't do. <code>ACTION_SET_TEXT</code> replaces the content of the focused
+  text field. It doesn't simulate a keypress arriving at the app. There is no modifier key support.
+  Hotkeys like Ctrl+Z or Ctrl+Tab are impossible because there's no mechanism to hold a modifier
+  while firing another key. Navigation keys like arrow keys and Page Down work in text fields but
+  not in games, editors, or anything that handles raw key events. The deeper problem is that <code>AccessibilityService</code> is built for screen reader use cases, not general-purpose
+  keyboard emulation. MapXr needs to send arbitrary key chords to any app, and AccessibilityService
+  can't do that.</p> <h2>Attempt 2: Custom input method (IME)</h2> <p>The second attempt was building a custom <code>InputMethodService</code>. Essentially a software
+  keyboard that MapXr controls behind the scenes. An IME has access to <code>InputConnection</code>, which lets it inject text and some key events into the currently
+  focused text field with decent fidelity.</p> <p>This hits the same ceiling from a different direction. <code>InputConnection</code> only reaches
+  the currently focused editable view. A browser, a game, a terminal app. None of these route key
+  events through the IME at all. The IME approach works well if your goal is a smarter text input
+  experience, but MapXr needs to be a keyboard replacement for <em>everything</em>. An IME that
+  can't send Escape to a terminal or arrow keys to a game is not a keyboard replacement.</p> <h2>Attempt 3: ADB wireless debugging shell</h2> <p>The third attempt was more ambitious. Android's developer options expose a wireless debugging
+  mode, and <code>adb shell input keyevent</code> can inject arbitrary key events as the shell user,
+  bypassing all the usual input API restrictions. If MapXr could establish its own ADB connection
+  over the local Wi-Fi interface, it could fire shell commands directly without any external tool.</p> <p>This turned into a substantial engineering effort. The ADB wireless debugging pairing protocol
+  involves SPAKE2 password-authenticated key exchange, followed by TLS negotiation using the
+  exchanged keys. The ADB transport protocol for sending shell commands sits on top of that. None of
+  this is formally documented. The spec is the AOSP source code.</p> <p>Pairing worked. The SPAKE2 exchange completed, the device showed "mapxr@mapxr" in the Paired
+  Devices list. The TLS connection attempt then failed with <code>CERTIFICATE_VERIFY_FAILED</code>.
+  Logcat on the device showed <em>"Invalid base64 key"</em> for every entry in the ADB keystore
+  loaded from our pairing. The key was structurally correct. The base64 decoded to 524 bytes,
+  the RSA header fields matched the format exactly, and the same key format is accepted without
+  complaint on desktop Linux. Something in the Samsung Android 16 (API 36) <code>adbd</code> implementation was rejecting it for a reason that can't be diagnosed without root access to the
+  device. After exhausting every diagnostic angle available from the unprivileged side, the approach
+  was abandoned.</p> <h2>Shizuku</h2> <p><a href="https://shizuku.rikka.app/" target="_blank" rel="noopener noreferrer">Shizuku</a> is an
+  open-source project by <a href="https://rikka.app/" target="_blank" rel="noopener noreferrer">Rikka</a> that solves exactly this class of problem in a way the previous approaches couldn't.
+  It uses Android's wireless debugging infrastructure (the same pairing mechanism that already
+  works) to launch a persistent background service as the shell user. Apps that have been granted
+  permission via Shizuku can then bind to that service over Binder IPC and make calls as if they
+  were running as shell uid 2000, without requiring root and without needing to implement any ADB
+  protocol themselves.</p> <p>The key Android API this unlocks is <code>InputManager.injectInputEvent()</code>. This is the same
+  method that <code>adb shell input</code> uses internally. With shell uid access, MapXr can inject
+  any <code>KeyEvent</code> or <code>MotionEvent</code> into the global input pipeline. Modifier
+  keys, function keys, key chords, everything.</p> <p>I want to specifically thank the Shizuku team for what they've built. This is a genuinely
+  difficult problem to solve. Navigating Android's increasingly restrictive permission model while
+  keeping things user-friendly and not requiring root is no small feat. The library is well-designed,
+  the documentation is clear, and the project has been actively maintained across multiple Android
+  major versions. MapXr would not have an Android port without their work.</p> <h2>How the Shizuku integration works</h2> <p>The integration has three layers: a Shizuku UserService running as shell uid, a dispatcher
+  singleton on the app side, and a JNI bridge to the Rust engine.</p> <h3>InputUserService</h3> <p><code>InputUserService</code> is a bound service that Shizuku launches as the shell user.
+  It implements an AIDL interface (<code>IInputService</code>) with two methods: <code>injectKey(KeyEvent)</code> and <code>injectMotion(MotionEvent)</code>. The implementation
+  uses reflection to call <code>InputManagerGlobal.injectInputEvent()</code> directly, with a
+  fallback to the public <code>InputManager</code> API. Running as shell uid 2000, these calls
+  succeed where they would be silently dropped from a normal app process.</p> <h3>ShizukuDispatcher</h3> <p><code>ShizukuDispatcher</code> is a Kotlin singleton that owns the Shizuku connection lifecycle
+  and translates mapping-core action JSON into <code>KeyEvent</code> and <code>MotionEvent</code> calls. It exposes a <code>StateFlow&lt;ShizukuState></code> that tracks whether Shizuku is
+  installed, running, permission-granted, binding, active, or reconnecting. The UI wizard drives
+  from that state. It polls every second and auto-advances through the setup steps as each
+  condition is met.</p> <p>The dispatcher handles the full action vocabulary: <code>key</code> (with complete modifier key
+  sequencing: down all modifiers, down+up the primary key, up modifiers in reverse), <code>key_chord</code>, <code>type_string</code> (via <code>ACTION_MULTIPLE</code> with a per-character fallback for
+  OEMs that drop it), <code>mouse_click</code>, <code>mouse_double_click</code>, <code>mouse_scroll</code>, and <code>macro</code> with per-step delays.</p> <h3>JNI bridge and background dispatch</h3> <p>The reason background key injection works (even when the MapXr WebView is suspended) is that
+  the dispatch path never goes through JavaScript at all. When a BLE characteristic notification
+  arrives from the Tap Strap, <code>BlePlugin.onTapBytes()</code> calls <code>NativeBridge.processTapBytes()</code>, which crosses the JNI boundary into Rust. The Rust
+  pump resolves the tap bytes into actions, then calls back into Kotlin via JNI to invoke <code>ShizukuDispatcher.dispatch(actionsJson)</code> on the <code>InputUserService</code> binder.
+  The WebView is not involved at any point in this path, so the pipeline keeps working when the app
+  is in the background.</p> <h3>Setup wizard</h3> <p>The <code>ShizukuSetup</code> wizard in Settings walks through three steps: install Shizuku,
+  start it via Wireless Debugging, and grant MapXr permission. Each step polls the dispatcher state
+  every second and advances automatically. The user doesn't need to tap "Next". Once the <code>InputUserService</code> binds successfully, the wizard shows a confirmation screen and
+  that's the full setup. After the first start, Shizuku auto-starts on every reboot via the
+  wireless debugging daemon, so the one-time setup is genuinely one-time.</p> <h2>What's next</h2> <p>The Android implementation is complete. The APK build is working and will be included in the next
+  release alongside the existing Linux and Windows installers. If you've been waiting to try MapXr
+  on Android, it's almost there.</p><!--]--></article><!--]--></div><!--]--><!----></div> <footer class="footer footer-center bg-base-200 text-base-content p-6 mt-auto border-t border-base-300"><aside><p class="font-bold"><span class="text-primary">Map</span>Xr</p> <p class="text-sm text-base-content/60">Map your TAP Strap to anything — keyboard shortcuts, app controls, custom macros.</p> <p class="text-xs text-base-content/40 mt-2">MIT License · Built with Svelte 5 + Tauri + Rust</p> <a href="https://www.buymeacoffee.com/halfmonty" target="_blank" rel="noreferrer" class="text-xs text-base-content/50 hover:text-primary transition-colors mt-2">☕ Buy me a coffee</a> <p class="text-xs text-base-content/30 mt-1">TAP Strap and TapXr are a product of <a href="https://www.tapwithus.com" target="_blank" rel="noreferrer" class="underline hover:text-base-content/50">Tap Systems Inc.</a> MapXr is an independent project and is not affiliated with or endorsed by Tap Systems Inc.</p></aside></footer><!----></div><!--]--><!--]--> <!--[-1--><!--]--><!--]-->
+			
+			<script>
+				{
+					__sveltekit_vmh3tj = {
+						base: new URL("..", location).pathname.slice(0, -1),
+						assets: "/mapxr"
+					};
+
+					const element = document.currentScript.parentElement;
+
+					Promise.all([
+						import("../_app/immutable/entry/start.D5EpkWL7.js"),
+						import("../_app/immutable/entry/app.rs_CnH5O.js")
+					]).then(([kit, app]) => {
+						kit.start(app, element, {
+							node_ids: [0, 4],
+							data: [null,null],
+							form: null,
+							error: null
+						});
+					});
+				}
+			</script>
+		</div>
+    </body>
+</html>

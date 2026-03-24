@@ -14,34 +14,34 @@
                 stored ?? (prefersDark ? "business" : "corporate"),
             );
         </script>
-        <link href="../_app/immutable/entry/start.C52J93SD.js" rel="modulepreload">
+        <link href="../_app/immutable/entry/start.D5EpkWL7.js" rel="modulepreload">
 		<link href="../_app/immutable/chunks/CGwnShg4.js" rel="modulepreload">
-		<link href="../_app/immutable/chunks/CyUtBfIa.js" rel="modulepreload">
-		<link href="../_app/immutable/entry/app.CFdIDFkL.js" rel="modulepreload">
+		<link href="../_app/immutable/chunks/DF5kQQXa.js" rel="modulepreload">
+		<link href="../_app/immutable/entry/app.rs_CnH5O.js" rel="modulepreload">
 		<link href="../_app/immutable/chunks/CFKVnMbq.js" rel="modulepreload">
-		<link href="../_app/immutable/nodes/0.C93o40Xj.js" rel="modulepreload">
+		<link href="../_app/immutable/nodes/0.5N-bQup8.js" rel="modulepreload">
 		<link href="../_app/immutable/chunks/D40A1Rfp.js" rel="modulepreload">
-		<link href="../_app/immutable/nodes/4.D1uorAE_.js" rel="modulepreload">
-		<link href="../_app/immutable/chunks/Dijf7hSe.js" rel="modulepreload">
-		<link href="../_app/immutable/chunks/D8tjqQzh.js" rel="modulepreload">
+		<link href="../_app/immutable/nodes/4.0lrmYtrC.js" rel="modulepreload">
+		<link href="../_app/immutable/chunks/C6RGsjzH.js" rel="modulepreload">
+		<link href="../_app/immutable/chunks/gFhHgSfH.js" rel="modulepreload">
 		<!--170evqy--><meta name="description" content="Shipped v0.1.2 — the first release where the full pipeline works end-to-end: build, sign, publish, auto-update. Getting there required hunting down three separate bugs: a missing config key that silently suppressed the auto-updater manifest, a Windows API breaking change in the focus monitor, and a tray icon crash that took down the app before the first window opened."/> <meta property="og:title" content="First public release: three bugs, two platforms, one coffee button — MapXr Devlog"/> <meta property="og:description" content="Shipped v0.1.2 — the first release where the full pipeline works end-to-end: build, sign, publish, auto-update. Getting there required hunting down three separate bugs: a missing config key that silently suppressed the auto-updater manifest, a Windows API breaking change in the focus monitor, and a tray icon crash that took down the app before the first window opened."/><!----><title>First public release: three bugs, two platforms, one coffee button — MapXr Devlog</title>
 		<link href="../_app/immutable/assets/0.BdFf_rzI.css" rel="stylesheet">
     </head>
     <body data-sveltekit-preload-data="hover">
         <div style="display: contents"><!--[--><!--[0--><!--[--><div class="min-h-screen flex flex-col bg-base-100"><div class="navbar bg-base-100 border-b border-base-200 sticky top-0 z-50"><div class="navbar-start"><a href="../" class="btn btn-ghost text-2xl font-bold"><span class="text-primary -mr-1">Map</span>Xr</a></div> <div class="navbar-center hidden md:flex"><ul class="menu menu-horizontal px-1 gap-1"><li><a href="../" class="rounded-btn">Home</a></li> <li><a href="../docs" class="rounded-btn">Docs</a></li> <li><a href="../devlog" class="rounded-btn">Devlog</a></li></ul></div> <div class="navbar-end gap-2"><label class="swap swap-rotate btn btn-ghost btn-circle" aria-label="Toggle theme"><input type="checkbox"/> <svg class="swap-off h-5 w-5 fill-current" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M5.64,17l-.71.71a1,1,0,0,0,0,1.41,1,1,0,0,0,1.41,0l.71-.71A1,1,0,0,0,5.64,17ZM5,12a1,1,0,0,0-1-1H3a1,1,0,0,0,0,2H4A1,1,0,0,0,5,12Zm7-7a1,1,0,0,0,1-1V3a1,1,0,0,0-2,0V4A1,1,0,0,0,12,5ZM5.64,7.05a1,1,0,0,0,.7.29,1,1,0,0,0,.71-.29,1,1,0,0,0,0-1.41l-.71-.71A1,1,0,0,0,4.93,6.34Zm12,.29a1,1,0,0,0,.7-.29l.71-.71a1,1,0,1,0-1.41-1.41L17,5.64a1,1,0,0,0,0,1.41A1,1,0,0,0,17.66,7.34ZM21,11H20a1,1,0,0,0,0,2h1a1,1,0,0,0,0-2Zm-9,8a1,1,0,0,0-1,1v1a1,1,0,0,0,2,0V20A1,1,0,0,0,12,19ZM18.36,17A1,1,0,0,0,17,18.36l.71.71a1,1,0,0,0,1.41,0,1,1,0,0,0,0-1.41ZM12,6.5A5.5,5.5,0,1,0,17.5,12,5.51,5.51,0,0,0,12,6.5Zm0,9A3.5,3.5,0,1,1,15.5,12,3.5,3.5,0,0,1,12,15.5Z"></path></svg> <svg class="swap-on h-5 w-5 fill-current" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21.64,13a1,1,0,0,0-1.05-.14,8.05,8.05,0,0,1-3.37.73A8.15,8.15,0,0,1,9.08,5.49a8.59,8.59,0,0,1,.25-2A1,1,0,0,0,8,2.36,10.14,10.14,0,1,0,22,14.05,1,1,0,0,0,21.64,13Zm-9.5,6.69A8.14,8.14,0,0,1,7.08,5.22v.27A10.15,10.15,0,0,0,17.22,15.63a9.79,9.79,0,0,0,2.1-.22A8.11,8.11,0,0,1,12.14,19.73Z"></path></svg></label> <a href="https://www.buymeacoffee.com/halfmonty" target="_blank" rel="noreferrer" class="btn btn-ghost btn-circle" aria-label="Buy me a coffee"><svg class="h-5 w-5 fill-current" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 3H4v10c0 2.21 1.79 4 4 4h6c2.21 0 4-1.79 4-4v-3h2c1.11 0 2-.89 2-2V5c0-1.11-.89-2-2-2zm0 5h-2V5h2v3zM4 19h16v2H4z"></path></svg></a> <a href="https://github.com/halfmonty/mapxr" target="_blank" rel="noreferrer" class="btn btn-ghost btn-circle" aria-label="GitHub"><svg class="h-5 w-5 fill-current" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"></path></svg></a> <div class="dropdown dropdown-end md:hidden"><button tabindex="0" class="btn btn-ghost btn-circle" aria-label="Menu"><svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg></button> <ul class="menu menu-sm dropdown-content bg-base-100 rounded-box z-[1] mt-3 w-52 p-2 shadow"><li><a href="../">Home</a></li> <li><a href="../docs">Docs</a></li> <li><a href="../devlog">Devlog</a></li></ul></div></div></div><!----> <div class="flex-1"><!--[--><div class="max-w-3xl mx-auto px-4 py-10"><a href="../devlog" class="btn btn-ghost btn-sm mb-8 -ml-2"><svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg> Back to logs</a> <div class="flex flex-wrap items-center gap-2 mb-6"><span class="font-mono text-sm text-base-content/50">2026-03-20</span> <!--[0--><!--[--><span class="badge badge-outline badge-sm">release</span><span class="badge badge-outline badge-sm">bug-fix</span><span class="badge badge-outline badge-sm">infrastructure</span><!--]--><!--]--></div> <!--[0--><article class="prose prose-base max-w-none"><!--[--><h1>First public release: three bugs, two platforms, one coffee button</h1> <p>v0.1.2 is the first release where the full pipeline works end-to-end: push a tag, GitHub Actions
   builds Linux and Windows installers in parallel, signs them, publishes a GitHub Release, uploads <code>latest.json</code>, and in-app update checking picks it up automatically. Getting there
-  required fixing three separate bugs — each one silent enough that it had slipped through
-  earlier testing.</p> <h2>Bug 1 — The auto-updater manifest was never generated</h2> <p>The first release had all the right pieces: a signing keypair, the <code>TAURI_SIGNING_PRIVATE_KEY</code> GitHub secret, a <code>tauri-action</code> step configured to publish a release. But <code>latest.json</code> never appeared in the release assets.</p> <p>The cause was a single missing line in <code>tauri.conf.json</code>. Tauri v2 requires <code>"createUpdaterArtifacts": true</code> in the <code>bundle</code> section before it will
+  required fixing three separate bugs, each one silent enough that it had slipped through
+  earlier testing.</p> <h2>Bug 1: The auto-updater manifest was never generated</h2> <p>The first release had all the right pieces: a signing keypair, the <code>TAURI_SIGNING_PRIVATE_KEY</code> GitHub secret, a <code>tauri-action</code> step configured to publish a release. But <code>latest.json</code> never appeared in the release assets.</p> <p>The cause was a single missing line in <code>tauri.conf.json</code>. Tauri v2 requires <code>"createUpdaterArtifacts": true</code> in the <code>bundle</code> section before it will
   generate <code>.sig</code> signature files during the build. Without those signature files, <code>tauri-action</code> has nothing to sign and produces no manifest. The config option isn't
-  mentioned prominently anywhere in the getting-started path — it lives in a note partway down the
-  plugin documentation.</p> <p>Once the config was added, the manual third job I had written to stitch together <code>latest.json</code> from GitHub Actions artifacts became unnecessary. <code>tauri-action</code> handles it automatically. That job was deleted.</p> <h2>Bug 2 — Windows CI broke after a crate update</h2> <p>The Windows build was failing with a type mismatch in the focus monitor. The <code>windows</code> crate 0.58 changed the inner type of <code>HWND</code> from <code>isize</code> to <code>*mut c_void</code>, which broke a null-check written against the old type. The same update
+  mentioned prominently anywhere in the getting-started path. It lives in a note partway down the
+  plugin documentation.</p> <p>Once the config was added, the manual third job I had written to stitch together <code>latest.json</code> from GitHub Actions artifacts became unnecessary. <code>tauri-action</code> handles it automatically. That job was deleted.</p> <h2>Bug 2: Windows CI broke after a crate update</h2> <p>The Windows build was failing with a type mismatch in the focus monitor. The <code>windows</code> crate 0.58 changed the inner type of <code>HWND</code> from <code>isize</code> to <code>*mut c_void</code>, which broke a null-check written against the old type. The same update
   changed <code>GetWindowTextW</code> to take <code>&amp;mut [u16]</code> directly instead of a
-  raw pointer plus length. Both call sites needed updating.</p> <h2>Bug 3 — The RPM crashed before the first window opened</h2> <p>Installing and running the RPM on Fedora/Nobara produced an immediate panic: <em>tray icon error: Zero width not allowed</em>. The app never reached the main window.</p> <p>The tray icon setup tried two file paths at runtime: the Tauri resource directory and, as a
+  raw pointer plus length. Both call sites needed updating.</p> <h2>Bug 3: The RPM crashed before the first window opened</h2> <p>Installing and running the RPM on Fedora/Nobara produced an immediate panic: <em>tray icon error: Zero width not allowed</em>. The app never reached the main window.</p> <p>The tray icon setup tried two file paths at runtime: the Tauri resource directory and, as a
   fallback, the source tree path baked in at compile time via <code>env!("CARGO_MANIFEST_DIR")</code>.
-  Both failed silently under the RPM install layout, and the final fallback was <code>Image::new(&amp;[], 0, 0)</code> — a valid call that creates a zero-width image. <code>TrayIconBuilder</code> then rejected it with a hard panic.</p> <p>The fix was to stop doing runtime path lookups for this at all. The icon is now embedded directly
+  Both failed silently under the RPM install layout, and the final fallback was <code>Image::new(&amp;[], 0, 0)</code>. This is a valid call that creates a zero-width image. <code>TrayIconBuilder</code> then rejected it with a hard panic.</p> <p>The fix was to stop doing runtime path lookups for this at all. The icon is now embedded directly
   in the binary via <code>include_bytes!</code> at compile time. It's always available regardless of
   where the binary is installed, and the fallback chain is gone.</p> <p>The AppImage on NVIDIA + Wayland systems hits a separate crash in the NVIDIA EGL Wayland driver
-  during WebKit initialization — a known incompatibility between the AppImage's bundled WebKitGTK
+  during WebKit initialization. This is a known incompatibility between the AppImage's bundled WebKitGTK
   and certain NVIDIA driver versions. The workaround is to run with <code>WEBKIT_DISABLE_DMABUF_RENDERER=1</code>, or to use the RPM/DEB package instead, which uses
   the system's WebKitGTK and doesn't have this problem.</p> <h2>Release automation</h2> <p>Getting the first release out surfaced how many manual steps the process had. A <code>scripts/bump-version.sh</code> script now handles the version increment across all three
   files that need it (<code>tauri.conf.json</code>, <code>Cargo.toml</code>, <code>package.json</code>) in one command. A <code>docs/release-checklist.md</code> documents the
@@ -49,7 +49,7 @@
 			
 			<script>
 				{
-					__sveltekit_14k5p3t = {
+					__sveltekit_vmh3tj = {
 						base: new URL("..", location).pathname.slice(0, -1),
 						assets: "/mapxr"
 					};
@@ -57,8 +57,8 @@
 					const element = document.currentScript.parentElement;
 
 					Promise.all([
-						import("../_app/immutable/entry/start.C52J93SD.js"),
-						import("../_app/immutable/entry/app.CFdIDFkL.js")
+						import("../_app/immutable/entry/start.D5EpkWL7.js"),
+						import("../_app/immutable/entry/app.rs_CnH5O.js")
 					]).then(([kit, app]) => {
 						kit.start(app, element, {
 							node_ids: [0, 4],
