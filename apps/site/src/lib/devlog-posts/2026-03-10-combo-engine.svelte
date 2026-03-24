@@ -2,7 +2,7 @@
 
 <p>
   The ComboEngine is the most complex piece of MapXr's core logic. It has to correctly
-  distinguish between a single tap, a double tap, and a two-handed combo — all from a stream
+  distinguish between a single tap, a double tap, and a two-handed combo. All from a stream
   of raw tap events arriving over Bluetooth with no inherent timing guarantees.
 </p>
 
@@ -31,9 +31,9 @@
 </p>
 
 <ul>
-  <li><strong>None</strong> — no pending events</li>
-  <li><strong>One(event, deadline)</strong> — one event received, waiting for a possible second</li>
-  <li><strong>Two(event1, event2)</strong> — two events received, resolving as double-tap or combo</li>
+  <li><strong>None:</strong> no pending events</li>
+  <li><strong>One(event, deadline):</strong> one event received, waiting for a possible second</li>
+  <li><strong>Two(event1, event2):</strong> two events received, resolving as double-tap or combo</li>
 </ul>
 
 <p>
@@ -47,7 +47,7 @@
 <p>
   Timing-sensitive tests use <code>tokio::time::pause()</code> and
   <code>tokio::time::advance(Duration)</code> to control the clock without actually sleeping.
-  This makes the test suite fast and deterministic — the 300 ms combo window can be "waited out"
+  This makes the test suite fast and deterministic. The 300 ms combo window can be "waited out"
   in zero real time.
 </p>
 

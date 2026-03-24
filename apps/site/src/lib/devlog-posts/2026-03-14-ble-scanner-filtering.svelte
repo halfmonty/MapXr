@@ -1,7 +1,7 @@
 <h1>BLE scanner filtering for TAP devices</h1>
 
 <p>
-  Before this change, MapXr's Bluetooth scanner would surface every BLE device in range — phones,
+  Before this change, MapXr's Bluetooth scanner would surface every BLE device in range: phones,
   headphones, fitness trackers, smart lightbulbs, all of it. Useful for debugging, but not
   something you want to ship to users.
 </p>
@@ -16,7 +16,7 @@
 
 <p>
   The filter is applied in the <code>btleplug</code> scan filter configuration, so unrelated
-  devices never even reach MapXr's application layer — the OS-level BLE stack discards them before
+  devices never even reach MapXr's application layer. The OS-level BLE stack discards them before
   they're passed up.
 </p>
 

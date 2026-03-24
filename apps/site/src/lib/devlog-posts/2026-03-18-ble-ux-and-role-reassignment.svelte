@@ -16,17 +16,17 @@
 
 <ul>
   <li>
-    <strong>Seen in scan</strong> — the device was actively advertising during the scan window.
+    <strong>Seen in scan:</strong> the device was actively advertising during the scan window.
     Shows a signal-strength badge (Strong / Good / Fair / Weak) and the Connect button is enabled.
   </li>
   <li>
-    <strong>Paired</strong> — the device has an active BLE connection to the OS (BlueZ, Windows
+    <strong>Paired:</strong> the device has an active BLE connection to the OS (BlueZ, Windows
     Bluetooth stack, etc.). The OS clears RSSI for connected peripherals and they stop advertising,
     so no signal reading is available. These show a "Paired" badge and Connect remains enabled so
     the user can take over the connection from the OS.
   </li>
   <li>
-    <strong>Cached</strong> — the device is in the OS Bluetooth cache from a previous scan but was
+    <strong>Cached:</strong> the device is in the OS Bluetooth cache from a previous scan but was
     not seen this time. It is likely off or out of range. Shows a greyed-out "Cached" badge and
     Connect is disabled.
   </li>
@@ -42,15 +42,15 @@
 </p>
 
 <p>
-  Two new fields were added to <code>TapDeviceInfo</code> — <code>seen_in_scan</code> and
-  <code>is_connected_to_os</code> — and propagated through the DTO, TypeScript types, and
+  Two new fields were added to <code>TapDeviceInfo</code> (<code>seen_in_scan</code> and
+  <code>is_connected_to_os</code>) and propagated through the DTO, TypeScript types, and
   Svelte UI.
 </p>
 
 <h2>Connected device name display</h2>
 
 <p>
-  Previously the connected-devices panel showed only the role and address — the human-readable
+  Previously the connected-devices panel showed only the role and address. The human-readable
   device name (e.g. "TapXR_A0363") was lost the moment you clicked Connect.
 </p>
 
@@ -87,8 +87,8 @@
 
 <p>
   The <code>docs/reference/</code> directory had accumulated six files with names that didn't
-  reflect their contents. Most notably, <code>other-uuids.txt</code> — which is actually the best
-  annotated GATT characteristic map in the project — got renamed to
+  reflect their contents. Most notably, <code>other-uuids.txt</code> (which is actually the best
+  annotated GATT characteristic map in the project) got renamed to
   <code>gatt-characteristics.txt</code>. The full rename list:
 </p>
 
@@ -110,7 +110,7 @@
 </p>
 
 <p>
-  The key insight is that <code>DeviceId</code> (the role) is just a label — it gets stamped onto
+  The key insight is that <code>DeviceId</code> (the role) is just a label. It gets stamped onto
   <code>RawTapEvent</code>s and onto <code>BleStatusEvent</code> notifications, but the underlying
   BLE connection, GATT characteristic handles, controller mode, and notification subscription are
   all properties of the <code>btleplug</code> <code>Peripheral</code> object and don't care about
@@ -131,7 +131,7 @@
   <code>reassign()</code>, then emits <code>BleStatusEvent::Disconnected</code> (old role) followed
   by <code>BleStatusEvent::Connected</code> (new role). The existing Tauri event pump picks these
   up and pushes <code>device-disconnected</code> / <code>device-connected</code> events to the
-  frontend — no new plumbing required.
+  frontend. No new plumbing required.
 </p>
 
 <p>

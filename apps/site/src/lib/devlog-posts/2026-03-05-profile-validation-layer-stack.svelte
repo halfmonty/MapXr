@@ -2,7 +2,7 @@
 
 <p>
   A MapXr profile is a JSON file that users write by hand. That means the engine needs to catch
-  mistakes clearly and early — at load time, not at runtime when a tap fires the wrong action.
+  mistakes clearly and early. Validation runs at load time, not at runtime when a tap fires the wrong action.
   This session focused on building out that validation layer and the LayerStack that manages
   runtime layer switching.
 </p>
@@ -15,11 +15,11 @@
 </p>
 
 <ul>
-  <li><strong>Duplicate triggers</strong> — the same finger combination bound to two actions in the same layer is always a mistake</li>
-  <li><strong>Missing layer references</strong> — a <code>push_layer</code> action that names a layer not defined in the profile</li>
-  <li><strong>Empty layers</strong> — a layer with no mappings is valid but suspicious; flagged as a warning</li>
-  <li><strong>Hold modifier constraints</strong> — the modifier key in a <code>hold_modifier</code> action can't also be a trigger key in the same layer</li>
-  <li><strong>Default layer must exist</strong> — the <code>default_layer</code> field must name a layer actually defined in the profile</li>
+  <li><strong>Duplicate triggers:</strong> the same finger combination bound to two actions in the same layer is always a mistake</li>
+  <li><strong>Missing layer references:</strong> a <code>push_layer</code> action that names a layer not defined in the profile</li>
+  <li><strong>Empty layers:</strong> a layer with no mappings is valid but suspicious; flagged as a warning</li>
+  <li><strong>Hold modifier constraints:</strong> the modifier key in a <code>hold_modifier</code> action can't also be a trigger key in the same layer</li>
+  <li><strong>Default layer must exist:</strong> the <code>default_layer</code> field must name a layer actually defined in the profile</li>
 </ul>
 
 <p>
@@ -31,7 +31,7 @@
 
 <p>
   The LayerStack maintains the ordered list of active layers at runtime. Trigger resolution walks
-  the stack from top to bottom — the first layer with a matching mapping wins, lower layers act
+  the stack from top to bottom. The first layer with a matching mapping wins; lower layers act
   as fallbacks.
 </p>
 

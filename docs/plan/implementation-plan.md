@@ -2,8 +2,8 @@
 
 ## Current focus
 
-**Next task:** 21.7 — manual test matrix
-**Epic:** 21 — Android Shizuku key injection (replaces Epic 20)
+**Next task:** none — all planned epics complete
+**Epic:** —
 **Blocker:** none
 **Pending decisions:** none
 
@@ -286,7 +286,7 @@ Notable deviations / carry-overs:
   swap `ShellServerSetup` → `ShizukuSetup`; swap `getShellServerState` → `getShizukuState`.
   Verify cleanup grep (spec §4) returns no results.
 
-- [ ] **21.7** _(spec §12)_ Manual test matrix: fresh install wizard, key injection, KeyChord,
+- [x] **21.7** _(spec §12)_ Manual test matrix: fresh install wizard, key injection, KeyChord,
   global shortcuts, TypeString, mouse click/scroll, background injection, reboot persistence,
   graceful degradation. `cargo clippy -- -D warnings` clean. `cargo test --workspace` passes.
 
@@ -312,6 +312,6 @@ Epics 0–18 (complete, except 14.6 pending external)
   └── Epic 15 (Android port, Phase 1 complete; 15.15–15.18 post-release)
       └── Epic 19 (Android background dispatch — JNI fix for task 15.5 deviation)
           └── Epic 20 (Android shell server — SUPERSEDED, do not implement)
-          └── Epic 21 (Android Shizuku key injection — replaces Epic 20)
+          └── Epic 21 (Android Shizuku key injection — replaces Epic 20) ✓
   └── S.1–S.5 (stretch goals, unscheduled)
 ```

@@ -66,6 +66,19 @@ base_url: https://s3.amazonaws.com/tap-firmware-files/
 
 {"hw_version":30300,"fw_version":20600,"kfw_version":0,"mver_version":"N","bl_version":101,"env_id":1,"app_version":"a:1.5.9","tap_sn":"<insert SN>"}
 
+[
+  {
+    "fw_id": 541,
+    "hw_version": 30300,
+    "fw_version": 20700,
+    "bl_version": 101,
+    "env_id": 1,
+    "component_id": 0,
+    "s3_file_path": "production/3.3/NRF/2.x.x/2.7.x/2.7.0_3.3_101_20250410/dfu_files/NRF_2_7_0_3_3_101_20250410_debug.zip",
+    "change_log": "TapModes for TapStrap",
+    "release-date": "2025-04-10"
+  }
+]
 
 
 =================================

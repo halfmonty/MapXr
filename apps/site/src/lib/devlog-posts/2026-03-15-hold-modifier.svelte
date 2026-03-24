@@ -2,7 +2,7 @@
 
 <p>
   This feature came out of a specific use case: one-handed typing with the TAP Strap. When only
-  one hand is available, pressing Shift + a letter requires two separate taps — one to activate
+  one hand is available, pressing Shift + a letter requires two separate taps: one to activate
   Shift, one for the letter. The <code>hold_modifier</code> action makes that possible.
 </p>
 

@@ -10,6 +10,15 @@ export type DevlogEntry = {
 
 export const DEVLOG: DevlogEntry[] = [
   {
+    slug: '2026-03-24-android-port',
+    date: '2026-03-24',
+    title: 'Porting MapXr to Android: three dead ends and one great open-source library',
+    body: 'Getting arbitrary key injection working on Android without root required three attempts: AccessibilityService (too limited for modifier keys and non-text apps), a custom IME (same ceiling), and a hand-rolled ADB wireless debugging client (pairing worked, but Samsung Android 16 rejected the keys for an undiagnosable reason). Shizuku solved it cleanly — shell-uid Binder IPC via the same wireless debugging infrastructure. The full action vocabulary is dispatched through a JNI bridge that bypasses the WebView entirely, so injection keeps working when the app is backgrounded. APK coming soon.',
+    epicsDone: 21,
+    totalEpics: 21,
+    tags: ['android', 'feature', 'shizuku'],
+  },
+  {
     slug: '2026-03-20-first-release-and-distribution',
     date: '2026-03-20',
     title: 'First public release: three bugs, two platforms, one coffee button',

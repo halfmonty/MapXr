@@ -17,14 +17,15 @@ Pre-release builds use the suffix convention `v1.2.3-beta.1`, `v1.2.3-rc.1`, etc
 ## [Unreleased]
 
 ### Added
-- **Android port (Phase 1)** — run MapXr on Android 8.0+ (API 26+); connect a Tap Strap via Bluetooth and forward gestures as keystrokes into any app
+- **Android port (Phase 1)** — run MapXr on Android 11+ (API 30+); connect a Tap Strap via Bluetooth and inject gestures as keystrokes into any app
   - BLE scan, connect, and reconnect via `BlePlugin` Kotlin plugin with runtime permission handling
-  - Foreground service (`MapxrForegroundService`) with persistent notification; "Stop" action; `foregroundServiceType=connectedDevice`
-  - AccessibilityService key injection into the foreground app (`MapxrAccessibilityService` + `AccessibilityPlugin`) — full key mapping table per spec §7.4; requires API 28+ for key dispatch
-  - Mouse gesture simulation via `GestureDescription` (tap, double-tap, directional swipe)
+  - Foreground service (`MapxrForegroundService`) with persistent notification showing device count, active profile, and keyboard status; `foregroundServiceType=connectedDevice`
+  - **Shizuku key injection** — full action vocabulary dispatched via Shizuku's `InputManager.injectInputEvent()` running as shell uid (2000); no root required; supports: `key`, `key_chord`, `type_string`, `mouse_click`, `mouse_double_click`, `mouse_scroll`, `macro`, `vibrate`; complete key mapping table for all `VALID_KEYS`
+  - Shizuku setup wizard (`ShizukuSetup`) — 3-step guided flow (Install → Start → Grant permission); polls state every 1 s and auto-advances; "✓ Active" confirmation screen
+  - Background key injection via JNI (`NativeBridge` + `android_jni.rs`): tap bytes flow directly from `BlePlugin` → `ShizukuDispatcher.dispatch()` without going through the WebView, so injection works when the app is backgrounded or the screen is off
   - OEM battery restriction wizard (`BatterySetupWizard`) with manufacturer-specific deep-link instructions for Xiaomi, Samsung, Huawei/Honor, OPPO, OnePlus, Realme, Vivo
-  - First-launch onboarding: sequences accessibility setup → battery setup automatically (`AndroidOnboarding`)
-  - Android-specific Settings sections: accessibility status, background operation / battery exemption status, auto-start service toggle
+  - First-launch onboarding: sequences battery setup automatically on first run (`AndroidOnboarding`)
+  - Android-specific Settings sections: Keyboard Mode (Shizuku status badge + setup wizard), background operation / battery exemption status, auto-start service toggle
   - Signed APK published to GitHub Releases on each version tag via `release.yml` `build-android` job
 
 ---

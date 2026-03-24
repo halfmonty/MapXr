@@ -15,8 +15,8 @@
 
 <p>
   The TAP Strap hardware emits spurious duplicate BLE notifications within roughly 10–30 ms of a
-  genuine tap event. This is normal for the hardware — it's a byproduct of how the firmware
-  debounces the capacitive sensors internally — but it was invisible to MapXr's engine.
+  genuine tap event. This is normal for the hardware (it's a byproduct of how the firmware
+  debounces the capacitive sensors internally), but it was invisible to MapXr's engine.
 </p>
 
 <p>
@@ -46,7 +46,7 @@
 </p>
 
 <p>
-  <code>GITHUB_TOKEN</code> is a GitHub built-in secret — no manual secret creation needed. The
+  <code>GITHUB_TOKEN</code> is a GitHub built-in secret, so no manual secret creation is needed. The
   repo just needs "Read and write permissions" enabled under Settings → Actions → General for the
   release upload step to work.
 </p>

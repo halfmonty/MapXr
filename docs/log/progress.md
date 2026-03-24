@@ -1,3 +1,45 @@
+## 2026-03-24 — 21.7: manual test complete; Epic 21 done
+
+**Tasks completed:** 21.7
+**Tasks in progress:** none
+
+**Files changed:**
+
+- `apps/desktop/src-tauri/src/lib.rs` — **root fix:** `"shellServer"` → `"shizuku"` in
+  `run_mobile()` Kotlin plugin stub registration; without this Tauri returned "plugin shizuku
+  not found" for every `getShizukuState` invoke
+- `apps/desktop/src/routes/settings/+page.svelte` — initial `shizukuState` changed from
+  `"Unsupported"` to `"NotRunning"` (prevents false red badge on load); `refreshAndroidStatus()`
+  split so Shizuku fetch is independent of battery/prefs (a throw in either no longer blocks
+  the other); background 2 s state-polling timer added so badge auto-updates after launch
+- `apps/desktop/src-tauri/gen/android/app/src/main/AndroidManifest.xml` — added `<queries>`
+  block for `moe.shizuku.privileged.api` (Android 11+ package-visibility; required for
+  `getLaunchIntentForPackage` and `getPackageInfo` to see Shizuku)
+- `apps/desktop/src-tauri/gen/android/app/src/main/java/com/mapxr/app/ShizukuDispatcher.kt` —
+  added `startStatePoller()`: polls `pingBinder()` every 2 s while state is
+  `NotRunning`/`NotInstalled`, ensuring state advances even if `addBinderReceivedListenerSticky`
+  fires before the provider is ready; `binderDeadListener` now also calls `startStatePoller()`
+  on reconnect; added diagnostic `Log.d` calls to `updateState()` and `isShizukuInstalled()`;
+  `startStatePoller` logs start/stop
+- `apps/desktop/src-tauri/gen/android/app/src/main/java/com/mapxr/app/ShizukuPlugin.kt` —
+  added `android.util.Log` import; `openShizukuApp` wrapped in try-catch and primary launch
+  intent now gets `FLAG_ACTIVITY_NEW_TASK`
+
+**Notes:**
+- Manual test on Samsung Android 16 device using sideloaded Shizuku APK (Play Store version
+  does not support Android 16). Shizuku detects correctly, wizard progresses, key injection
+  works.
+- The single most impactful bug was `lib.rs` still registering `"shellServer"` as the Kotlin
+  plugin stub. Tauri's invoke routing looks up the Rust stub first; without `"shizuku"` in the
+  Rust registry every `plugin:shizuku|...` call failed before reaching Kotlin.
+- `cargo clippy -- -D warnings` clean; `cargo test --workspace` passes.
+- All planned epics (0–21) are now complete. Next work is unscheduled stretch goals or a
+  release bump.
+
+**Next:** no planned tasks remaining; stretch goals S.1–S.5 are unscheduled
+
+---
+
 ## 2026-03-23 — 21.3–21.6: Shizuku dispatcher, plugin, JNI, and frontend
 
 **Tasks completed:** 21.3, 21.4, 21.5, 21.6
