@@ -329,27 +329,57 @@ export async function getPlatform(): Promise<string> {
   return invoke("get_platform");
 }
 
-// ── Android accessibility commands ───────────────────────────────────────────
-//
-// These call into the Kotlin AccessibilityPlugin registered in MainActivity.kt.
+// ── Shizuku commands (Android only) ──────────────────────────────────────────
 
 /**
- * Return whether `MapxrAccessibilityService` is currently enabled in system settings.
+ * Possible states of the Shizuku integration lifecycle.
  *
- * Android only.
+ * - `"Unsupported"` — device is running Android < 11 (API 30).
+ * - `"NotInstalled"` — Shizuku app is not installed.
+ * - `"NotRunning"` — installed but not running; user must start via Wireless Debugging.
+ * - `"PermissionRequired"` — running but mapxr permission not yet granted.
+ * - `"Binding"` — permission granted; binding the UserService.
+ * - `"Active"` — UserService bound and ready to inject input events.
+ * - `"Reconnecting"` — UserService disconnected unexpectedly; auto-rebind in progress.
  */
-export async function checkAccessibilityEnabled(): Promise<{ enabled: boolean }> {
-  return invoke("plugin:accessibility|checkAccessibilityEnabled");
+export type ShizukuState =
+  | "Unsupported"
+  | "NotInstalled"
+  | "NotRunning"
+  | "PermissionRequired"
+  | "Binding"
+  | "Active"
+  | "Reconnecting";
+
+/**
+ * Return the current Shizuku integration state and device API level.
+ *
+ * Android only — calls `ShizukuPlugin.getShizukuState`.
+ */
+export async function getShizukuState(): Promise<{
+  state: ShizukuState;
+  apiLevel: number;
+}> {
+  return invoke("plugin:shizuku|getShizukuState");
 }
 
 /**
- * Open the Android Accessibility Settings screen so the user can enable
- * `MapxrAccessibilityService`.
+ * Trigger the Shizuku in-app permission request dialog.
+ *
+ * Resolves immediately; poll {@link getShizukuState} to observe the result.
+ * Android only.
+ */
+export async function requestShizukuPermission(): Promise<void> {
+  return invoke("plugin:shizuku|requestShizukuPermission");
+}
+
+/**
+ * Open the Shizuku app if installed, or navigate to its Play Store listing.
  *
  * Android only.
  */
-export async function openAccessibilitySettings(): Promise<void> {
-  return invoke("plugin:accessibility|openAccessibilitySettings");
+export async function openShizukuApp(): Promise<void> {
+  return invoke("plugin:shizuku|openShizukuApp");
 }
 
 // ── Android preferences (mobile only) ────────────────────────────────────────

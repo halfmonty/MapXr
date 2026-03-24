@@ -45,11 +45,22 @@ android {
             )
         }
     }
+    packaging {
+        resources.excludes.add("META-INF/versions/9/OSGI-INF/MANIFEST.MF")
+    }
     kotlinOptions {
         jvmTarget = "1.8"
     }
     buildFeatures {
         buildConfig = true
+        aidl = true
+    }
+    testOptions {
+        unitTests {
+            // Return default values (0 / null / false) instead of throwing
+            // "Method not mocked" for Android stub calls (e.g. Log.w) in JVM unit tests.
+            isReturnDefaultValues = true
+        }
     }
 }
 
@@ -62,7 +73,16 @@ dependencies {
     implementation("androidx.appcompat:appcompat:1.7.1")
     implementation("androidx.activity:activity-ktx:1.10.1")
     implementation("com.google.android.material:material:1.12.0")
+
+    // Shizuku: shell-uid IPC for InputManager.injectInputEvent()
+    implementation("dev.rikka.shizuku:api:13.1.5")
+    implementation("dev.rikka.shizuku:provider:13.1.5")
+
+    // Coroutine lifecycle (used by ShizukuDispatcher)
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
+
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3")
     androidTestImplementation("androidx.test.ext:junit:1.1.4")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.5.0")
 }

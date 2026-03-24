@@ -9,7 +9,10 @@
     "opener:default",
     "core:window:default",
     "ble:default",
-    "accessibility:default",
-    "battery:default"
+    "battery:default",
+    "shizuku:default",
+    "notification:default",
+    "notification:allow-is-permission-granted",
+    "notification:allow-request-permission"
   ]
 }

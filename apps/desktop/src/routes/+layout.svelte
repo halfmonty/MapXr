@@ -52,7 +52,7 @@
         // Check whether any onboarding step needs to be shown.
         try {
           const androidPrefs = await getAndroidPreferences();
-          if (!androidPrefs.accessibility_setup_done || !androidPrefs.battery_setup_done) {
+          if (!androidPrefs.battery_setup_done) {
             onboardingOpen = true;
           }
         } catch {

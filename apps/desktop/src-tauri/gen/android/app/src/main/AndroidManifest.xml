@@ -30,6 +30,12 @@
     <!-- AndroidTV support -->
     <uses-feature android:name="android.software.leanback" android:required="false" />
 
+    <!-- ── Package visibility (Android 11+) ──────────────────────────────────── -->
+    <!-- Required for getLaunchIntentForPackage and getPackageInfo to see Shizuku. -->
+    <queries>
+        <package android:name="moe.shizuku.privileged.api" />
+    </queries>
+
     <application
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
@@ -63,25 +69,6 @@
             android:exported="false"
             android:foregroundServiceType="connectedDevice" />
 
-        <!-- ── Accessibility service ──────────────────────────────────────────── -->
-        <!--
-            MapxrAccessibilityService dispatches key events (and gestures for mouse
-            actions) into the foreground app on behalf of the Tap wearable.
-        -->
-        <service
-            android:name=".MapxrAccessibilityService"
-            android:enabled="true"
-            android:exported="true"
-            android:label="@string/accessibility_service_label"
-            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
-            <intent-filter>
-                <action android:name="android.accessibilityservice.AccessibilityService" />
-            </intent-filter>
-            <meta-data
-                android:name="android.accessibilityservice"
-                android:resource="@xml/accessibility_service_config" />
-        </service>
-
         <!-- ── File provider (Tauri default) ─────────────────────────────────── -->
         <provider
             android:name="androidx.core.content.FileProvider"
@@ -92,6 +79,15 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
         </provider>
+
+        <!-- ── Shizuku provider (enables communication with the Shizuku process) ── -->
+        <provider
+            android:name="rikka.shizuku.ShizukuProvider"
+            android:authorities="${applicationId}.shizuku"
+            android:multiprocess="false"
+            android:enabled="true"
+            android:exported="true"
+            android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
 
     </application>
 </manifest>

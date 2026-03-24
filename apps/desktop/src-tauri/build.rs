@@ -18,11 +18,11 @@ const BLE_COMMANDS: &[&str] = &[
     "removeListener",
 ];
 
-// Commands exposed by AccessibilityPlugin.kt via @Command annotations.
-const ACCESSIBILITY_COMMANDS: &[&str] = &[
-    "checkAccessibilityEnabled",
-    "openAccessibilitySettings",
-    "dispatchActions",
+// Commands exposed by ShizukuPlugin.kt via @Command annotations.
+const SHIZUKU_COMMANDS: &[&str] = &[
+    "getShizukuState",
+    "requestShizukuPermission",
+    "openShizukuApp",
 ];
 
 // Commands exposed by BatteryPlugin.kt via @Command annotations.
@@ -43,9 +43,9 @@ fn main() {
                     .default_permission(DefaultPermissionRule::AllowAllCommands),
             )
             .plugin(
-                "accessibility",
+                "shizuku",
                 InlinedPlugin::new()
-                    .commands(ACCESSIBILITY_COMMANDS)
+                    .commands(SHIZUKU_COMMANDS)
                     .default_permission(DefaultPermissionRule::AllowAllCommands),
             )
             .plugin(

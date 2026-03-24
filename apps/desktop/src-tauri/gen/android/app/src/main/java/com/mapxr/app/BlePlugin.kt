@@ -753,17 +753,25 @@ class BlePlugin(private val activity: Activity) : Plugin(activity) {
     private fun onTapBytes(address: String, bytes: ByteArray) {
         if (bytes.isEmpty()) return
 
-        // Convert raw bytes to a JS-safe integer array so they survive the invoke bridge.
+        bleLog("[$address] onTapBytes tap_code=${bytes[0].toInt() and 0xFF}")
+
+        // Native path — feeds the Rust engine via JNI, bypassing the WebView.
+        // Works when the app is backgrounded (WebView JS is suspended).
+        val result = NativeBridge.processTapBytes(address, bytes)
+        if (result != "ok") {
+            bleLog("[$address] processTapBytes returned '$result'")
+        }
+
+        // WebView trigger — best-effort UI update for the finger visualiser and
+        // debug panel when the app is foregrounded. Dropped silently if suspended.
         val jsArray = app.tauri.plugin.JSArray()
         for (b in bytes) {
             jsArray.put(b.toInt() and 0xFF)
         }
-
-        val payload = JSObject().apply {
+        trigger("tap-bytes-received", JSObject().apply {
             put("address", address)
             put("bytes", jsArray)
-        }
-        trigger("tap-bytes-received", payload)
+        })
     }
 
     // ── Internal helpers ──────────────────────────────────────────────────────

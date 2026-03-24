@@ -1,19 +1,20 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, onDestroy } from "svelte";
   import {
     getPreferences,
     savePreferences,
     checkForUpdate,
     getPlatform,
-    checkAccessibilityEnabled,
     checkBatteryExemptionGranted,
     getAndroidPreferences,
     saveAndroidPreferences,
+    getShizukuState,
   } from "$lib/commands";
   import type { TrayPreferences, AndroidPreferences } from "$lib/types";
+  import type { ShizukuState } from "$lib/commands";
   import { updateStore } from "$lib/stores/updates.svelte";
-  import AccessibilitySetupPrompt from "$lib/components/AccessibilitySetupPrompt.svelte";
   import BatterySetupWizard from "$lib/components/BatterySetupWizard.svelte";
+  import ShizukuSetup from "$lib/components/ShizukuSetup.svelte";
 
   let prefs = $state<TrayPreferences>({
     close_to_tray: true,
@@ -39,46 +40,78 @@
 
   // Android-specific state.
   let isAndroid = $state(false);
-  let accessibilityEnabled = $state(false);
   let batteryExemptionGranted = $state(false);
-  let androidPrefs = $state<AndroidPreferences | null>(null);
-  let accessibilityPromptOpen = $state(false);
+  let androidPrefs = $state<AndroidPreferences>({
+    notify_device_connected: true,
+    notify_device_disconnected: true,
+    notify_layer_switch: false,
+    notify_profile_switch: true,
+    haptics_enabled: true,
+    haptic_on_tap: false,
+    haptic_on_layer_switch: true,
+    haptic_on_profile_switch: true,
+    accessibility_setup_done: false,
+    battery_setup_done: false,
+    auto_start_service: false,
+  });
   let batteryWizardOpen = $state(false);
+  let shizukuState = $state<ShizukuState>("NotRunning");
+  let shizukuSetupOpen = $state(false);
+  let shizukuStateTimer: ReturnType<typeof setInterval> | undefined;
 
   onMount(async () => {
-    const platform = await getPlatform();
-    if (platform === "android") {
-      isAndroid = true;
-      loading = false;
-      await refreshAndroidStatus();
-    } else {
-      try {
-        prefs = await getPreferences();
-      } catch (e) {
-        error = String(e);
-      } finally {
-        loading = false;
+    try {
+      const platform = await getPlatform();
+      if (platform === "android") {
+        isAndroid = true;
+        await refreshAndroidStatus();
+        // Poll Shizuku state so the button badge reflects changes (startup race condition).
+        shizukuStateTimer = setInterval(async () => {
+          try {
+            const r = await getShizukuState();
+            shizukuState = r.state;
+          } catch {
+            // Non-fatal.
+          }
+        }, 2000);
+      } else {
+        try {
+          prefs = await getPreferences();
+        } catch (e) {
+          error = String(e);
+        }
       }
+    } catch (e) {
+      error = String(e);
+    } finally {
+      loading = false;
     }
+  });
+
+  onDestroy(() => {
+    clearInterval(shizukuStateTimer);
   });
 
   async function refreshAndroidStatus() {
     try {
-      const [accessResult, batteryResult, ap] = await Promise.all([
-        checkAccessibilityEnabled(),
+      const [batteryResult, ap] = await Promise.all([
         checkBatteryExemptionGranted(),
         getAndroidPreferences(),
       ]);
-      accessibilityEnabled = accessResult.enabled;
       batteryExemptionGranted = batteryResult.granted;
       androidPrefs = ap;
     } catch {
       // Non-fatal.
     }
+    try {
+      const r = await getShizukuState();
+      shizukuState = r.state;
+    } catch {
+      // Non-fatal — shizukuState retains its current value.
+    }
   }
 
   async function toggleAndroid(field: keyof AndroidPreferences) {
-    if (!androidPrefs) return;
     error = null;
     const prev = androidPrefs[field] as boolean;
     androidPrefs = { ...androidPrefs, [field]: !prev };
@@ -386,48 +419,55 @@
     <!-- ── End desktop-only sections ────────────────────────────────────────── -->
 
     <!-- ── Android-only sections ──────────────────────────────────────────── -->
-    {#if isAndroid && androidPrefs}
-      <!-- Accessibility -->
+    {#if isAndroid}
+      <!-- Keyboard Mode -->
       <section class="space-y-4">
         <h2 class="text-sm font-semibold uppercase tracking-wider text-base-content/50">
-          Accessibility
+          Keyboard Mode
         </h2>
         <div class="card bg-base-100 shadow-sm">
           <div class="card-body gap-4 p-4">
             <div class="flex items-start justify-between gap-4">
               <div>
-                <p class="font-medium">Accessibility service</p>
+                <p class="font-medium">Full keyboard emulation</p>
                 <p class="text-sm text-base-content/60">
-                  Required to forward Tap Strap gestures as keystrokes in other apps.
+                  Injects keystrokes via Shizuku — works in games, browsers, and all apps.
+                  Requires Android 11 and a one-time Shizuku setup.
                 </p>
                 <p class="mt-1 text-sm">
-                  {#if accessibilityEnabled}
-                    <span class="text-success font-medium">✓ Enabled</span>
+                  {#if shizukuState === "Active"}
+                    <span class="text-success font-medium">✓ Active</span>
+                  {:else if shizukuState === "Binding" || shizukuState === "Reconnecting"}
+                    <span class="text-info font-medium">Connecting…</span>
+                  {:else if shizukuState === "Unsupported"}
+                    <span class="text-error font-medium">Requires Android 11+</span>
+                  {:else if shizukuState === "NotInstalled"}
+                    <span class="text-warning font-medium">Not installed</span>
+                  {:else if shizukuState === "NotRunning"}
+                    <span class="text-warning font-medium">Not running</span>
                   {:else}
-                    <span class="text-warning font-medium">Not enabled</span>
+                    <span class="text-warning font-medium">Permission required</span>
                   {/if}
                 </p>
               </div>
               <button
                 class="btn btn-outline btn-sm flex-shrink-0"
-                onclick={() => (accessibilityPromptOpen = true)}
+                onclick={() => (shizukuSetupOpen = true)}
+                disabled={shizukuState === "Unsupported"}
+                title={shizukuState === "Unsupported" ? "Requires Android 11+" : undefined}
               >
-                {accessibilityEnabled ? "Re-run setup" : "Set up"}
+                {shizukuState === "Active" ? "View" : "Set up"}
               </button>
             </div>
 
-            <div class="divider my-0"></div>
-
-            <div class="rounded bg-base-200 p-3 text-xs text-base-content/60 space-y-1">
-              <p>
-                <strong>Banking and secure apps:</strong> Key injection is blocked by apps that set
-                <code>FLAG_SECURE</code>. This is intentional security behaviour.
-              </p>
-              <p>
-                <strong>API 26–27:</strong> Key injection requires Android 9 (API 28). On older versions,
-                keys will not be dispatched.
-              </p>
-            </div>
+            {#if shizukuState !== "Active" && shizukuState !== "Unsupported"}
+              <div class="rounded bg-base-200 p-3 text-xs text-base-content/60">
+                <p>
+                  <strong>After a device restart:</strong> Shizuku auto-starts via Wireless Debugging.
+                  MapXr reconnects automatically when you open the app.
+                </p>
+              </div>
+            {/if}
           </div>
         </div>
       </section>
@@ -528,11 +568,11 @@
 </div>
 
 <!-- Android-only modals -->
-<AccessibilitySetupPrompt
-  open={accessibilityPromptOpen}
-  onClose={() => (accessibilityPromptOpen = false)}
+<ShizukuSetup
+  open={shizukuSetupOpen}
+  onClose={() => (shizukuSetupOpen = false)}
   onDone={async () => {
-    accessibilityPromptOpen = false;
+    shizukuSetupOpen = false;
     await refreshAndroidStatus();
   }}
 />

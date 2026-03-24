@@ -6,6 +6,9 @@ pub mod state;
 #[cfg(mobile)]
 pub mod android_pump;
 
+#[cfg(target_os = "android")]
+pub mod android_jni;
+
 #[cfg(not(mobile))]
 pub mod context_rules;
 #[cfg(not(mobile))]
@@ -80,8 +83,8 @@ fn run_mobile() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(kotlin_plugin::<tauri::Wry>("ble"))
-        .plugin(kotlin_plugin::<tauri::Wry>("accessibility"))
         .plugin(kotlin_plugin::<tauri::Wry>("battery"))
+        .plugin(kotlin_plugin::<tauri::Wry>("shizuku"))
         .setup(|app| {
             let app_handle = app.handle().clone();
 
@@ -98,6 +101,10 @@ fn run_mobile() {
 
             let state_arc = Arc::new(app_state);
             app.manage(Arc::clone(&state_arc));
+
+            // Populate JNI statics so native functions can reach the engine.
+            #[cfg(target_os = "android")]
+            android_jni::init(Arc::clone(&state_arc), app_handle.clone());
 
             // Spawn the Android event pump.
             tauri::async_runtime::spawn(android_pump::run_android_pump(

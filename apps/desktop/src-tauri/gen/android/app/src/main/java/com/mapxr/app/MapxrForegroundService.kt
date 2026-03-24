@@ -136,10 +136,18 @@ class MapxrForegroundService : Service() {
             }
         }
 
+        val keyboardStatus = when (ShizukuDispatcher.state.value) {
+            is ShizukuState.Active -> "Keyboard: active"
+            is ShizukuState.Binding,
+            is ShizukuState.Reconnecting -> "Keyboard: reconnecting…"
+            else -> "Keyboard: setup needed"
+        }
+
         return Notification.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle("MapXr active")
             .setContentText(contentText)
+            .setStyle(Notification.BigTextStyle().bigText("$contentText\n$keyboardStatus"))
             .setContentIntent(openPendingIntent)
             .setOngoing(true)
             .setShowWhen(false)

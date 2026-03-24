@@ -1,25 +1,26 @@
-/// Android event pump — drives the combo engine from tap events forwarded by
-/// the Kotlin `BlePlugin` and emits resolved actions back to the WebView and
-/// Kotlin `AccessibilityPlugin`.
+/// Android event pump — drives the combo engine from tap events and dispatches
+/// resolved actions via Shizuku (bypasses WebView when backgrounded).
 ///
-/// # Architecture
+/// # Architecture (after Epic 21)
 ///
 /// ```text
-/// Kotlin BlePlugin
-///   │  trigger("tap-bytes-received", { address, bytes })
+/// Kotlin BlePlugin.onTapBytes()
+///   │  NativeBridge.processTapBytes(address, bytes)     ← JNI, always runs
 ///   ↓
-/// WebView JS shim  (apps/desktop/src/lib/android-bridge.ts)
-///   │  invoke("process_tap_event", { address, bytes })
-///   ↓
-/// Rust process_tap_event command  (commands.rs)
-///   │  sends TapEventMsg over mpsc channel
-///   ↓
-/// run_android_pump (this file)
+/// run_android_pump (this file) via mpsc channel
 ///   │  push_event / check_timeout → Vec<EngineOutput>
 ///   ↓
-/// app.emit("tap-actions-fired", ...)   → WebView + Kotlin AccessibilityPlugin
-/// app.emit("layer-changed", ...)       → WebView UI
-/// app.emit("tap-vibrate", ...)         → Kotlin BlePlugin haptics
+/// dispatch_via_shizuku(actionsJson)                     ← JNI, always runs
+///   │  ShizukuDispatcher.dispatch(actionsJson)          [Kotlin object, non-external]
+///   ↓
+/// IInputService.injectKey / injectMotion (shell uid via Shizuku)
+///   ↓
+/// InputManager.injectInputEvent()
+///
+/// WebView path (best-effort when foregrounded, UI only):
+///   app.emit("tap-actions-fired", ...)   → debug panel event log
+///   app.emit("layer-changed", ...)       → layer indicator
+///   app.emit("tap-vibrate", ...)         → BlePlugin haptics
 /// ```
 use std::sync::Arc;
 use std::time::Instant;
@@ -50,8 +51,7 @@ pub struct TapEventMsg {
 
 /// Payload for the `tap-actions-fired` Tauri event.
 ///
-/// Consumed by WebView JS and by the Kotlin `AccessibilityPlugin` which listens
-/// for this event and dispatches the actions as Android key/gesture events.
+/// Consumed by WebView JS for the debug panel event log.
 #[derive(Serialize, Clone)]
 pub struct TapActionsFiredPayload {
     /// Serialised actions from the combo engine, in dispatch order.
@@ -73,6 +73,8 @@ pub struct TapVibratePayload {
 /// Name of the `tap-actions-fired` Tauri event.
 pub(crate) const TAP_ACTIONS_FIRED: &str = "tap-actions-fired";
 /// Name of the `tap-vibrate` Tauri event.
+// TODO: task 15.10 — wire Vibrate action dispatch through BlePlugin tap-vibrate event
+#[allow(dead_code)]
 pub(crate) const TAP_VIBRATE: &str = "tap-vibrate";
 
 // ── Pump ──────────────────────────────────────────────────────────────────────
@@ -265,12 +267,72 @@ pub(crate) async fn process_android_outputs(
     }
 
     if !dispatch_actions.is_empty() {
+        // Serialise once; shared by the JNI callback and the WebView event.
+        let actions_json = serde_json::to_string(&dispatch_actions).unwrap_or_else(|e| {
+            log::warn!("android_pump: failed to serialise actions: {e}");
+            String::from("[]")
+        });
+
+        // Native dispatch path — routes to ShizukuDispatcher via JNI, bypasses
+        // WebView, works when app is backgrounded.
+        dispatch_via_shizuku(&actions_json);
+
+        // WebView event — keeps the debug panel populated when foregrounded.
         let _ = app.emit(
             TAP_ACTIONS_FIRED,
             TapActionsFiredPayload { actions: dispatch_actions },
         );
     }
 }
+
+// ── Shizuku dispatch ──────────────────────────────────────────────────────────
+
+/// Call `ShizukuDispatcher.dispatch(actionsJson)` via JNI on the current thread.
+///
+/// `ShizukuDispatcher.dispatch` is a `@JvmStatic` Kotlin method on the singleton object
+/// that converts the action JSON into `IInputService.injectKey` / `injectMotion` calls
+/// running as shell uid via Shizuku.
+///
+/// Uses the [`JavaVM`] and `ShizukuDispatcher` class global ref stored by
+/// `NativeBridge.registerShizukuDispatcher()`. If that has not yet been called
+/// (very early startup), logs a warning and returns — the WebView `tap-actions-fired`
+/// event is still emitted and the debug panel remains functional.
+///
+/// [`JavaVM`]: jni::JavaVM
+#[cfg(target_os = "android")]
+fn dispatch_via_shizuku(actions_json: &str) {
+    use jni::objects::JValue;
+
+    let (vm, class_ref) = match (
+        crate::android_jni::java_vm(),
+        crate::android_jni::shizuku_dispatcher_class(),
+    ) {
+        (Some(vm), Some(c)) => (vm, c),
+        _ => {
+            log::warn!(
+                "android_pump: Shizuku dispatch not registered — actions delivered via WebView only"
+            );
+            return;
+        }
+    };
+
+    if let Err(e) = vm.attach_current_thread(|env| -> jni::errors::Result<()> {
+        let j_str = env.new_string(actions_json)?;
+        env.call_static_method(
+            class_ref,
+            jni::jni_str!("dispatch"),
+            jni::jni_sig!("(Ljava/lang/String;)V"),
+            &[JValue::Object(j_str.as_ref())],
+        )?;
+        Ok(())
+    }) {
+        eprintln!("mapxr/pump: ShizukuDispatcher.dispatch() failed: {e}");
+    }
+}
+
+/// No-op on non-Android mobile targets (iOS).
+#[cfg(not(target_os = "android"))]
+fn dispatch_via_shizuku(_actions_json: &str) {}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 

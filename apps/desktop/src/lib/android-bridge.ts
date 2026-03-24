@@ -1,18 +1,21 @@
 /**
- * Android bridge — proxies events between the Kotlin plugins and the Rust backend.
+ * Android bridge — wires Kotlin plugin events to the Rust backend and debug store.
  *
- * Architecture:
+ * Architecture (after Epic 21):
  *
- *   Kotlin BlePlugin
- *     └─ trigger("tap-bytes-received", { address, bytes })
+ *   Kotlin BlePlugin.onTapBytes()
+ *     └─ NativeBridge.processTapBytes() → Rust pump → ShizukuDispatcher  [native, always]
+ *     └─ trigger("tap-bytes-received")  → WebView JS (UI only, best-effort)
  *   WebView JS (this file)
- *     └─ addPluginListener("ble", "tap-bytes-received") → invoke("process_tap_event", ...)
+ *     └─ addPluginListener("ble", "tap-bytes-received") → debug store (finger visualiser)
  *   Rust android_pump
- *     └─ ComboEngine → app.emit("tap-actions-fired", { actions })
+ *     └─ app.emit("tap-actions-fired", { actions }) → WebView JS (debug panel only)
  *   WebView JS (this file)
- *     └─ listen("tap-actions-fired") → invoke("plugin:accessibility|dispatchActions", ...)
- *   Kotlin AccessibilityPlugin
- *     └─ dispatchKeyEvent / injectText
+ *     └─ listen("tap-actions-fired") → debug store (event log)
+ *
+ * The WebView path does not invoke `process_tap_event` or `dispatch`.
+ * Both roles are handled by the JNI native path, which runs even when the WebView
+ * is backgrounded and suspended.
  *
  * Call `startAndroidBridge()` once from the app root on Android.
  */
@@ -21,6 +24,7 @@ import { listen } from "@tauri-apps/api/event";
 import { invoke, addPluginListener } from "@tauri-apps/api/core";
 import type { Action, BleDeviceConnectedPayload, BleDeviceDisconnectedPayload } from "./types";
 import { logger } from "./logger";
+import { debugStore } from "./stores/debug.svelte";
 
 interface TapBytesPayload {
   address: string;
@@ -36,28 +40,26 @@ export async function startAndroidBridge(): Promise<() => void> {
   // Kotlin BlePlugin events use plugin.trigger() — must use addPluginListener(), not listen().
   // Rust events (tap-actions-fired) use app.emit() — must use listen().
 
+  // tap-bytes-received: UI update only. The native JNI path (NativeBridge.processTapBytes)
+  // has already fed these bytes into the Rust engine — do NOT invoke process_tap_event here
+  // as that would double-feed the engine.
   const bytesListener = await addPluginListener<TapBytesPayload>(
     "ble",
     "tap-bytes-received",
-    async ({ address, bytes }) => {
-      try {
-        await invoke("process_tap_event", { address, bytes });
-      } catch (err) {
-        logger.warn(`android-bridge: process_tap_event failed: ${err}`);
-      }
+    ({ address, bytes }) => {
+      logger.info(`android-bridge: tap-bytes-received address=${address} len=${bytes.length}`);
     },
   );
 
-  // tap-actions-fired is emitted by Rust (app.emit()), so listen() is correct here.
+  // tap-actions-fired: debug panel only. The native JNI path has already dispatched the
+  // actions to ShizukuDispatcher — do NOT invoke dispatch here as that would
+  // double-dispatch when the app is foregrounded.
   const unlistenActions = await listen<TapActionsFiredPayload>(
     "tap-actions-fired",
-    async (event) => {
+    (event) => {
       const { actions } = event.payload;
-      if (actions.length === 0) return;
-      try {
-        await invoke("plugin:accessibility|dispatchActions", { actions });
-      } catch (err) {
-        logger.warn(`android-bridge: dispatchActions failed: ${err}`);
+      for (const action of actions) {
+        debugStore.recordAction({ action_kind: action.type, label: null });
       }
     },
   );
